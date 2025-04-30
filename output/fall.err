@@ -1,0 +1,41 @@
+Program Version,EnergyPlus, Version 23.1.0-87ed9199d4, YMD=2025.03.04 10:41,
+   ************* Beginning Zone Sizing Calculations
+   ** Warning ** Weather file location will be used rather than entered (IDF) Location object.
+   **   ~~~   ** ..Location object=BEIJING
+   **   ~~~   ** ..Weather File Location=Shanghai Shanghai CHN CSWD WMO#=583620
+   **   ~~~   ** ..due to location differences, Latitude difference=[8.40] degrees, Longitude difference=[4.98] degrees.
+   **   ~~~   ** ..Time Zone difference=[0.0] hour(s), Elevation difference=[82.43] percent, [25.80] meters.
+   ** Warning ** GetSurfaceData: Construction PFWALLWITHPAINT of interzone surface ZONE0 SURFACE ROOF does not have the same materials in the reverse order as the construction PFWALLWITHPAINT of adjacent surface ZONE1 SURFACE FLOOR
+   **   ~~~   ** or the properties of the reversed layers are not correct due to differing layer front and back side values
+   **   ~~~   ** ...but Nominal U values are similar, diff=[0.0000] ... simulation proceeds.
+   **   ~~~   ** ...if the two zones are expected to have significantly different temperatures, the proper "reverse" construction should be created.
+   **   ~~~   ** ...this problem for this pair will not be reported again.
+   ** Warning ** Output:Meter:MeterFileOnly requested for "DistrictCooling:HVAC" (Hourly), already on "Output:Meter". Will report to both fall.eso and fall.mtr
+   ** Warning ** Output:Meter:MeterFileOnly requested for "DistrictHeating:HVAC" (Hourly), already on "Output:Meter". Will report to both fall.eso and fall.mtr
+   ** Warning ** Output:Meter:MeterFileOnly requested for "Electricity:Facility" (Hourly), already on "Output:Meter". Will report to both fall.eso and fall.mtr
+   ************* Testing Individual Branch Integrity
+   ************* All Branches passed integrity testing
+   ************* Testing Individual Supply Air Path Integrity
+   ************* All Supply Air Paths passed integrity testing
+   ************* Testing Individual Return Air Path Integrity
+   ************* All Return Air Paths passed integrity testing
+   ************* No node connection errors were found.
+   ************* Beginning Simulation
+   ************* Simulation Error Summary *************
+   ** Warning ** The following Report Variables were requested but not generated -- check.rdd file
+   **   ~~~   ** Either the IDF did not contain these elements, the variable name is misspelled,
+   **   ~~~   ** or the requested variable is an advanced output which requires Output : Diagnostics, DisplayAdvancedReportVariables;
+   ************* Key=*, VarName=ZONE LIGHTS ELECTRIC POWER, Frequency=Hourly
+   ************* Key=UNZ_1, VarName=ZONE ELECTRIC EQUIPMENT ELECTRIC POWER FFU, Frequency=Hourly
+   ************* Key=UNZ_1, VarName=ZONE ELECTRIC EQUIPMENT ELECTRIC POWER FRESHAIR, Frequency=Hourly
+   ************* Key=UNZ_0, VarName=ZONE ELECTRIC EQUIPMENT ELECTRIC POWER WATERPUMP, Frequency=Hourly
+   ************* Key=UNZ_0, VarName=ZONE ELECTRIC EQUIPMENT ELECTRIC POWER CONTROLEQUIPMENT, Frequency=Hourly
+   ************* Key=UNZ_0, VarName=ZONE ELECTRIC EQUIPMENT ELECTRIC POWER LIGHTFAN, Frequency=Hourly
+   ************* Key=UNZ_0, VarName=OTHER EQUIPMENT ELECTRIC POWER, Frequency=Hourly
+   ************* There are 4 unused schedules in input.
+   ************* There are 374 unused week schedules in input.
+   ************* There are 374 unused day schedules in input.
+   ************* Use Output:Diagnostics,DisplayUnusedSchedules; to see them.
+   ************* EnergyPlus Warmup Error Summary. During Warmup: 0 Warning; 0 Severe Errors.
+   ************* EnergyPlus Sizing Error Summary. During Sizing: 2 Warning; 0 Severe Errors.
+   ************* EnergyPlus Completed Successfully-- 6 Warning; 0 Severe Errors; Elapsed Time=00hr 00min  1.01sec

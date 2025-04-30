@@ -1,0 +1,11 @@
+{
+  "success" : true,
+  "message" : "成功",
+  "data" : {
+    "supportPv" : false,
+    "ifPvcost" : false,
+    "hasShare" : false,
+    "ifShare" : false,
+    "type" : "YADA"
+  }
+}

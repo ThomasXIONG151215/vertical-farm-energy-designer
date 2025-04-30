@@ -1,0 +1,49 @@
+{
+  "success" : true,
+  "message" : "成功",
+  "data" : {
+    "supportPv" : false,
+    "ifPvcost" : false,
+    "on" : false,
+    "sn" : "230817040842",
+    "houseName" : "baseGY1",
+    "dateList" : [ "08:03:08", "09:07:26", "10:10:59", "13:03:10", "14:07:05" ],
+    "usedList" : [ "0.510", "0.590", "0.590", "0.480", "0.590" ],
+    "powerUsedDetails" : [ {
+      "date" : "08:03:08",
+      "start" : "1755.500",
+      "end" : "1756.010",
+      "total" : "0.510",
+      "expense" : "0.0001"
+    }, {
+      "date" : "09:07:26",
+      "start" : "1756.010",
+      "end" : "1756.600",
+      "total" : "0.590",
+      "expense" : "0.0001"
+    }, {
+      "date" : "10:10:59",
+      "start" : "1756.600",
+      "end" : "1757.190",
+      "total" : "0.590",
+      "expense" : "0.0001"
+    }, {
+      "date" : "13:03:10",
+      "start" : "1757.190",
+      "end" : "1757.670",
+      "total" : "0.480",
+      "expense" : "0.000"
+    }, {
+      "date" : "14:07:05",
+      "start" : "1757.670",
+      "end" : "1758.260",
+      "total" : "0.590",
+      "expense" : "0.0001"
+    } ],
+    "hasShare" : false,
+    "ifShare" : false,
+    "totalUsed" : "2.760",
+    "totalAmount" : "0.00",
+    "type" : "YADA"
+  }
+}

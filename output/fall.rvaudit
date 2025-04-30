@@ -1,0 +1,13 @@
+ ReadVarsESO
+ processing:G:\PVBES_Design\monthly_idfs\Template_fall.rvi
+ Requested ESO file=G:\PVBES_Design\output\fall.eso
+ does not exist.  ReadVarsESO program terminated.
+ ReadVarsESO program terminated.
+ ReadVarsESO
+ processing:G:\PVBES_Design\monthly_idfs\Template_fall.mvi
+ input file:G:\PVBES_Design\output\fall.mtr
+ output file:G:\PVBES_Design\output\fallMeter.csv
+ getting all vars from:G:\PVBES_Design\output\fall.mtr
+  number variables requested for output=           5
+ ReadVars Run Time=00hr 00min  0.02sec
+ ReadVarsESO program completed successfully.
