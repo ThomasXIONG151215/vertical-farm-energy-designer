@@ -1,3 +1,10 @@
+import numpy as np
+from typing import Dict
+
+
+class BatterySystem:
+    """Battery system model for PV-Battery energy systems"""
+    
     def calculate_power_flows(self, 
                             available_power: np.ndarray, 
                             load_profile: np.ndarray, 
