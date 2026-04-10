@@ -17,7 +17,7 @@ from tqdm import tqdm
 import re
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from energy_data_analysis import PlotStyler
+from load_analysis.energy_data_analysis import PlotStyler
 import traceback
 import sys
 from typing import Dict

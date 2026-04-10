@@ -43,6 +43,8 @@ dependencies = [
     "scikit-learn>=0.24.0",
     "deap>=1.3.0",
     "scipy>=1.6.0",
+    "typer>=0.9.0",
+    "tqdm>=4.62.0",
 ]
 
 [project.optional-dependencies]
@@ -80,7 +82,7 @@ Issues = "https://github.com/ThomasXIONG151215/OpenCROPS/issues"
 Discussions = "https://github.com/ThomasXIONG151215/OpenCROPS/discussions"
 
 [project.scripts]
-opencrops = "main:main"
+opencrops = "src.cli:app"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -91,7 +93,7 @@ include = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/opencrops"]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
