@@ -1204,13 +1204,15 @@ def create_pfal_images_plot(image_path1, image_path2, output_dir="load_analysis"
 
 if __name__ == "__main__":
     # Example usage
-    base_data_path = "BW_processed_data.csv"
-    base_bw_data_path = "BW_data.csv"
+    # Updated paths: data is now in data/raw/ directory
+    # Fallback to old location for backward compatibility during transition
+    base_data_path = "data/raw/BW_processed_data.csv"
+    base_bw_data_path = "data/raw/BW_data.csv"
     output_dir = "load_analysis"
     
-    # Find valid paths for data files
-    data_path = find_valid_path(base_data_path)
-    bw_data_path = find_valid_path(base_bw_data_path)
+    # Find valid paths for data files (checks new location first, then old locations)
+    data_path = find_valid_path(base_data_path, possible_drives=["G:", "D:", ""])
+    bw_data_path = find_valid_path(base_bw_data_path, possible_drives=["G:", "D:", ""])
     
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)

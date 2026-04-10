@@ -29,7 +29,21 @@ def process_fau_schedules():
     """Process FAU data to create typical seasonal operation schedules."""
     
     # Read the hourly energy consumption data
-    df = pd.read_csv('BW_data.csv')
+    # Try new location first, then fall back to old location for compatibility
+    data_paths = [
+        'data/raw/BW_data.csv',
+        'BW_data.csv'  # Legacy fallback
+    ]
+    
+    df = None
+    for path in data_paths:
+        if os.path.exists(path):
+            df = pd.read_csv(path)
+            print(f"Loaded data from: {path}")
+            break
+    
+    if df is None:
+        raise FileNotFoundError("Could not find BW_data.csv in any expected location")
     
     # Create datetime column from Date and Hour columns
     df['time'] = pd.to_datetime(df['Date'] + ' ' + df['Hour'].astype(str) + ':00:00')

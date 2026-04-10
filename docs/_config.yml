@@ -1,0 +1,121 @@
+# Jupyter Book Configuration for OpenCROPS
+
+# Book metadata
+title: OpenCROPS Documentation
+author: Thomas XIONG
+copyright: "2024"
+
+# Short description (appears in search results)
+description: Climate-Responsive Optimizer for Plant Systems
+
+# URL of the repository
+repository: https://github.com/ThomasXIONG151215/OpenCROPS
+repository_branch: main
+
+# Links to extra files in the sidebar
+launch_buttons:
+  notebook_interface: jupyterlab
+  colab_url: ""
+  binderhub_url: ""
+  thebe: false
+  notebook ejecut: auto
+
+# HTML output settings
+html:
+  title: OpenCROPS Documentation
+  description: Climate-Responsive Optimizer for Plant Systems
+  author: Thomas XIONG
+  comment: ""
+  thumbnail: ""
+
+  # Navigation
+  use_issues_button: false
+  use_repository_button: true
+  use_edit_page_button: false
+  use_download_button: true
+
+  # Sidebars
+  navigation_depth: 3
+
+  # Favicon
+  favicon: ""
+
+  # Google Analytics
+  google_analytics_id: ""
+
+# LaTeX output settings
+latex:
+  latex_documents:
+    targetname: book.tex
+
+# Markdown settings
+markdown:
+  syntax_highlighting: "default"
+  heading_anchors: 3
+
+# PDF settings
+pdf:
+  enabled: true
+  toc: true
+  toc_depth: 2
+
+# Sphinx settings
+sphinx:
+  extra_extensions:
+    - sphinx.ext.autodoc
+    - sphinx.ext.viewcode
+    - sphinx.ext.napoleon
+    - sphinx.ext.intersphinx
+    - sphinx_gallery.gen_gallery
+
+  local_extensions:
+    - ""
+
+  config:
+    autodoc_default_options:
+      members: true
+      undoc-members: true
+      show-inheritance: true
+
+    intersphinx_mapping:
+      python:
+        - https://docs.python.org/3
+        - null
+      numpy:
+        - https://numpy.org/doc/stable
+        - null
+      pandas:
+        - https://pandas.pydata.org/docs
+        - null
+
+# Execute notebook settings
+execute:
+  execute_notebooks: auto
+  timeout: 600
+  run_in_temp: false
+  exclude_patterns: []
+
+# Filter content settings
+exclude_patterns:
+  - "_build"
+  - "_templates"
+  - "**.ipynb_checkpoints"
+  - "Thumbs.db"
+  - ".DS_Store"
+
+# Table of contents settings
+parse:
+  myst_enable_extensions:
+    - amsmath
+    - colon_fence
+    - deflist
+    - dollarmath
+    - fieldlist
+    - html_admonition
+    - html_image
+    - linkify
+    - replacements
+    - smartquotes
+    - strikethrough
+    - substation
+    - tasklist
