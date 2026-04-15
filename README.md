@@ -1,23 +1,23 @@
-# OpenCROPS / OpenCROPS
+# vertical-farm-energy-designer (OpenCROPS)
 
 ### Climate-Responsive Optimizer for Plant Systems / 气候响应式植物系统优化器
 
 ---
 
-[![CI](https://github.com/ThomasXIONG151215/OpenCROPS/actions/workflows/ci.yml/badge.svg)](https://github.com/ThomasXIONG151215/OpenCROPS/actions/workflows/ci.yml)
+[![CI](https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/actions/workflows/ci.yml/badge.svg)](https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey)](https://creativecommons.org/licenses/by/4.0/)
 
-[![GitHub stars](https://img.shields.io/github/stars/ThomasXIONG151215/OpenCROPS)](https://github.com/ThomasXIONG151215/OpenCROPS/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/ThomasXIONG151215/OpenCROPS)](https://github.com/ThomasXIONG151215/OpenCROPS/network)
-[![Downloads](https://img.shields.io/github/downloads/ThomasXIONG151215/OpenCROPS/total)](https://github.com/ThomasXIONG151215/OpenCROPS/releases)
+[![GitHub stars](https://img.shields.io/github/stars/ThomasXIONG151215/vertical-farm-energy-designer)](https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/ThomasXIONG151215/vertical-farm-energy-designer)](https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/network)
+[![Downloads](https://img.shields.io/github/downloads/ThomasXIONG151215/vertical-farm-energy-designer/total)](https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/releases)
 
 ---
 
-**OpenCROPS** is an open-source framework for optimizing the integration of photovoltaic and battery energy storage systems (PVBES) with Plant Factories with Artificial Lighting (PFALs).
+**vertical-farm-energy-designer** (原 **OpenCROPS**) 是一个开源框架，用于优化光伏电池储能系统 (PVBES) 与人工光植物工厂 (PFAL) 的集成。
 
-**OpenCROPS** 是一个开源框架，用于优化光伏电池储能系统 (PVBES) 与人工光植物工厂 (PFAL) 的集成。
+**vertical-farm-energy-designer** (formerly **OpenCROPS**) is an open-source framework for optimizing the integration of photovoltaic and battery energy storage systems (PVBES) with Plant Factories with Artificial Lighting (PFALs).
 
 ## Key Features / 核心特性
 
@@ -34,8 +34,8 @@
 
 ```bash
 # Clone the repository / 克隆仓库
-git clone https://github.com/ThomasXIONG151215/OpenCROPS.git
-cd OpenCROPS
+git clone https://github.com/ThomasXIONG151215/vertical-farm-energy-designer.git
+cd vertical-farm-energy-designer
 
 # Install in development mode / 开发模式安装
 pip install -e .
@@ -48,47 +48,47 @@ pip install -e ".[all]"
 
 ```bash
 # Show CLI help / 显示 CLI 帮助
-opencrops --help
+vf-ed --help
 
 # Optimize for all cities / 优化所有城市
-opencrops optimize
+vf-ed optimize
 
 # Optimize for specific cities / 优化特定城市
-opencrops optimize --cities shanghai dubai harbin
+vf-ed optimize --cities shanghai dubai harbin
 
 # Evaluate a specific configuration / 评估特定配置
-opencrops evaluate --pv-area 200 --battery-capacity 100 --city shanghai --start-hour 8
+vf-ed evaluate --pv-area 200 --battery-capacity 100 --city shanghai --start-hour 8
 
 # Calibrate optimization parameters / 校准优化参数
-opencrops calibrate --city shanghai
+vf-ed calibrate --city shanghai
 
 # Analyze results / 分析结果
-opencrops analyze --results-file all_optimization_results.csv
+vf-ed analyze --results-file all_optimization_results.csv
 ```
 
 ## CLI Commands / CLI 命令
 
 | Command | 说明 / Description |
 |---------|-------------------|
-| `opencrops --version` | Show version / 显示版本 |
-| `opencrops optimize` | Optimize PV-Battery system / 优化光伏电池系统 |
-| `opencrops evaluate` | Evaluate single configuration / 评估单个配置 |
-| `opencrops calibrate` | Calibrate step sizes / 校准步长 |
-| `opencrops analyze` | Analyze results / 分析结果 |
-| `opencrops mechanism` | Comparative analysis / 对比分析 |
+| `vf-ed --version` | Show version / 显示版本 |
+| `vf-ed optimize` | Optimize PV-Battery system / 优化光伏电池系统 |
+| `vf-ed evaluate` | Evaluate single configuration / 评估单个配置 |
+| `vf-ed calibrate` | Calibrate step sizes / 校准步长 |
+| `vf-ed analyze` | Analyze results / 分析结果 |
+| `vf-ed mechanism` | Comparative analysis / 对比分析 |
 
 ### Available Cities / 支持的城市
 
 ```
-shanghai, beijing, newyork, hohhot, urumqi, dubai, paris, sydney, 
-saopaulo, harbin, chongqing, hangzhou, tianjin, zhengzhou, 
+shanghai, beijing, newyork, hohhot, urumqi, dubai, paris, sydney,
+saopaulo, harbin, chongqing, hangzhou, tianjin, zhengzhou,
 hainan, jinan, lasa, haikou
 ```
 
 ## Architecture Overview / 架构概览
 
 ```
-OpenCROPS/
+vertical-farm-energy-designer/
 ├── src/                    # Core modules / 核心模块
 │   ├── __init__.py        # Package init with version / 版本信息
 │   ├── cli.py             # Typer CLI interface / Typer CLI 接口
@@ -124,20 +124,20 @@ OpenCROPS/
 
 ```bash
 # Optimize for default cities / 优化默认城市
-opencrops optimize
+vf-ed optimize
 
 # Optimize for specific cities / 优化特定城市
-opencrops optimize --cities shanghai harbin
+vf-ed optimize --cities shanghai harbin
 
 # Optimize with verbose output / 详细输出
-opencrops optimize --verbose
+vf-ed optimize --verbose
 ```
 
 ### Evaluate Configuration / 评估配置
 
 ```bash
 # Evaluate specific PV-Battery configuration / 评估特定配置
-opencrops evaluate \
+vf-ed evaluate \
   --pv-area 200 \
   --battery-capacity 100 \
   --city shanghai \
@@ -148,7 +148,7 @@ opencrops evaluate \
 
 ```bash
 # Compare two different photoperiod schedules / 比较两种不同光周期
-opencrops mechanism \
+vf-ed mechanism \
   --pv-area 200 \
   --battery-capacity 100 \
   --city shanghai \
@@ -158,9 +158,9 @@ opencrops mechanism \
 
 ## Research Results / 研究结果
 
-OpenCROPS has been validated across five representative Chinese climate regions:
+vertical-farm-energy-designer 已在五个代表性的中国气候区进行了验证：
 
-OpenCROPS 已在五个代表性的中国气候区进行了验证：
+vertical-farm-energy-designer has been validated across five representative Chinese climate regions:
 
 | Metric / 指标 | Value / 值 |
 |--------------|-----------|
@@ -171,11 +171,11 @@ OpenCROPS 已在五个代表性的中国气候区进行了验证：
 
 **Key Finding / 关键发现**: Photoperiod schedules aligned with peak solar hours (3:00-5:00) consistently outperform other options. / 与峰值太阳小时（3:00-5:00）对齐的光周期始终优于其他方案。
 
-## Extending OpenCROPS / 扩展 OpenCROPS
+## Extending / 扩展
 
-OpenCROPS is designed to be extensible. You can add custom models for:
+vertical-farm-energy-designer 设计为可扩展的。您可以添加自定义模型：
 
-OpenCROPS 设计为可扩展的。您可以添加自定义模型：
+vertical-farm-energy-designer is designed to be extensible. You can add custom models for:
 
 - **PV Models / 光伏模型**: Implement the `BaseModel` interface to add new PV panel models / 实现 `BaseModel` 接口以添加新的光伏面板模型
 - **Battery Models / 电池模型**: Extend the battery system with custom chemistry models / 使用自定义化学模型扩展电池系统
@@ -185,9 +185,9 @@ See [docs/extensions/README.md](docs/extensions/README.md) for detailed guides. 
 
 ## Data / 数据
 
-Experimental data from the PFAL facility is available in `data/raw/`:
-
 PFAL 设施的实验数据位于 `data/raw/`:
+
+Experimental data from the PFAL facility is available in `data/raw/`:
 
 - `BW_data.csv`: Raw energy consumption measurements / 原始能耗测量
 - `BW_processed_data.csv`: Processed and cleaned data / 处理后的数据
@@ -221,23 +221,23 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ## Citation / 引用
 
-If you use OpenCROPS in your research, please cite:
+如果您在研究中使用 vertical-farm-energy-designer，请引用：
 
-如果您在研究中使用 OpenCROPS，请引用：
+If you use vertical-farm-energy-designer in your research, please cite:
 
 ```bibtex
-@software{OpenCROPS,
-  title = {OpenCROPS: Climate-Responsive Optimizer for Plant Systems},
+@software{vertical-farm-energy-designer,
+  title = {vertical-farm-energy-designer: Climate-Responsive Optimizer for Plant Systems},
   author = {Thomas XIONG},
-  url = {https://github.com/ThomasXIONG151215/OpenCROPS},
+  url = {https://github.com/ThomasXIONG151215/vertical-farm-energy-designer},
   year = {2024}
 }
 ```
 
 ## Support / 支持
 
-- **Issues**: https://github.com/ThomasXIONG151215/OpenCROPS/issues
-- **Discussions**: https://github.com/ThomasXIONG151215/OpenCROPS/discussions
+- **Issues**: https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/issues
+- **Discussions**: https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/discussions
 
 ---
 

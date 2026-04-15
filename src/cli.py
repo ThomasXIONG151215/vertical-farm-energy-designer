@@ -9,8 +9,8 @@ import logging
 from src import __version__
 
 app = typer.Typer(
-    name="opencrops",
-    help="OpenCROPS - Climate-Responsive Photovoltaic-Battery System Optimizer",
+    name="vf-ed",
+    help="vertical-farm-energy-designer (OpenCROPS) - Climate-Responsive Photovoltaic-Battery System Optimizer",
     add_completion=False,
 )
 
@@ -37,8 +37,8 @@ VALID_OPTIMIZE_CITIES = [
 
 @app.command()
 def version():
-    """Show OpenCROPS version / 显示 OpenCROPS 版本"""
-    typer.echo(f"OpenCROPS v{__version__}")
+    """Show version / 显示版本"""
+    typer.echo(f"vertical-farm-energy-designer (OpenCROPS) v{__version__}")
 
 
 @app.command()
@@ -143,7 +143,7 @@ def evaluate(
 
     weather_csv = dirs["weather"] / f"{city}_2024.csv"
     if not weather_csv.exists():
-        typer.echo(f"Error: Weather data not found for {city}. Run 'opencrops optimize' first.", err=True)
+        typer.echo(f"Error: Weather data not found for {city}. Run 'vf-ed optimize' first.", err=True)
         raise typer.Exit(code=1)
 
     weather_data = pd.read_csv(weather_csv)
