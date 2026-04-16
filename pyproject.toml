@@ -83,7 +83,7 @@ Issues = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/iss
 Discussions = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/discussions"
 
 [project.scripts]
-opencrops = "src.cli:app"
+vfed = "src.cli:app"
 
 [tool.hatch.build.targets.sdist]
 include = [

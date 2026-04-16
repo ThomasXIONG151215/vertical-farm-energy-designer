@@ -1,16 +1,21 @@
 """
 OpenCROPS CLI - Command Line Interface for PV-Battery System Optimization
 """
+import sys
+from pathlib import Path
+
+# Add parent directory to path for weather module access
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 import typer
 from typing import Optional, List
-from pathlib import Path
 import logging
 
 from src import __version__
 
 app = typer.Typer(
-    name="vf-ed",
-    help="vertical-farm-energy-designer (OpenCROPS) - Climate-Responsive Photovoltaic-Battery System Optimizer",
+    name="vfed",
+    help="vertical-farm-energy-designer (vfed) - Climate-Responsive Photovoltaic-Battery System Optimizer",
     add_completion=False,
 )
 
@@ -57,19 +62,23 @@ def optimize(
     优化所有或选定城市的 PV-Battery 系统。
     """
     from main import process_city, RESULTS_DF_PATH, save_aggregated_performance_data
+    from weather.city_coordinates import get_city_coordinates
     from pathlib import Path
 
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Get available cities dynamically
+    available_cities = list(get_city_coordinates().keys())
+
     base_dir = Path("test_case")
-    cities_to_process = cities if cities else VALID_OPTIMIZE_CITIES
+    cities_to_process = cities if cities else available_cities
 
     logger.info(f"Starting optimization for cities: {', '.join(cities_to_process)}")
 
     for city_key in cities_to_process:
-        if city_key not in VALID_OPTIMIZE_CITIES:
-            typer.echo(f"Error: Unknown city '{city_key}'. Valid cities: {', '.join(VALID_OPTIMIZE_CITIES)}", err=True)
+        if city_key not in available_cities:
+            typer.echo(f"Error: Unknown city '{city_key}'. Available cities: {', '.join(available_cities)}", err=True)
             raise typer.Exit(code=1)
         logger.info(f"\nProcessing city: {city_key}")
         try:
@@ -98,7 +107,7 @@ def evaluate(
         ...,
         "--city",
         "-c",
-        help=f"City key / 城市键值 ({', '.join(VALID_CITIES)})",
+        help="City key / 城市键值",
     ),
     start_hour: int = typer.Option(
         ...,
@@ -116,14 +125,16 @@ def evaluate(
     from main import evaluate_single_config
     from pathlib import Path
     import pandas as pd
+    from weather.city_coordinates import get_city_coordinates
 
     base_dir = Path("test_case")
 
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    if city not in VALID_CITIES:
-        typer.echo(f"Error: Unknown city '{city}'. Valid cities: {', '.join(VALID_CITIES)}", err=True)
+    available_cities = list(get_city_coordinates().keys())
+    if city not in available_cities:
+        typer.echo(f"Error: Unknown city '{city}'. Available cities: {', '.join(available_cities)}", err=True)
         raise typer.Exit(code=1)
 
     if not (0 <= start_hour <= 23):
@@ -143,7 +154,7 @@ def evaluate(
 
     weather_csv = dirs["weather"] / f"{city}_2024.csv"
     if not weather_csv.exists():
-        typer.echo(f"Error: Weather data not found for {city}. Run 'vf-ed optimize' first.", err=True)
+        typer.echo(f"Error: Weather data not found for {city}. Run 'vfed optimize' first.", err=True)
         raise typer.Exit(code=1)
 
     weather_data = pd.read_csv(weather_csv)
@@ -179,7 +190,7 @@ def calibrate(
         ...,
         "--city",
         "-c",
-        help=f"City key / 城市键值 ({', '.join(VALID_CITIES)})",
+        help="City key / 城市键值",
     ),
     pv_max: float = typer.Option(
         500.0,
@@ -204,8 +215,10 @@ def calibrate(
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    if city not in VALID_CITIES:
-        typer.echo(f"Error: Unknown city '{city}'. Valid cities: {', '.join(VALID_CITIES)}", err=True)
+    from weather.city_coordinates import get_city_coordinates
+    available_cities = list(get_city_coordinates().keys())
+    if city not in available_cities:
+        typer.echo(f"Error: Unknown city '{city}'. Available cities: {', '.join(available_cities)}", err=True)
         raise typer.Exit(code=1)
 
     calibrator = StepSizeCalibrator(
@@ -282,7 +295,7 @@ def mechanism(
         ...,
         "--city",
         "-c",
-        help=f"City key / 城市键值 ({', '.join(VALID_CITIES)})",
+        help="City key / 城市键值",
     ),
     start_hour1: int = typer.Option(
         ...,
@@ -309,8 +322,10 @@ def mechanism(
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    if city not in VALID_CITIES:
-        typer.echo(f"Error: Unknown city '{city}'. Valid cities: {', '.join(VALID_CITIES)}", err=True)
+    from weather.city_coordinates import get_city_coordinates
+    available_cities = list(get_city_coordinates().keys())
+    if city not in available_cities:
+        typer.echo(f"Error: Unknown city '{city}'. Available cities: {', '.join(available_cities)}", err=True)
         raise typer.Exit(code=1)
 
     if not (0 <= start_hour1 <= 23):
@@ -333,6 +348,129 @@ def mechanism(
     )
 
     typer.echo("Mechanism analysis complete!")
+
+
+# City subcommand group
+city_app = typer.Typer(help="City management / 城市管理")
+app.add_typer(city_app, name="city", help="City management commands / 城市管理命令")
+
+
+@city_app.command("list")
+def city_list():
+    """
+    List all available cities.
+
+    列出所有可用城市。
+    """
+    from weather.city_coordinates import list_cities
+
+    df = list_cities()
+    typer.echo(f"\nAvailable cities ({len(df)} total):")
+    typer.echo("-" * 60)
+    for _, row in df.iterrows():
+        typer.echo(f"  {row['city_key']:12} | {row['name']:20} | ({row['latitude']:+.4f}, {row['longitude']:+.4f}) | {row['timezone']}")
+    typer.echo("-" * 60)
+
+
+@city_app.command("search")
+def city_search(
+    query: str = typer.Argument(..., help="City name to search / 要搜索的城市名"),
+    limit: int = typer.Option(5, "--limit", "-n", help="Maximum number of results / 最大结果数"),
+):
+    """
+    Search for a city using Nominatim geocoding service.
+
+    使用 Nominatim 地理编码服务搜索城市。
+    """
+    from geopy.geocoders import Nominatim
+    from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+    import time
+
+    typer.echo(f"Searching for: {query}")
+
+    geolocator = Nominatim(user_agent="vfed-city-search", timeout=10)
+
+    try:
+        # Rate limit: 1 request per second
+        time.sleep(1.1)
+
+        locations = geolocator.geocode(query, exactly_one=False, limit=limit, addressdetails=True)
+
+        if not locations:
+            typer.echo(f"No results found for '{query}'", err=True)
+            raise typer.Exit(code=1)
+
+        typer.echo(f"\nFound {len(locations)} result(s):")
+        typer.echo("-" * 60)
+
+        for i, loc in enumerate(locations, 1):
+            address = loc.raw.get('address', {})
+            city_name = address.get('city', address.get('town', address.get('village', address.get('municipality', 'Unknown'))))
+            country = address.get('country', 'Unknown')
+            display_name = loc.address if hasattr(loc, 'address') else str(loc)
+
+            typer.echo(f"\n{i}. {display_name}")
+            typer.echo(f"   Coordinates: ({loc.latitude:.4f}, {loc.longitude:.4f})")
+            typer.echo(f"   City: {city_name}, Country: {country}")
+
+        typer.echo("-" * 60)
+
+    except GeocoderTimedOut:
+        typer.echo("Error: Geocoding service timed out. Please try again.", err=True)
+        raise typer.Exit(code=1)
+    except GeocoderServiceError as e:
+        typer.echo(f"Error: Geocoding service error: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@city_app.command("add")
+def city_add(
+    name: str = typer.Option(..., "--name", "-n", help="City key (unique identifier) / 城市键值（唯一标识符）"),
+    lat: float = typer.Option(..., "--lat", "-lat", help="Latitude (-90 to 90) / 纬度（-90 到 90）"),
+    lon: float = typer.Option(..., "--lon", "-lon", help="Longitude (-180 to 180) / 经度（-180 到 180）"),
+    display_name: Optional[str] = typer.Option(None, "--display-name", "-dn", help="Display name / 显示名称"),
+    timezone: str = typer.Option("Asia/Singapore", "--timezone", "-tz", help="IANA timezone / IANA 时区"),
+):
+    """
+    Add a new city to the database.
+
+    添加新城市到数据库。
+    """
+    from weather.city_coordinates import add_city
+
+    # Validate coordinates
+    if not -90 <= lat <= 90:
+        typer.echo(f"Error: Latitude must be between -90 and 90, got {lat}", err=True)
+        raise typer.Exit(code=1)
+
+    if not -180 <= lon <= 180:
+        typer.echo(f"Error: Longitude must be between -180 and 180, got {lon}", err=True)
+        raise typer.Exit(code=1)
+
+    # Use key as display name if not provided
+    if display_name is None:
+        display_name = name.capitalize()
+
+    try:
+        add_city(
+            city_key=name.lower().replace(" ", "_"),
+            name=display_name,
+            latitude=lat,
+            longitude=lon,
+            timezone=timezone
+        )
+        typer.echo(f"Successfully added city: {name}")
+        typer.echo(f"  Key: {name.lower().replace(' ', '_')}")
+        typer.echo(f"  Display name: {display_name}")
+        typer.echo(f"  Coordinates: ({lat:.4f}, {lon:.4f})")
+        typer.echo(f"  Timezone: {timezone}")
+
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        typer.echo(f"Error adding city: {e}", err=True)
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
