@@ -473,5 +473,195 @@ def city_add(
         raise typer.Exit(code=1)
 
 
+idf_app = typer.Typer(help="IDF file generation and simulation / IDF 文件生成与模拟")
+app.add_typer(idf_app, name="idf", help="IDF file management commands / IDF 文件管理命令")
+
+
+@idf_app.command("generate")
+def idf_generate(
+    name: str = typer.Option(..., "--name", "-n", help="Name for the PFAL building / PFAL 建筑名称"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output IDF file path / 输出 IDF 文件路径"),
+    template: str = typer.Option("container", "--template", "-t", help="Template type: container / 模板类型"),
+    floor_area: float = typer.Option(100.0, "--floor-area", "-fa", help="Floor area in m² / 建筑面积（平方米）"),
+    lighting_power: float = typer.Option(350.0, "--lighting-power", "-lp", help="Lighting power density W/m² / 照明功率密度（瓦/平方米）"),
+    heating_setpoint: float = typer.Option(20.0, "--heating", "-heat", help="Heating setpoint °C / 供暖设定温度（摄氏度）"),
+    cooling_setpoint: float = typer.Option(25.0, "--cooling", "-cool", help="Cooling setpoint °C / 制冷设定温度（摄氏度）"),
+):
+    """
+    Generate a PFAL building IDF file from template.
+
+    基于模板生成 PFAL 建筑 IDF 文件。
+    """
+    from eppy import openidf
+    from shutil import copy2
+
+    template_path = Path(__file__).resolve().parent.parent.parent / "OpenCROPS" / "idfs" / "Template.idf"
+    idd_path = "C:/EnergyPlusV23-1-0/Energy+.idd"
+    ventilation_schedule = Path(__file__).resolve().parent.parent.parent / "OpenCROPS" / "idfs" / "ventilationSchedule.txt"
+
+    if not template_path.exists():
+        typer.echo(f"Error: Template not found at {template_path}", err=True)
+        raise typer.Exit(code=1)
+
+    if not Path(idd_path).exists():
+        typer.echo(f"Error: IDD file not found at {idd_path}", err=True)
+        raise typer.Exit(code=1)
+
+    if not ventilation_schedule.exists():
+        typer.echo(f"Error: Ventilation schedule not found at {ventilation_schedule}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        typer.echo(f"Loading template from {template_path}...")
+        idf = openidf(str(template_path), idd_path)
+
+        building = idf.idfobjects['BUILDING'][0]
+        building.Name = name
+
+        zone = idf.idfobjects['ZONE'][0]
+        zone.Name = name.replace(" ", "_").upper()
+
+        lights = idf.idfobjects['LIGHTS'][0]
+        lights.Design_Level_Calculation_Method = "Watts/Area"
+        lights.Watts_per_Zone_Floor_Area = lighting_power
+        lights.Name = f"{name.replace(' ', '_').upper()}_General_lighting"
+
+        for obj in idf.idfobjects.get('ELECTRICEQUIPMENT', []):
+            if hasattr(obj, 'Design_Level'):
+                obj.Design_Level = floor_area * 50
+
+        schedule_file_objs = idf.idfobjects.get('SCHEDULE:FILE', [])
+        for sched_file in schedule_file_objs:
+            if hasattr(sched_file, 'File_Name') and 'ventilationSchedule' in str(sched_file.File_Name):
+                sched_file.File_Name = str(output.parent / "ventilationSchedule.txt")
+
+        output_dir = output.parent
+        output_dir.mkdir(parents=True, exist_ok=True)
+        copy2(str(ventilation_schedule), str(output_dir / "ventilationSchedule.txt"))
+
+        idf.save(str(output))
+        typer.echo(f"Successfully generated IDF: {output}")
+        typer.echo(f"  Building: {name}")
+        typer.echo(f"  Floor area: {floor_area} m²")
+        typer.echo(f"  Lighting power: {lighting_power} W/m²")
+        typer.echo(f"  Ventilation schedule: {output_dir / 'ventilationSchedule.txt'}")
+
+    except Exception as e:
+        typer.echo(f"Error generating IDF: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@idf_app.command("run")
+def idf_run(
+    idf_file: Path = typer.Option(..., "--idf", "-i", help="Input IDF file / 输入 IDF 文件"),
+    weather: Path = typer.Option(..., "--weather", "-w", help="EPW weather file / EPW 气象文件"),
+    output_dir: Path = typer.Option(Path("output"), "--output-dir", "-o", help="Output directory / 输出目录"),
+):
+    """
+    Run EnergyPlus simulation with an IDF file.
+
+    使用 IDF 文件运行 EnergyPlus 模拟。
+    """
+    import subprocess
+
+    energyplus_exe = Path("C:/EnergyPlusV23-1-0/energyplus.exe")
+    expand_objects_exe = Path("C:/EnergyPlusV23-1-0/ExpandObjects.exe")
+
+    if not energyplus_exe.exists():
+        typer.echo(f"Error: EnergyPlus not found at {energyplus_exe}", err=True)
+        raise typer.Exit(code=1)
+
+    if not idf_file.exists():
+        typer.echo(f"Error: IDF file not found: {idf_file}", err=True)
+        raise typer.Exit(code=1)
+
+    if not weather.exists():
+        typer.echo(f"Error: Weather file not found: {weather}", err=True)
+        raise typer.Exit(code=1)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    typer.echo(f"Running EnergyPlus simulation...")
+    typer.echo(f"  IDF: {idf_file}")
+    typer.echo(f"  Weather: {weather}")
+    typer.echo(f"  Output: {output_dir}")
+
+    try:
+        expanded_idf = output_dir / idf_file.name
+        typer.echo("Running ExpandObjects to process HVACTemplate objects...")
+
+        expand_result = subprocess.run(
+            [
+                str(expand_objects_exe),
+                "-i", str(idf_file),
+                "-o", str(expanded_idf),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if expand_result.returncode != 0:
+            typer.echo(f"ExpandObjects failed: {expand_result.stderr[:500]}", err=True)
+
+        typer.echo("Running EnergyPlus...")
+        result = subprocess.run(
+            [
+                str(energyplus_exe),
+                "-d", str(output_dir),
+                "-w", str(weather),
+                "-i", "C:/EnergyPlusV23-1-0/Energy+.idd",
+                str(expanded_idf) if expand_result.returncode == 0 else str(idf_file),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
+        if result.returncode == 0:
+            typer.echo("Simulation completed successfully!")
+            err_file = output_dir / "eplusout.err"
+            if err_file.exists():
+                with open(err_file) as f:
+                    errors = f.read()
+                    if "Fatal Error" in errors or "** Fatal" in errors:
+                        typer.echo("Warning: Errors found in simulation:", err=True)
+                        typer.echo(errors[:500], err=True)
+        else:
+            typer.echo(f"Simulation failed with code {result.returncode}", err=True)
+            if result.stderr:
+                typer.echo(result.stderr[:500], err=True)
+            raise typer.Exit(code=1)
+
+    except subprocess.TimeoutExpired:
+        typer.echo("Error: Simulation timed out", err=True)
+        raise typer.Exit(code=1)
+    except Exception as e:
+        typer.echo(f"Error running simulation: {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@idf_app.command("template")
+def idf_template():
+    """
+    Show available IDF templates.
+
+    显示可用的 IDF 模板。
+    """
+    templates_dir = Path(__file__).resolve().parent.parent.parent / "OpenCROPS" / "idfs"
+    templates = [
+        ("container", "Template.idf", "Container-style PFAL template (recommended)"),
+        ("noequip", "Template_NoEquip.idf", "Template without equipment"),
+    ]
+
+    typer.echo("\nAvailable templates:")
+    typer.echo("-" * 70)
+    for key, filename, desc in templates:
+        template_path = templates_dir / filename
+        status = "✓" if template_path.exists() else "✗"
+        typer.echo(f"  {status} {key:12} | {filename:20} | {desc}")
+    typer.echo("-" * 70)
+
+
 if __name__ == "__main__":
     app()
