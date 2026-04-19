@@ -477,77 +477,98 @@ idf_app = typer.Typer(help="IDF file generation and simulation / IDF 文件生�
 app.add_typer(idf_app, name="idf", help="IDF file management commands / IDF 文件管理命令")
 
 
-@idf_app.command("generate")
-def idf_generate(
-    name: str = typer.Option(..., "--name", "-n", help="Name for the PFAL building / PFAL 建筑名称"),
+@idf_app.command("build")
+def idf_build(
+    name: str = typer.Option("PFAL", "--name", "-n", help="Building name / 建筑名称"),
     output: Path = typer.Option(..., "--output", "-o", help="Output IDF file path / 输出 IDF 文件路径"),
-    template: str = typer.Option("container", "--template", "-t", help="Template type: container / 模板类型"),
-    floor_area: float = typer.Option(100.0, "--floor-area", "-fa", help="Floor area in m² / 建筑面积（平方米）"),
-    lighting_power: float = typer.Option(350.0, "--lighting-power", "-lp", help="Lighting power density W/m² / 照明功率密度（瓦/平方米）"),
-    heating_setpoint: float = typer.Option(20.0, "--heating", "-heat", help="Heating setpoint °C / 供暖设定温度（摄氏度）"),
-    cooling_setpoint: float = typer.Option(25.0, "--cooling", "-cool", help="Cooling setpoint °C / 制冷设定温度（摄氏度）"),
+    floor_area: float = typer.Option(100.0, "--floor-area", "-fa", help="Floor area in m2 / 建筑面积（平方米）"),
+    num_zones: int = typer.Option(1, "--zones", "-z", help="Number of growing zones (racks) / 种植区数量"),
+    lighting_power: float = typer.Option(350.0, "--lighting-power", "-lp", help="Lighting power density W/m2 / 照明功率密度（瓦/平方米）"),
+    ventilation_rate: float = typer.Option(0.3, "--ventilation", "-v", help="Ventilation rate (air changes/hr) / 换气次数"),
+    heating: float = typer.Option(20.0, "--heating", "-heat", help="Heating setpoint C / 供暖设定温度（摄氏度）"),
+    cooling: float = typer.Option(25.0, "--cooling", "-cool", help="Cooling setpoint C / 制冷设定温度（摄氏度）"),
+    equipment_power: float = typer.Option(500.0, "--equipment", "-ep", help="Equipment heat gain W / 设备热收益（瓦）"),
 ):
     """
-    Generate a PFAL building IDF file from template.
+    Build a PFAL building IDF from scratch (no external files required).
 
-    基于模板生成 PFAL 建筑 IDF 文件。
+    从零开始构建 PFAL 建筑 IDF（无需外部文件）。
+    All schedules are inline, no ventilationSchedule.txt dependency.
     """
-    from eppy import openidf
-    from shutil import copy2
-
-    template_path = Path(__file__).resolve().parent.parent.parent / "OpenCROPS" / "idfs" / "Template.idf"
-    idd_path = "C:/EnergyPlusV23-1-0/Energy+.idd"
-    ventilation_schedule = Path(__file__).resolve().parent.parent.parent / "OpenCROPS" / "idfs" / "ventilationSchedule.txt"
-
-    if not template_path.exists():
-        typer.echo(f"Error: Template not found at {template_path}", err=True)
-        raise typer.Exit(code=1)
-
-    if not Path(idd_path).exists():
-        typer.echo(f"Error: IDD file not found at {idd_path}", err=True)
-        raise typer.Exit(code=1)
-
-    if not ventilation_schedule.exists():
-        typer.echo(f"Error: Ventilation schedule not found at {ventilation_schedule}", err=True)
-        raise typer.Exit(code=1)
+    from src.idf_builder import IDFBuilder
 
     try:
-        typer.echo(f"Loading template from {template_path}...")
-        idf = openidf(str(template_path), idd_path)
+        typer.echo(f"Building IDF for: {name}")
 
-        building = idf.idfobjects['BUILDING'][0]
-        building.Name = name
+        idf = IDFBuilder()
+        idf.set_building(name, floor_area=floor_area, num_zones=num_zones)
 
-        zone = idf.idfobjects['ZONE'][0]
-        zone.Name = name.replace(" ", "_").upper()
+        # Add zones
+        for i in range(num_zones):
+            idf.add_zone(
+                name=f"Zone_{i:02d}",
+                x=0, y=0, z=i * 2.5,  # stacked vertically
+                multiplier=1,
+                ceiling_height=2.5,
+                floor_area=floor_area / num_zones
+            )
 
-        lights = idf.idfobjects['LIGHTS'][0]
-        lights.Design_Level_Calculation_Method = "Watts/Area"
-        lights.Watts_per_Zone_Floor_Area = lighting_power
-        lights.Name = f"{name.replace(' ', '_').upper()}_General_lighting"
+        # Add lighting for each zone
+        for i in range(num_zones):
+            idf.add_lights(
+                zone_idx=i,
+                power_density=lighting_power,
+                zone_name=f"Zone_{i:02d}",
+                schedule_name="LightSchedule"
+            )
 
-        for obj in idf.idfobjects.get('ELECTRICEQUIPMENT', []):
-            if hasattr(obj, 'Design_Level'):
-                obj.Design_Level = floor_area * 50
+        # Add equipment heat gain for each zone
+        for i in range(num_zones):
+            idf.add_electric_equipment(
+                zone_idx=i,
+                design_level=equipment_power,
+                zone_name=f"Zone_{i:02d}",
+                schedule_name="EquipSchedule"
+            )
 
-        schedule_file_objs = idf.idfobjects.get('SCHEDULE:FILE', [])
-        for sched_file in schedule_file_objs:
-            if hasattr(sched_file, 'File_Name') and 'ventilationSchedule' in str(sched_file.File_Name):
-                sched_file.File_Name = str(output.parent / "ventilationSchedule.txt")
+        # Add ventilation for each zone (convert air changes/hr to m3/s/m2)
+        # 1 ACH = 1/3600 m3/s per m3 of space; for floor area: flow_rate = ACH * floor_area / 3600 / floor_area
+        flow_rate = ventilation_rate / 3600  # simplified
+        for i in range(num_zones):
+            idf.add_ventilation(
+                zone_idx=i,
+                flow_rate_per_area=flow_rate,
+                zone_name=f"Zone_{i:02d}",
+                schedule_name="VentilationSchedule"
+            )
 
-        output_dir = output.parent
-        output_dir.mkdir(parents=True, exist_ok=True)
-        copy2(str(ventilation_schedule), str(output_dir / "ventilationSchedule.txt"))
+        # Add thermostat for each zone
+        for i in range(num_zones):
+            idf.add_thermostat(
+                zone_idx=i,
+                heating_setpoint=heating,
+                cooling_setpoint=cooling,
+                zone_name=f"Zone_{i:02d}"
+            )
 
-        idf.save(str(output))
-        typer.echo(f"Successfully generated IDF: {output}")
+        # Write IDF file
+        output.parent.mkdir(parents=True, exist_ok=True)
+        idf_content = idf.build()
+        output.write_text(idf_content, encoding='utf-8')
+
+        typer.echo(f"Successfully built IDF: {output}")
         typer.echo(f"  Building: {name}")
-        typer.echo(f"  Floor area: {floor_area} m²")
-        typer.echo(f"  Lighting power: {lighting_power} W/m²")
-        typer.echo(f"  Ventilation schedule: {output_dir / 'ventilationSchedule.txt'}")
+        typer.echo(f"  Floor area: {floor_area} m2")
+        typer.echo(f"  Zones: {num_zones}")
+        typer.echo(f"  Lighting power: {lighting_power} W/m2")
+        typer.echo(f"  Ventilation rate: {ventilation_rate} ACH")
+        typer.echo(f"  Heating: {heating} C / Cooling: {cooling} C")
+        typer.echo(f"  Equipment: {equipment_power} W/zone")
+        typer.echo("")
+        typer.echo("No external file dependencies - all schedules are inline!")
 
     except Exception as e:
-        typer.echo(f"Error generating IDF: {e}", err=True)
+        typer.echo(f"Error building IDF: {e}", err=True)
         raise typer.Exit(code=1)
 
 
