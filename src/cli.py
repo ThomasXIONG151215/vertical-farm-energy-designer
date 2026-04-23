@@ -531,13 +531,11 @@ def idf_build(
                 schedule_name="EquipSchedule"
             )
 
-        # Add ventilation for each zone (convert air changes/hr to m3/s/m2)
-        # 1 ACH = 1/3600 m3/s per m3 of space; for floor area: flow_rate = ACH * floor_area / 3600 / floor_area
-        flow_rate = ventilation_rate / 3600  # simplified
+        # Add ventilation for each zone (air changes per hour)
         for i in range(num_zones):
             idf.add_ventilation(
                 zone_idx=i,
-                flow_rate_per_area=flow_rate,
+                air_changes_per_hour=ventilation_rate,
                 zone_name=f"Zone_{i:02d}",
                 schedule_name="VentilationSchedule"
             )
@@ -608,22 +606,38 @@ def idf_run(
     typer.echo(f"  Output: {output_dir}")
 
     try:
-        expanded_idf = output_dir / idf_file.name
-        typer.echo("Running ExpandObjects to process HVACTemplate objects...")
+        # Check if IDF contains HVACTemplate objects that need ExpandObjects
+        idf_content = idf_file.read_text(encoding='utf-8')
+        needs_expand = 'HVACTemplate:' in idf_content
 
-        expand_result = subprocess.run(
-            [
-                str(expand_objects_exe),
-                "-i", str(idf_file),
-                "-o", str(expanded_idf),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        if needs_expand and expand_objects_exe.exists():
+            expanded_idf = output_dir / idf_file.name
+            typer.echo("Running ExpandObjects to process HVACTemplate objects...")
 
-        if expand_result.returncode != 0:
-            typer.echo(f"ExpandObjects failed: {expand_result.stderr[:500]}", err=True)
+            expand_result = subprocess.run(
+                [
+                    str(expand_objects_exe),
+                    "-i", str(idf_file),
+                    "-o", str(expanded_idf),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            if expand_result.returncode != 0:
+                typer.echo(f"ExpandObjects failed: {expand_result.stderr[:500]}", err=True)
+                typer.echo("Trying to run EnergyPlus with original IDF...")
+
+            if expand_result.returncode == 0:
+                final_idf = str(expanded_idf)
+            else:
+                final_idf = str(idf_file)
+        else:
+            # No HVACTemplate objects - use IDF directly
+            if not needs_expand:
+                typer.echo("No HVACTemplate objects found - skipping ExpandObjects")
+            final_idf = str(idf_file)
 
         typer.echo("Running EnergyPlus...")
         result = subprocess.run(
@@ -632,7 +646,7 @@ def idf_run(
                 "-d", str(output_dir),
                 "-w", str(weather),
                 "-i", "C:/EnergyPlusV23-1-0/Energy+.idd",
-                str(expanded_idf) if expand_result.returncode == 0 else str(idf_file),
+                final_idf,
             ],
             capture_output=True,
             text=True,
@@ -660,6 +674,148 @@ def idf_run(
     except Exception as e:
         typer.echo(f"Error running simulation: {e}", err=True)
         raise typer.Exit(code=1)
+
+
+@idf_app.command("extract-loads")
+def idf_extract_loads(
+    eso_file: Path = typer.Option(..., "--eso", "-e", help="Input eplusout.eso file / 输入 eplusout.eso 文件"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output CSV file / 输出 CSV 文件"),
+    include_hvac: bool = typer.Option(False, "--include-hvac", help="Include HVAC electricity estimate / 包含 HVAC 估算电耗"),
+):
+    """
+    Extract building load profile from EnergyPlus ESO file for PV/Battery optimization.
+
+    从 EnergyPlus ESO 文件提取建筑负荷曲线，用于 PV/电池优化。
+
+    Outputs annual_energy_schedule_*.csv format compatible with main.py load_schedule().
+    输出与 main.py load_schedule() 兼容的 annual_energy_schedule_*.csv 格式。
+    """
+    import re
+    import csv
+
+    if not eso_file.exists():
+        typer.echo(f"Error: ESO file not found: {eso_file}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Parsing {eso_file}...")
+
+    with open(eso_file, 'r') as f:
+        content = f.read()
+
+    # Split header and data
+    header, data = content.split('End of Data Dictionary')
+
+    # Parse variable IDs from header
+    var_map = {}
+    for line in header.split('\n'):
+        m = re.match(r'^(\d+),(\d+),([^,]+),(.+?) !', line)
+        if m:
+            vid = int(m.group(1))
+            var_map[vid] = {
+                'key': m.group(3).strip(),
+                'name': m.group(4).strip()
+            }
+
+    # Initialize hourly storage - accumulate values per timestep
+    # ESO format: each timestep has timestamp line (vid=2) followed by variable lines
+    hourly_data = {
+        'lights_j': [],
+        'equipment_j': [],
+        'heating_j': [],
+        'cooling_j': [],
+    }
+
+    ts_lights = 0
+    ts_equipment = 0
+    ts_heating = 0
+    ts_cooling = 0
+
+    # Parse data lines
+    for line in data.strip().split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(',')
+        if len(parts) < 2:
+            continue
+
+        try:
+            vid = int(parts[0])
+        except ValueError:
+            continue
+
+        # vid=1 is environment (only once at start), vid=2 marks new timestep
+        if vid == 2:
+            # Save previous timestep data if exists (skip first vid=2 which has no prior data)
+            if ts_lights > 0 or ts_equipment > 0 or ts_heating > 0 or ts_cooling > 0:
+                hourly_data['lights_j'].append(ts_lights)
+                hourly_data['equipment_j'].append(ts_equipment)
+                hourly_data['heating_j'].append(ts_heating)
+                hourly_data['cooling_j'].append(ts_cooling)
+            # Reset accumulators for new timestep
+            ts_lights = 0
+            ts_equipment = 0
+            ts_heating = 0
+            ts_cooling = 0
+            continue
+
+        if vid not in var_map:
+            continue
+
+        var_name = var_map[vid]['name']
+        val = float(parts[1])
+
+        # Accumulate values for this timestep (sum across zones)
+        if 'Lights Electricity Energy' in var_name:
+            ts_lights += val
+        elif 'Electric Equipment Electricity Energy' in var_name:
+            ts_equipment += val
+        elif 'Heating Energy' in var_name:
+            ts_heating += val
+        elif 'Cooling Energy' in var_name:
+            ts_cooling += val
+
+    # Don't forget last timestep
+    hourly_data['lights_j'].append(ts_lights)
+    hourly_data['equipment_j'].append(ts_equipment)
+    hourly_data['heating_j'].append(ts_heating)
+    hourly_data['cooling_j'].append(ts_cooling)
+
+    typer.echo(f"Hourly records: {len(hourly_data['lights_j'])}")
+
+    # Convert J to kWh
+    kwh_data = {
+        'lights_kwh': [j / 3_600_000 for j in hourly_data['lights_j']],
+        'equipment_kwh': [j / 3_600_000 for j in hourly_data['equipment_j']],
+        'heating_kwh': [j / 3_600_000 for j in hourly_data['heating_j']],
+        'cooling_kwh': [j / 3_600_000 for j in hourly_data['cooling_j']],
+    }
+
+    typer.echo(f"Annual totals:")
+    typer.echo(f"  Lights: {sum(kwh_data['lights_kwh']):.2f} kWh")
+    typer.echo(f"  Equipment: {sum(kwh_data['equipment_kwh']):.2f} kWh")
+    typer.echo(f"  Heating: {sum(kwh_data['heating_kwh']):.2f} kWh")
+    typer.echo(f"  Cooling: {sum(kwh_data['cooling_kwh']):.2f} kWh")
+
+    # Calculate total load
+    total_kwh = []
+    for i in range(len(kwh_data['lights_kwh'])):
+        load = kwh_data['lights_kwh'][i] + kwh_data['equipment_kwh'][i]
+        if include_hvac:
+            hvac_est = (kwh_data['heating_kwh'][i] + kwh_data['cooling_kwh'][i]) * 0.1
+            load += hvac_est
+        total_kwh.append(load)
+
+    # Save CSV
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with open(output, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Power (kWh)'])
+        for p in total_kwh:
+            writer.writerow([f'{p:.4f}'])
+
+    typer.echo(f"Total building load: {sum(total_kwh):.2f} kWh/year")
+    typer.echo(f"Saved {len(total_kwh)} hourly values to {output}")
 
 
 @idf_app.command("template")

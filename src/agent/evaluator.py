@@ -19,8 +19,25 @@ import pandas as pd
 
 from .result import AgentResult, ResultStatus, Warning, Error
 from .errors import create_error, create_warning, ERROR_CATALOG
-from ..system import EnergySystem
-from ...weather.city_coordinates import get_city_coordinates
+
+# Import EnergySystem - use absolute import via sys.path
+from src.system import EnergySystem
+
+# Import weather module - weather is at OpenCROPS root level
+try:
+    from weather.city_coordinates import CITY_COORDINATES
+except ImportError:
+    # When running from tests, add project root to path
+    import sys
+    from pathlib import Path
+    project_root = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(project_root))
+    from weather.city_coordinates import CITY_COORDINATES
+
+
+def _get_city_coordinates():
+    """Get city coordinates dict - wrapper for CITY_COORDINATES"""
+    return CITY_COORDINATES
 
 
 def _generate_next_actions(
@@ -112,7 +129,7 @@ def agent_evaluate(
     errors_list: List[Error] = []
 
     # Step 1: Validate city
-    available_cities = list(get_city_coordinates().keys())
+    available_cities = list(_get_city_coordinates().keys())
     if city not in available_cities:
         err = create_error("E003", city=city, available_cities=", ".join(available_cities[:5]) + "...")
         errors_list.append(err)

@@ -11,7 +11,11 @@ Key Principles:
 4. Error self-healing: errors include _fix suggestions
 
 Usage:
-    from src.agent import agent, AgentResult
+    from src.agent import AgentResult
+    from src.agent.result import Warning, Error
+
+    # Import the main run function
+    from src.agent import agent  # agent.run(intent)
 
     # Simple usage
     result = agent.run("minimize energy for shanghai")
@@ -27,13 +31,14 @@ from .errors import ERROR_CATALOG, get_fix, create_error, create_warning
 from .intent import IntentParser, parse_intent, ParsedIntent
 from .evaluator import agent_evaluate
 
-# Import the run function as 'agent' for convenience
-from .agent import run as agent_run
+# Note: To use agent.run(), import it directly:
+#   from src.agent import agent
+#   result = agent.run("...")
+# Or:
+#   from src.agent.agent import run
+#   result = run("...")
 
 __all__ = [
-    # Main entry point
-    "agent_run",
-
     # Schema classes
     "AgentResult",
     "Warning",

@@ -213,9 +213,17 @@ class IntentParser:
     def _extract_city(self, text: str) -> Optional[str]:
         """Extract city name from text"""
         # Simple city name extraction
-        from ...weather.city_coordinates import get_city_coordinates
+        try:
+            from weather.city_coordinates import CITY_COORDINATES
+        except ImportError:
+            # When running from tests, add project root to path
+            import sys
+            from pathlib import Path
+            project_root = Path(__file__).resolve().parent.parent.parent
+            sys.path.insert(0, str(project_root))
+            from weather.city_coordinates import CITY_COORDINATES
 
-        available_cities = {c.lower(): c for c in get_city_coordinates().keys()}
+        available_cities = {c.lower(): c for c in CITY_COORDINATES.keys()}
         text_lower = text.lower()
 
         for name, key in available_cities.items():
