@@ -346,6 +346,17 @@ class TestEvaluatorWrapper:
         assert len(result.errors) > 0
         assert result.errors[0].code == "E003"
 
+    def test_invalid_city_in_natural_language(self):
+        """Test that invalid city in natural language text returns FAILED"""
+        from src.agent_runner import run as agent_run
+
+        result = agent_run('evaluate invalid_city')
+
+        assert result.status == "failed", f"Expected failed but got {result.status}"
+        assert len(result.errors) > 0
+        assert result.errors[0].code == "E003"
+        assert "invalid_city" in result.errors[0].message
+
     def test_parameter_validation_negative_pv(self):
         """T11: Parameter validation - negative PV area"""
         from src.agent.evaluator import agent_evaluate

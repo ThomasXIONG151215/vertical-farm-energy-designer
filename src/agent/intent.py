@@ -93,6 +93,7 @@ class ParsedIntent:
     start_hour: Optional[int] = None
     confidence: float = 1.0
     matched_patterns: List[str] = None
+    potential_city: Optional[str] = None  # Track potential unrecognized city token
 
     def __post_init__(self):
         if self.matched_patterns is None:
@@ -211,8 +212,13 @@ class IntentParser:
             intent.action = value
 
     def _extract_city(self, text: str) -> Optional[str]:
-        """Extract city name from text"""
-        # Simple city name extraction
+        """Extract city name from text.
+
+        Returns:
+            - City key if found (e.g., "shanghai")
+            - None if no city-like token found
+            - Unrecognized token if it looks like a city but isn't in CITY_COORDINATES
+        """
         try:
             from weather.city_coordinates import CITY_COORDINATES
         except ImportError:
@@ -226,9 +232,33 @@ class IntentParser:
         available_cities = {c.lower(): c for c in CITY_COORDINATES.keys()}
         text_lower = text.lower()
 
+        # First, try exact match against known cities
         for name, key in available_cities.items():
             if name in text_lower or key in text_lower:
                 return key
+
+        # No match found - check if there are word-like tokens that might be
+        # an unrecognized city name (for error reporting)
+        import re
+        potential_city_pattern = r'\b([a-zA-Z][a-zA-Z0-9_-]{2,20})\b'
+        tokens = re.findall(potential_city_pattern, text_lower)
+
+        # Known action/crop/season words to exclude
+        known_words = {
+            'minimize', 'maximize', 'optimize', 'evaluate', 'analyze', 'compare',
+            'calibrate', 'build', 'run', 'simulate', 'for', 'with', 'and', 'the', 'in',
+            'energy', 'cost', 'savings', 'performance', 'summer', 'winter', 'spring',
+            'autumn', 'fall', 'lettuce', 'tomato', 'strawberry', 'herb', 'leaf',
+            'green', 'solar', 'pv', 'battery', 'grid', 'area', 'capacity', 'hour',
+            'what', 'how', 'many', 'much', 'best', 'better', 'good', 'bad',
+        }
+
+        # Find potential city tokens that weren't matched
+        for token in tokens:
+            if token not in known_words and len(token) > 2:
+                # This looks like a city name but wasn't recognized in CITY_COORDINATES
+                # Return it so the caller can report an error
+                return token
 
         return None
 

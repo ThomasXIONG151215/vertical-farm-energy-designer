@@ -68,7 +68,7 @@ def run(intent: str, **kwargs) -> AgentResult:
     elif action == "run_simulation":
         return _handle_simulation(parsed, **kwargs)
     else:
-        from .result import Error
+        from src.agent.result import Error
         return AgentResult(
             status=ResultStatus.FAILED.value,
             errors=[
@@ -89,8 +89,31 @@ def _handle_evaluate(parsed: ParsedIntent, **kwargs) -> AgentResult:
     # Extract parameters
     pv_area = parsed.pv_area or kwargs.get("pv_area", 100.0)
     battery_capacity = parsed.battery_capacity or kwargs.get("battery_capacity", 50.0)
-    city = parsed.city or kwargs.get("city", "shanghai")
+    city = parsed.city or kwargs.get("city", None)
     start_hour = parsed.start_hour or kwargs.get("start_hour", 8)
+
+    # Validate: if city was provided but not recognized, return error instead of defaulting
+    from weather.city_coordinates import CITY_COORDINATES
+
+    if city is not None and city not in CITY_COORDINATES:
+        from src.agent.result import Error
+        return AgentResult(
+            status=ResultStatus.FAILED.value,
+            errors=[
+                Error(
+                    code="E003",
+                    message=f"Unknown city: '{city}'",
+                    _fix={
+                        "action": "use_valid_city",
+                        "available_cities": list(CITY_COORDINATES.keys()),
+                    }
+                )
+            ],
+        )
+
+    # Default to shanghai only if no city was provided
+    if city is None:
+        city = "shanghai"
 
     # Run evaluation
     return agent_evaluate(
@@ -104,12 +127,12 @@ def _handle_evaluate(parsed: ParsedIntent, **kwargs) -> AgentResult:
 
 def _handle_optimize(parsed: ParsedIntent, **kwargs) -> AgentResult:
     """Handle optimize action"""
-    from .result import Warning
+    from src.agent.result import Warning
 
     city = parsed.city or kwargs.get("city", None)
 
     if city is None:
-        from .result import Error
+        from src.agent.result import Error
         return AgentResult(
             status=ResultStatus.FAILED.value,
             errors=[
@@ -154,7 +177,7 @@ def _handle_optimize(parsed: ParsedIntent, **kwargs) -> AgentResult:
         )
 
     except Exception as e:
-        from .result import Error
+        from src.agent.result import Error
         return AgentResult(
             status=ResultStatus.FAILED.value,
             errors=[
@@ -172,7 +195,7 @@ def _handle_optimize(parsed: ParsedIntent, **kwargs) -> AgentResult:
 
 def _handle_calibrate(parsed: ParsedIntent, **kwargs) -> AgentResult:
     """Handle calibrate action"""
-    from .result import Error
+    from src.agent.result import Error
 
     city = parsed.city or kwargs.get("city", None)
 
@@ -236,7 +259,7 @@ def _handle_calibrate(parsed: ParsedIntent, **kwargs) -> AgentResult:
 
 def _handle_analyze(parsed: ParsedIntent, **kwargs) -> AgentResult:
     """Handle analyze action"""
-    from .result import Error
+    from src.agent.result import Error
 
     results_file = kwargs.get("results_file", None)
 
@@ -274,7 +297,7 @@ def _handle_analyze(parsed: ParsedIntent, **kwargs) -> AgentResult:
         )
 
     except Exception as e:
-        from .result import Error
+        from src.agent.result import Error
         return AgentResult(
             status=ResultStatus.FAILED.value,
             errors=[
@@ -285,7 +308,7 @@ def _handle_analyze(parsed: ParsedIntent, **kwargs) -> AgentResult:
 
 def _handle_compare(parsed: ParsedIntent, **kwargs) -> AgentResult:
     """Handle compare action - placeholder for multi-config comparison"""
-    from .result import Warning
+    from src.agent.result import Warning
 
     pv_area = parsed.pv_area or kwargs.get("pv_area", 100.0)
     battery_capacity = parsed.battery_capacity or kwargs.get("battery_capacity", 50.0)
@@ -331,7 +354,7 @@ def _handle_compare(parsed: ParsedIntent, **kwargs) -> AgentResult:
         )
 
     except Exception as e:
-        from .result import Error
+        from src.agent.result import Error
         return AgentResult(
             status=ResultStatus.FAILED.value,
             errors=[
@@ -343,7 +366,7 @@ def _handle_compare(parsed: ParsedIntent, **kwargs) -> AgentResult:
 def _handle_build_idf(parsed: ParsedIntent, **kwargs) -> AgentResult:
     """Handle build_idf action"""
     from src.idf_builder import IDFBuilder
-    from .result import Warning
+    from src.agent.result import Warning
 
     name = kwargs.get("name", "PFAL")
     output_path = kwargs.get("output", None)
@@ -352,7 +375,7 @@ def _handle_build_idf(parsed: ParsedIntent, **kwargs) -> AgentResult:
     lighting_power = kwargs.get("lighting_power", 350.0)
 
     if output_path is None:
-        from .result import Error
+        from src.agent.result import Error
         return AgentResult(
             status=ResultStatus.FAILED.value,
             errors=[
@@ -431,7 +454,7 @@ def _handle_build_idf(parsed: ParsedIntent, **kwargs) -> AgentResult:
         )
 
     except Exception as e:
-        from .result import Error
+        from src.agent.result import Error
         return AgentResult(
             status=ResultStatus.FAILED.value,
             errors=[
@@ -442,7 +465,7 @@ def _handle_build_idf(parsed: ParsedIntent, **kwargs) -> AgentResult:
 
 def _handle_simulation(parsed: ParsedIntent, **kwargs) -> AgentResult:
     """Handle run_simulation action - placeholder"""
-    from .result import Warning, Error
+    from src.agent.result import Warning, Error
 
     idf_file = kwargs.get("idf", None)
     weather_file = kwargs.get("weather", None)
