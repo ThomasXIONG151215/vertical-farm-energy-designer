@@ -229,19 +229,35 @@ class IntentParser:
             sys.path.insert(0, str(project_root))
             from weather.city_coordinates import CITY_COORDINATES
 
-        available_cities = {c.lower(): c for c in CITY_COORDINATES.keys()}
         text_lower = text.lower()
 
-        # First, try exact match against known cities
-        for name, key in available_cities.items():
-            if name in text_lower or key in text_lower:
-                return key
+        # First, try exact match against keys (supports both English and Chinese keys)
+        for key in CITY_COORDINATES.keys():
+            key_lower = key.lower() if isinstance(key, str) else key
+            if isinstance(key, str) and (key_lower in text_lower or key in text):
+                # If it's an alias (Chinese name pointing to English), return the canonical key
+                value = CITY_COORDINATES[key]
+                if isinstance(value, str):
+                    return value  # It's an alias, return canonical key
+                elif isinstance(value, dict) and key_lower == key.lower():
+                    return key  # It's the canonical entry
+
+        # Try matching against name_zh fields for dict entries
+        for key, value in CITY_COORDINATES.items():
+            if isinstance(value, dict) and "name_zh" in value:
+                if value["name_zh"] in text:
+                    return key
 
         # No match found - check if there are word-like tokens that might be
         # an unrecognized city name (for error reporting)
         import re
-        potential_city_pattern = r'\b([a-zA-Z][a-zA-Z0-9_-]{2,20})\b'
-        tokens = re.findall(potential_city_pattern, text_lower)
+        # Match both English words and Chinese characters
+        english_pattern = r'\b([a-zA-Z][a-zA-Z0-9_-]{2,20})\b'
+        chinese_pattern = r'([\u4e00-\u9fff]{2,10})'
+        english_tokens = re.findall(english_pattern, text_lower)
+        chinese_tokens = re.findall(chinese_pattern, text)
+
+        all_tokens = english_tokens + chinese_tokens
 
         # Known action/crop/season words to exclude
         known_words = {
@@ -254,8 +270,9 @@ class IntentParser:
         }
 
         # Find potential city tokens that weren't matched
-        for token in tokens:
-            if token not in known_words and len(token) > 2:
+        for token in all_tokens:
+            token_lower = token.lower()
+            if token_lower not in known_words and len(token) > 1:
                 # This looks like a city name but wasn't recognized in CITY_COORDINATES
                 # Return it so the caller can report an error
                 return token
