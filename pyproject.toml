@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "opencrops"
 version = "1.0.0"
-description = "Climate-Responsive Optimizer for Plant Systems (vertical-farm-energy-designer)"
+description = "An open-source framework for PV-Battery-Load energy modeling in vertical farms"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"

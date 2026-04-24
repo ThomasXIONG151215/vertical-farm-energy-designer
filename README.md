@@ -1,8 +1,8 @@
-# vertical-farm-energy-designer (OpenCROPS)
+# Vertical Farm Energy Designer (VFED) (formerly OpenCROPS)
 
 **[中文版](./README_zh.md)**
 
-### Climate-Responsive Optimizer for Plant Systems
+### An open-source framework for PV-Battery-Load energy modeling in vertical farms
 
 ---
 
@@ -16,7 +16,7 @@
 
 ---
 
-**vertical-farm-energy-designer** (formerly **OpenCROPS**) is an open-source framework for optimizing the integration of photovoltaic and battery energy storage systems (PVBES) with Plant Factories with Artificial Lighting (PFALs).
+**Vertical Farm Energy Designer (VFED)** is an open-source framework for optimizing the integration of photovoltaic and battery energy storage systems (PVBES) with Plant Factories with Artificial Lighting (PFALs).
 
 ## Key Features
 
@@ -157,7 +157,7 @@ vf-ed mechanism \
 
 ## Research Results
 
-vertical-farm-energy-designer has been validated across five representative Chinese climate regions:
+Vertical Farm Energy Designer has been validated across five representative Chinese climate regions:
 
 | Metric | Value |
 |--------|-------|
@@ -170,7 +170,7 @@ vertical-farm-energy-designer has been validated across five representative Chin
 
 ## Extending
 
-vertical-farm-energy-designer is designed to be extensible. You can add custom models for:
+Vertical Farm Energy Designer is designed to be extensible. You can add custom models for:
 
 - **PV Models**: Implement the `BaseModel` interface to add new PV panel models
 - **Battery Models**: Extend the battery system with custom chemistry models
@@ -210,11 +210,11 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ## Citation
 
-If you use vertical-farm-energy-designer in your research, please cite:
+If you use Vertical Farm Energy Designer in your research, please cite:
 
 ```bibtex
 @software{vertical-farm-energy-designer,
-  title = {vertical-farm-energy-designer: Climate-Responsive Optimizer for Plant Systems},
+  title = {Vertical Farm Energy Designer (VFED)},
   author = {Thomas XIONG},
   url = {https://github.com/ThomasXIONG151215/vertical-farm-energy-designer},
   year = {2024}

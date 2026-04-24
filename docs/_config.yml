@@ -1,12 +1,12 @@
 # Jupyter Book Configuration for OpenCROPS
 
 # Book metadata
-title: OpenCROPS Documentation
+title: Vertical Farm Energy Designer Documentation
 author: Thomas XIONG
 copyright: "2024"
 
 # Short description (appears in search results)
-description: Climate-Responsive Optimizer for Plant Systems
+description: An open-source framework for PV-Battery-Load energy modeling in vertical farms
 
 # URL of the repository
 repository: https://github.com/ThomasXIONG151215/OpenCROPS
@@ -22,8 +22,8 @@ launch_buttons:
 
 # HTML output settings
 html:
-  title: OpenCROPS Documentation
-  description: Climate-Responsive Optimizer for Plant Systems
+  title: Vertical Farm Energy Designer Documentation
+  description: An open-source framework for PV-Battery-Load energy modeling in vertical farms
   author: Thomas XIONG
   comment: ""
   thumbnail: ""

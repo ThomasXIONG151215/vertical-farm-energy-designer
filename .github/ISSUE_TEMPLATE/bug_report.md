@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-description: Report a bug to help us improve OpenCROPS
+description: Report a bug to help us improve Vertical Farm Energy Designer
 labels: ["bug"]
 title: "[Bug] "
 ---

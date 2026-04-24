@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-description: Suggest a new feature or improvement for OpenCROPS
+description: Suggest a new feature or improvement for Vertical Farm Energy Designer (VFED)
 labels: ["enhancement"]
 title: "[Feature] "
 ---
