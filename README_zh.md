@@ -47,34 +47,34 @@ pip install -e ".[all]"
 
 ```bash
 # 显示 CLI 帮助
-vf-ed --help
+vfed --help
 
 # 优化所有城市
-vf-ed optimize
+vfed optimize
 
 # 优化特定城市
-vf-ed optimize --cities shanghai dubai harbin
+vfed optimize --cities shanghai dubai harbin
 
 # 评估特定配置
-vf-ed evaluate --pv-area 200 --battery-capacity 100 --city shanghai --start-hour 8
+vfed evaluate --pv-area 200 --battery-capacity 100 --city shanghai --start-hour 8
 
 # 校准优化参数
-vf-ed calibrate --city shanghai
+vfed calibrate --city shanghai
 
 # 分析结果
-vf-ed analyze --results-file all_optimization_results.csv
+vfed analyze --results-file all_optimization_results.csv
 ```
 
 ## CLI 命令
 
 | 命令 | 说明 |
 |------|------|
-| `vf-ed --version` | 显示版本 |
-| `vf-ed optimize` | 优化所有或选定城市的光伏电池系统 |
-| `vf-ed evaluate` | 评估单个光伏电池配置 |
-| `vf-ed calibrate` | 校准某城市的优化步长 |
-| `vf-ed analyze` | 分析优化结果 |
-| `vf-ed mechanism` | 对比分析两种不同起始时间的光周期机制 |
+| `vfed --version` | 显示版本 |
+| `vfed optimize` | 优化所有或选定城市的光伏电池系统 |
+| `vfed evaluate` | 评估单个光伏电池配置 |
+| `vfed calibrate` | 校准某城市的优化步长 |
+| `vfed analyze` | 分析优化结果 |
+| `vfed mechanism` | 对比分析两种不同起始时间的光周期机制 |
 
 ### 支持的城市
 
@@ -123,20 +123,20 @@ vertical-farm-energy-designer/
 
 ```bash
 # 优化默认城市
-vf-ed optimize
+vfed optimize
 
 # 优化特定城市
-vf-ed optimize --cities shanghai harbin
+vfed optimize --cities shanghai harbin
 
 # 详细输出
-vf-ed optimize --verbose
+vfed optimize --verbose
 ```
 
 ### 评估配置
 
 ```bash
 # 评估特定光伏电池配置
-vf-ed evaluate \
+vfed evaluate \
   --pv-area 200 \
   --battery-capacity 100 \
   --city shanghai \
@@ -147,7 +147,7 @@ vf-ed evaluate \
 
 ```bash
 # 比较两种不同光周期
-vf-ed mechanism \
+vfed mechanism \
   --pv-area 200 \
   --battery-capacity 100 \
   --city shanghai \

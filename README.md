@@ -47,34 +47,34 @@ pip install -e ".[all]"
 
 ```bash
 # Show CLI help
-vf-ed --help
+vfed --help
 
 # Optimize for all cities
-vf-ed optimize
+vfed optimize
 
 # Optimize for specific cities
-vf-ed optimize --cities shanghai dubai harbin
+vfed optimize --cities shanghai dubai harbin
 
 # Evaluate a specific configuration
-vf-ed evaluate --pv-area 200 --battery-capacity 100 --city shanghai --start-hour 8
+vfed evaluate --pv-area 200 --battery-capacity 100 --city shanghai --start-hour 8
 
 # Calibrate optimization parameters
-vf-ed calibrate --city shanghai
+vfed calibrate --city shanghai
 
 # Analyze results
-vf-ed analyze --results-file all_optimization_results.csv
+vfed analyze --results-file all_optimization_results.csv
 ```
 
 ## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `vf-ed --version` | Show version |
-| `vf-ed optimize` | Optimize PV-Battery system for all or selected cities |
-| `vf-ed evaluate` | Evaluate a single PV-Battery configuration |
-| `vf-ed calibrate` | Calibrate optimization step sizes for a city |
-| `vf-ed analyze` | Analyze optimization results |
-| `vf-ed mechanism` | Comparative mechanism analysis with two different start hours |
+| `vfed --version` | Show version |
+| `vfed optimize` | Optimize PV-Battery system for all or selected cities |
+| `vfed evaluate` | Evaluate a single PV-Battery configuration |
+| `vfed calibrate` | Calibrate optimization step sizes for a city |
+| `vfed analyze` | Analyze optimization results |
+| `vfed mechanism` | Comparative mechanism analysis with two different start hours |
 
 ### Available Cities
 
@@ -123,20 +123,20 @@ vertical-farm-energy-designer/
 
 ```bash
 # Optimize for default cities
-vf-ed optimize
+vfed optimize
 
 # Optimize for specific cities
-vf-ed optimize --cities shanghai harbin
+vfed optimize --cities shanghai harbin
 
 # Optimize with verbose output
-vf-ed optimize --verbose
+vfed optimize --verbose
 ```
 
 ### Evaluate Configuration
 
 ```bash
 # Evaluate specific PV-Battery configuration
-vf-ed evaluate \
+vfed evaluate \
   --pv-area 200 \
   --battery-capacity 100 \
   --city shanghai \
@@ -147,7 +147,7 @@ vf-ed evaluate \
 
 ```bash
 # Compare two different photoperiod schedules
-vf-ed mechanism \
+vfed mechanism \
   --pv-area 200 \
   --battery-capacity 100 \
   --city shanghai \

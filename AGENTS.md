@@ -94,8 +94,8 @@ vfed idf run -i output.idf -w weather.epw -o output/
 vfed idf extract-loads -e output/eplusout.eso -o loads.csv
 
 # Optimization
-vf-ed optimize --cities shanghai harbin
-vf-ed evaluate --pv-area 200 --battery-capacity 100 --city shanghai
+vfed optimize --cities shanghai harbin
+vfed evaluate --pv-area 200 --battery-capacity 100 --city shanghai
 ```
 
 ## EnergyPlus Integration

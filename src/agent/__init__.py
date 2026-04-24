@@ -1,8 +1,8 @@
 """
-OpenCROPS Agent Module
-=====================
+VFED Agent Module
+ =====================
 
-Agent-Native interface for OpenCROPS, designed for AI agent consumption.
+Agent-Native interface for VFED (Vertical Farm Energy Designer), designed for AI agent consumption.
 
 Key Principles:
 1. Single entry point: agent.run(intent)

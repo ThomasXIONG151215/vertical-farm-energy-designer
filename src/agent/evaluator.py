@@ -23,7 +23,7 @@ from .errors import create_error, create_warning, ERROR_CATALOG
 # Import EnergySystem - use absolute import via sys.path
 from src.system import EnergySystem
 
-# Import weather module - weather is at OpenCROPS root level
+# Import weather module - weather is at VFED root level
 try:
     from weather.city_coordinates import CITY_COORDINATES
 except ImportError:
