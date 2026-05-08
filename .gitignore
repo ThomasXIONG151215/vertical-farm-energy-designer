@@ -1,0 +1,14 @@
+# EnergyPlus outputs
+eplusout.*
+
+# Test outputs
+test_*/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyc
+
+# Results (large data)
+results/
