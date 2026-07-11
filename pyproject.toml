@@ -3,9 +3,9 @@ requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
-name = "opencrops"
-version = "1.0.0"
-description = "An open-source framework for PV-Battery-Load energy modeling in vertical farms"
+name = "vertical-farm-energy-designer"
+version = "2.0.0"
+description = "Parametric, config-driven design simulator for vertical farms: digital-twin (ODE) building model + PV-Battery-Grid (PVBES) energy system"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
@@ -40,12 +40,8 @@ classifiers = [
 dependencies = [
     "numpy>=1.20.0",
     "pandas>=1.3.0",
-    "plotly>=4.14.0",
-    "scikit-learn>=0.24.0",
-    "deap>=1.3.0",
-    "scipy>=1.6.0",
-    "typer>=0.9.0",
-    "tqdm>=4.62.0",
+    "requests>=2.25.0",
+    "pyyaml>=5.4.0",
 ]
 
 [project.optional-dependencies]
@@ -57,23 +53,6 @@ dev = [
     "flake8>=4.0",
     "mypy>=0.950",
 ]
-docs = [
-    "jupyter-book>=0.13",
-    "sphinx>=4.0",
-    "sphinx-rtd-theme>=1.0",
-]
-gpu = [
-    "numba>=0.54.0",
-    "cudatoolkit>=11.0",
-]
-all = [
-    "numba>=0.54.0",
-    "jupyter-book>=0.13",
-    "pytest>=6.0",
-    "pytest-cov>=3.0",
-    "black>=22.0",
-    "isort>=5.0",
-]
 
 [project.urls]
 Homepage = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer"
@@ -83,7 +62,7 @@ Issues = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/iss
 Discussions = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/discussions"
 
 [project.scripts]
-vfed = "src.cli:app"
+vfed = "src.cli:main"
 
 [tool.hatch.build.targets.sdist]
 include = [

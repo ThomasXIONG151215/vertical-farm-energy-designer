@@ -1,0 +1,6 @@
+numpy
+cma
+scipy
+statsmodels
+Pillow
+matplotlib
