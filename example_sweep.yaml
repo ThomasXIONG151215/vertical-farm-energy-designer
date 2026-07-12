@@ -1,0 +1,169 @@
+name: example_sweep
+site:
+  lat: 30.9
+  lon: 121.5
+  tz_hours: 8.0
+  tilt: 20.0
+  azimuth: 180.0
+  year: 2023
+envelope:
+  U_wall_A: 125.3
+  A_window: 0.0
+  eta_solar: 0.15
+  ach: 0.5
+  permeance: 0.0
+  V_room: 200.0
+  rho_air: 1.2
+  cp_air: 1005.0
+  C_z: 499597.0
+hvac:
+  P_rated_w: 3000.0
+  cop_value: 4.0
+  cop_mode: constant
+  cop_k: 0.02
+  cop_T_ref: 25.0
+  cop_heat: 3.0
+  heat_mode: heat_pump
+  P_rated_heat_w: 3000.0
+  deadband_c: 1.0
+  min_on_s: 180.0
+  min_off_s: 180.0
+  fan_power_w: 70.0
+  shr_BF: 0.15
+  tau_q: 90.0
+  tau_m: 60.0
+deh:
+  P_ref_w: 2233.0
+  poly_e:
+  - 1.0
+  - 0.02
+  - 0.0
+  - 0.05
+  - 0.0
+  - 0.0
+  T_mean: 22.0
+  T_std: 5.0
+  W_mean: 0.012
+  W_std: 0.003
+  eta_ref: 0.11
+  eta_max: 0.15
+  ah_min: 0.0054
+  ah_ref: 0.0099
+  smer: 2.0
+  deadband_rh: 3.0
+  min_on_s: 180.0
+  min_off_s: 180.0
+  fan_power_w: 40.0
+  tau_q: 90.0
+  tau_m: 120.0
+led:
+  power_w: 1300.0
+  light_start_hour: 6
+  photoperiod_hours: 16
+  heat_fraction: 1.0
+  auto_deduce: true
+  efficacy: 2.5
+  ppfd_target: 400.0
+  covered_area: 45.0
+transpiration:
+  method: vpd
+  E_max_kgs: 0.0001
+  k_vpd: 0.0001
+  stage_factor: 1.0
+  g_stomata: 0.001
+setpoints:
+  T_light: 22.0
+  T_dark: 18.0
+  RH: 65.0
+  co2_ppm: 800.0
+  crop_cycle_days: 30.0
+pv:
+  eta_pv: 0.233
+  area_to_power: 4.3
+  N_s: 156
+  I_sc_stc: 13.98
+  V_oc_stc: 57.34
+  I_mp_stc: 13.33
+  V_mp_stc: 46.0
+  alpha_sc: 0.045
+  beta_voc: -0.25
+  NOCT: 45.0
+  eta_inv: 0.97
+  C_pv: 110.0
+  degradation: 0.004
+battery:
+  c_energy: 220.0
+  c_rate: 1.0
+  eta_ch: 0.91
+  eta_dis: 0.91
+  soc_min: 0.1
+  soc_max: 0.9
+  cycle_life: 4000
+  maintenance: 0.01
+tariff:
+  peak_price: 0.096
+  normal_price: 0.096
+  valley_price: 0.096
+  export_price: 0.05
+  peak_hours:
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 18
+  - 19
+  - 20
+  - 21
+  valley_hours:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 23
+space:
+  parameter_ranges:
+    ppfd_target:
+    - 150
+    - 300
+    - 75
+    efficacy:
+    - 2.5
+    - 3.0
+    - 0.5
+    photoperiod_hours:
+    - 14
+    - 18
+    - 4
+    T_light:
+    - 20
+    - 24
+    - 2
+    T_dark:
+    - 16
+    - 20
+    - 2
+    RH:
+    - 65
+    - 75
+    - 10
+    co2_ppm:
+    - 600
+    - 1000
+    - 400
+    crop_cycle_days:
+    - 30
+    - 40
+    - 10
+    pv_area:
+    - 0
+    - 200
+    - 50
+    battery:
+    - 0
+    - 100
+    - 25
+  timestep_s: 600.0
+equipment_power_w: 0.0

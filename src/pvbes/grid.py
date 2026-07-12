@@ -1,8 +1,8 @@
 """
-Electricity tariff model (time-of-use).
+Electricity tariff model (hourly price table).
 
-Maps each hour-of-day to a price tier (peak / normal / valley) and computes
-grid import cost and export (feed-in) credit. Fully parametric for design studies.
+Maps each hour-of-day directly to a price via a 24-element array.
+Replaces the old three-tier peak/normal/valley model.
 """
 
 from dataclasses import dataclass, field
@@ -15,20 +15,15 @@ __all__ = ["Tariff"]
 
 @dataclass
 class Tariff:
-    peak_price: float = 0.096      # $/kWh
-    normal_price: float = 0.096
-    valley_price: float = 0.096
-    export_price: float = 0.05     # $/kWh feed-in credit
-    peak_hours: List[int] = field(default_factory=lambda: [10, 11, 12, 13, 14, 18, 19, 20, 21])
-    valley_hours: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 23])
+    hourly_prices: List[float] = field(
+        default_factory=lambda: [0.10] * 24)  # index = hour-of-day
+    export_price: float = 0.05                 # feed-in credit (same currency)
 
     def price_for_hour(self, hour: int) -> float:
         h = int(hour) % 24
-        if h in self.peak_hours:
-            return self.peak_price
-        if h in self.valley_hours:
-            return self.valley_price
-        return self.normal_price
+        if h < len(self.hourly_prices):
+            return self.hourly_prices[h]
+        return 0.10  # fallback
 
     def price_array(self, hours: np.ndarray) -> np.ndarray:
         return np.array([self.price_for_hour(h) for h in hours])

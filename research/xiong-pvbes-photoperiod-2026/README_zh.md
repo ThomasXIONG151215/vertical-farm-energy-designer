@@ -4,6 +4,11 @@
 
 ### 面向垂直农场的光伏-储能-负荷一体化能源建模开源框架
 
+> 📄 本目录包含以下论文的配套代码：
+>
+> **Xiong, T., Cai, W., Hu, Y., Song, M., Qian, T., & Bao, H. (2026).** *Photovoltaic-battery integration strategy in plant factories with artificial lighting.* Energy and Buildings, 361, 117462.
+> [DOI: 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
+
 ---
 
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
@@ -17,6 +22,17 @@
 ---
 
 **Vertical Farm Energy Designer (VFED)** 是一个开源框架，用于优化光伏电池储能系统 (PVBES) 与人工光植物工厂 (PFAL) 的集成。
+
+## 论文摘要
+
+本代码配套发表的研究论文：
+
+- **问题：** 人工光植物工厂年能耗达 200–500 kWh/m²，电网电力占运营成本主导地位。最优 PV+BESS 配置取决于地理位置、气候、建筑围护结构和电价结构。
+- **方法论：** EnergyPlus 仿真生成逐时建筑负荷 → 遗传算法 (DEAP) 优化光伏阵列面积和电池容量 → 5 个气候区 LCOE 最小化。
+- **研究范围：** 覆盖上海、哈尔滨、乌鲁木齐、迪拜和巴黎——分别代表湿热、寒冷、大陆、干旱和海洋性气候。
+- **关键发现：** 光周期与峰值日照时段对齐（3:00–5:00 起始）始终优于其他方案，LCOE 达 $0.032–0.042/kWh，电网依赖性降低 59–93%。
+
+> **当前 VFED (`src/`)** 在此基础上用纯 Python 一阶 ODE 求解器替代了 EnergyPlus，使工具更快且无外部依赖，同时保持相同的 PVBES 优化方法论。
 
 ## 核心特性
 
@@ -212,6 +228,21 @@ PFAL 设施的实验数据位于 `data/raw/`：
 
 如果您在研究中使用 Vertical Farm Energy Designer，请引用：
 
+**论文：**
+```bibtex
+@article{xiong2026photovoltaic,
+  title={Photovoltaic-battery integration strategy in plant factories with artificial lighting},
+  author={Xiong, Tianzheng and Cai, Wenxin and Hu, Yue and Song, Mingxuan and Qian, Tao and Bao, Huashan},
+  journal={Energy and Buildings},
+  volume={361},
+  pages={117462},
+  year={2026},
+  publisher={Elsevier},
+  doi={10.1016/j.enbuild.2026.117462}
+}
+```
+
+**软件：**
 ```bibtex
 @software{vertical-farm-energy-designer,
   title = {Vertical Farm Energy Designer (VFED)},

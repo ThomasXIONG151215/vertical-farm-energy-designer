@@ -55,8 +55,14 @@ def _build_devices(p):
         min_off_s=p.deh.min_off_s, fan_power_w=p.deh.fan_power_w,
         tau_q=p.deh.tau_q, tau_m=p.deh.tau_m,
     )
-    led = LEDDevice(power_w=p.led.power_w, start_hour=p.led.start_hour,
-                    end_hour=p.led.end_hour, heat_fraction=p.led.heat_fraction)
+    led = LEDDevice(power_w=p.led.power_w,
+                    light_start_hour=p.led.light_start_hour,
+                    photoperiod_hours=p.led.photoperiod_hours,
+                    heat_fraction=p.led.heat_fraction,
+                    auto_deduce=p.led.auto_deduce,
+                    efficacy=p.led.efficacy,
+                    ppfd_target=p.led.ppfd_target,
+                    covered_area=p.led.covered_area)
     transp = TranspirationModel(
         method=p.transpiration.method, E_max_kgs=p.transpiration.E_max_kgs,
         k_vpd=p.transpiration.k_vpd, stage_factor=p.transpiration.stage_factor,
@@ -99,7 +105,7 @@ class DesignEngine:
         harvest_days = max(1, int(round(p.setpoints.crop_cycle_days)))
         total_harvest_kg = 0.0  # cumulative harvested dry matter (kg)
 
-        T_z = p.setpoints.T_cool
+        T_z = p.setpoints.T_light
         W_z = temp_rh_to_ah(T_z, p.setpoints.RH)
         RH_z = p.setpoints.RH
 
@@ -117,9 +123,11 @@ class DesignEngine:
             is_light_h = led.is_light(hour_of_day)
             for s in range(sub):
                 Q_LED, P_led_s = led.step(hour_of_day)
+                # diurnal temperature setpoint: light vs dark period
+                T_sp = p.setpoints.T_light if is_light_h else p.setpoints.T_dark
                 hv = hvac.step(T_z, RH_z, T_ext[h], dt,
-                               T_setpoint=p.setpoints.T_cool,
-                               T_heat_setpoint=p.setpoints.T_heat)
+                               T_setpoint=T_sp,
+                               T_heat_setpoint=p.setpoints.T_dark - p.hvac.deadband_c)
                 dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH)
                 E_trans = transp.step(T_z, RH_z, is_light_h, dt, X_d=X_d)
                 # plant growth (van Henten carbon balance)

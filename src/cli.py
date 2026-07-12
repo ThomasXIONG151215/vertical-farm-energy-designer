@@ -4,12 +4,10 @@ VFED design simulator CLI (``vfed``).
 Commands:
     vfed design new <name> [--preset 609] [--out path]
     vfed design presets
-    vfed optimize <project.yaml> [--cache weather_cache]
-    vfed evaluate <project.yaml> --pv-area N --battery M
     vfed sweep <project.yaml> [--out results.csv]
 
 The CLI is intentionally dependency-light (argparse) and wraps the parametric
-ODE building model + PVBES energy system.
+ODE building model + optional PVBES energy system.
 """
 
 import argparse
@@ -21,8 +19,15 @@ from .design.presets import preset_default, preset_609
 from .design.engine import DesignEngine
 from .design.sweep import sweep_design
 from .agent.evaluator import agent_evaluate
-from .pvbes import PVSystem, BatterySystem, Tariff, EnergySystem
 from .weather.geocode import geocode_city
+
+
+def _currency_label(project: DesignProject) -> str:
+    cur = getattr(project, 'currency', 'USD')
+    rate = getattr(project, 'exchange_rate', 1.0)
+    if cur == "USD" or rate == 1.0:
+        return cur
+    return f"{cur} (1 USD = {rate:.1f} {cur})"
 
 
 def _cmd_design_new(args):
@@ -35,7 +40,8 @@ def _cmd_design_new(args):
             preset.site.lon = lon
             print(f"Geocoded '{args.city}' -> lat={lat:.3f}, lon={lon:.3f}")
         except Exception as e:
-            print(f"[WARN] Geocoding failed: {e}. Using preset defaults.", file=sys.stderr)
+            print(f"[WARN] Geocoding failed: {e}. Using preset defaults.",
+                  file=sys.stderr)
     if args.lat is not None:
         preset.site.lat = args.lat
     if args.lon is not None:
@@ -51,88 +57,96 @@ def _cmd_design_presets(args):
     print("Available presets: default, 609 (Fengxian lettuce PFAL)")
 
 
-def _cmd_optimize(args):
-    res = agent_evaluate(args.project, cache_dir=args.cache, tlps_max=args.tlps_max)
-    if not res["success"]:
-        print(f"[ERROR {res.get('error_code','?')}] {res['message']}", file=sys.stderr)
-        return 1
-    best = res["best"]
-    m = best["metrics"]
-    print(f"Project: {res['project']}")
-    print(f"Optimal design: PV={best['pv_area_m2']:.1f} m^2, "
-          f"Battery={best['battery_kwh']:.1f} kWh")
-    print(f"  LCOE      = {m['lcoe']:.4f} $/kWh")
-    print(f"  TLPS      = {m['tlps']:.2f} %")
-    print(f"  Capital   = {m['capital_cost']:.0f} $")
-    print(f"  Annual sav= {m['annual_savings']:.0f} $/yr")
-    print(f"  Payback   = {m['payback_period']:.1f} yr")
-    print(f"  PV gen    = {m['annual_pv_generation']:.0f} kWh/yr")
-    print(f"  Load      = {res['annual_load_kwh']:.0f} kWh/yr")
-    print(f"  Biomass   = {res.get('biomass_kg', 0):.1f} kg (dry)")
-    print(f"  kWh/kg    = {res.get('kwh_per_kg_fresh', 0):.1f} (fresh, ~5% DM)")
-    if args.out:
-        res["results"].to_csv(args.out, index=False)
-        print(f"Enumeration table -> {args.out}")
-    return 0
-
-
-def _cmd_evaluate(args):
-    project = DesignProject.load(args.project)
-    engine = DesignEngine(cache_dir=args.cache)
-    sim = engine.run(project)
-    load = sim["load"]
-    es = EnergySystem(
-        pv=PVSystem(C_pv=project.pv.C_pv, area_to_power=project.pv.area_to_power,
-                    eta_pv=project.pv.eta_pv, eta_inv=project.pv.eta_inv,
-                    NOCT=project.pv.NOCT, N_s=project.pv.N_s,
-                    I_sc_stc=project.pv.I_sc_stc, V_oc_stc=project.pv.V_oc_stc,
-                    I_mp_stc=project.pv.I_mp_stc, alpha_sc=project.pv.alpha_sc,
-                    beta_voc=project.pv.beta_voc),
-        battery=BatterySystem(c_energy=project.battery.c_energy,
-                              c_rate=project.battery.c_rate,
-                              eta_ch=project.battery.eta_ch,
-                              eta_dis=project.battery.eta_dis,
-                              soc_min=project.battery.soc_min,
-                              soc_max=project.battery.soc_max,
-                              maintenance=project.battery.maintenance),
-        tariff=Tariff(peak_price=project.tariff.peak_price,
-                      normal_price=project.tariff.normal_price,
-                      valley_price=project.tariff.valley_price,
-                      export_price=project.tariff.export_price,
-                      peak_hours=list(project.tariff.peak_hours),
-                      valley_hours=list(project.tariff.valley_hours)),
-    )
-    m = es.calculate_metrics([args.pv_area, args.battery], sim["weather"], load)
-    for k, v in m.items():
-        print(f"  {k:22s} = {v}")
-    print(f"  Annual load           = {sim['annual_load_kwh']:.0f} kWh/yr")
-    print(f"  Biomass (dry)         = {sim.get('biomass_kg', 0):.1f} kg")
-    print(f"  kWh/kg (dry)          = {sim.get('kwh_per_kg', 0):.1f}")
-    print(f"  kWh/kg (fresh, ~5%DM) = {sim.get('kwh_per_kg_fresh', 0):.1f}")
-    return 0
-
-
 def _cmd_sweep(args):
-    project = DesignProject.load(args.project)
-    engine = DesignEngine(cache_dir=args.cache)
-    sim = engine.run(project)
-    sweep = sweep_design(project, sim["load"], sim["weather"], tlps_max=args.tlps_max)
-    out = Path(args.out)
-    sweep["results"].to_csv(out, index=False)
-    best = sweep["best"]
-    if best:
-        print(f"Best: PV={best['pv_area_m2']:.1f} m^2, "
-              f"Battery={best['battery_kwh']:.1f} kWh, "
-              f"LCOE={best['metrics']['lcoe']:.4f} $/kWh")
-    print(f"  Annual load = {sim['annual_load_kwh']:.0f} kWh/yr")
-    print(f"  Biomass     = {sim.get('biomass_kg', 0):.1f} kg (dry)")
-    print(f"  kWh/kg      = {sim.get('kwh_per_kg_fresh', 0):.1f} (fresh, ~5% DM)")
-    print(f"Enumeration table ({len(sweep['results'])} configs) -> {out}")
+    """Run design sweep (single-point if parameter_ranges is empty)."""
+    res = agent_evaluate(args.project, cache_dir=args.cache)
+    if not res["success"]:
+        print(f"[ERROR {res.get('error_code','?')}] {res['message']}",
+              file=sys.stderr)
+        return 1
+
+    project = res.get("project", "unnamed")
+    currency = res.get("currency", "USD")
+    exchange_rate = res.get("exchange_rate", 1.0)
+    cur_label = currency
+    if currency != "USD" and abs(exchange_rate - 1.0) > 1e-6:
+        cur_label = f"{currency} (1 USD = {exchange_rate:.1f} {currency})"
+
+    print(f"Project: {project}  |  Currency: {cur_label}")
+
+    best = res["best"]
+    if best is None:
+        print("  No results produced.")
+        return 1
+
+    results = res["results"]
+    if results is None:
+        # single-point evaluation (no parameter_ranges in project)
+        print(f"  kWh/kg (fresh, ~5% DM) = {best.get('kwh_per_kg_fresh', 0):.1f}")
+        print(f"  Annual load             = {best.get('annual_load_kwh', 0):.0f} kWh/yr")
+        print(f"  Biomass (dry)           = {best.get('biomass_kg', 0):.1f} kg")
+        return 0
+
+    # full sweep — user-defined objective
+    objective = res.get("objective", "lcoe")
+    obj_labels = {
+        "lcoe": "LCOE",
+        "kwh_per_kg_fresh": "kWh/kg (fresh)",
+        "cost_per_kg_fresh": "$/kg (fresh)",
+    }
+    obj_label = obj_labels.get(objective, objective)
+    n_configs = len(results)
+    print(f"  Configs enumerated = {n_configs}")
+    print(f"\n  Best design (min {obj_label}):")
+
+    lcoe = best.get("lcoe", float("inf"))
+    cpk = best.get("cost_per_kg_fresh", float("inf"))
+    print(f"    LCOE                    = {lcoe:.4f} {currency}/kWh")
+    print(f"    $/kg (fresh)            = {cpk:.4f} {currency}/kg")
+    print(f"    kWh/kg (fresh)          = {best.get('kwh_per_kg_fresh', 0):.1f}")
+
+    # capital breakdown
+    ct = best.get("capital_total", 0)
+    if ct > 0:
+        print(f"    Total capital           = {ct:.0f} {currency}")
+
+    # swept parameter values
+    for key, val in best.items():
+        if key in ("lcoe", "cost_per_kg_fresh", "kwh_per_kg_fresh",
+                   "annual_load_kwh", "biomass_kg",
+                   "annual_pv_generation", "annual_grid_import",
+                   "annual_grid_export", "battery_cycles", "peak_power_kwp",
+                   "capital_total", "annual_capital", "annual_om",
+                   "annual_grid_cost",
+                   "capital_led", "capital_hvac", "capital_deh",
+                   "capital_pv", "capital_battery",
+                   "capital_equipment", "capital_envelope"):
+            continue
+        elif key == "pv_area":
+            print(f"    pv_area                 = {val:.1f} m2")
+        elif key == "battery_kwh":
+            print(f"    battery                 = {val:.1f} kWh")
+        else:
+            print(f"    {key:24s} = {val}")
+
+    print(f"    annual_load_kwh         = {best.get('annual_load_kwh', 0):.0f} kWh/yr")
+    print(f"    biomass_kg (dry)        = {best.get('biomass_kg', 0):.1f} kg")
+    print(f"    annual_capital          = {best.get('annual_capital', 0):.0f} {currency}/yr")
+    print(f"    annual_grid_cost        = {best.get('annual_grid_cost', 0):.0f} {currency}/yr")
+    if "annual_pv_generation" in best:
+        print(f"    annual_pv_generation    = {best.get('annual_pv_generation', 0):.0f} kWh/yr")
+    if "annual_grid_import" in best:
+        print(f"    annual_grid_import      = {best.get('annual_grid_import', 0):.0f} kWh/yr")
+
+    if args.out:
+        results.to_csv(args.out, index=False)
+        print(f"  Enumeration table -> {args.out}")
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vfed", description="VFED design simulator")
+    p = argparse.ArgumentParser(prog="vfed",
+                                description="VFED design simulator")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser("design", help="project management")
@@ -141,7 +155,8 @@ def build_parser() -> argparse.ArgumentParser:
     dn.add_argument("name")
     dn.add_argument("--preset", choices=["default", "609"], default="default")
     dn.add_argument("--out", default="project.yaml")
-    dn.add_argument("--city", default=None, help="resolve lat/lon via Open-Meteo geocoding")
+    dn.add_argument("--city", default=None,
+                    help="resolve lat/lon via Open-Meteo geocoding")
     dn.add_argument("--lat", type=float, default=None)
     dn.add_argument("--lon", type=float, default=None)
     dn.add_argument("--year", type=int, default=None)
@@ -149,26 +164,13 @@ def build_parser() -> argparse.ArgumentParser:
     dp = dsub.add_parser("presets", help="list presets")
     dp.set_defaults(func=_cmd_design_presets)
 
-    o = sub.add_parser("optimize", help="optimize PVBES design")
-    o.add_argument("project")
-    o.add_argument("--cache", default="weather_cache")
-    o.add_argument("--tlps-max", dest="tlps_max", type=float, default=100.0)
-    o.add_argument("--out", default=None)
-    o.set_defaults(func=_cmd_optimize)
-
-    e = sub.add_parser("evaluate", help="evaluate a single config")
-    e.add_argument("project")
-    e.add_argument("--pv-area", type=float, required=True)
-    e.add_argument("--battery", type=float, required=True)
-    e.add_argument("--cache", default="weather_cache")
-    e.set_defaults(func=_cmd_evaluate)
-
-    s = sub.add_parser("sweep", help="enumerate design space")
+    s = sub.add_parser("sweep", help="run design sweep")
     s.add_argument("project")
     s.add_argument("--cache", default="weather_cache")
-    s.add_argument("--tlps-max", dest="tlps_max", type=float, default=100.0)
-    s.add_argument("--out", default="sweep_results.csv")
+    s.add_argument("--out", default=None,
+                   help="CSV output file for enumeration table")
     s.set_defaults(func=_cmd_sweep)
+
     return p
 
 

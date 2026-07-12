@@ -1,8 +1,15 @@
-# Vertical Farm Energy Designer (VFED) (formerly OpenCROPS)
+# Vertical Farm Energy Designer (VFED) — Archived Research
+
+> **This is archived research code.** The current active codebase is at the repository root (`src/`), using a pure-Python ODE solver instead of EnergyPlus.
 
 **[中文版](./README_zh.md)**
 
 ### An open-source framework for PV-Battery-Load energy modeling in vertical farms
+
+> 📄 This directory contains the code accompanying the paper:
+>
+> **Xiong, T., Cai, W., Hu, Y., Song, M., Qian, T., & Bao, H. (2026).** *Photovoltaic-battery integration strategy in plant factories with artificial lighting.* Energy and Buildings, 361, 117462.
+> [DOI: 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
 
 ---
 
@@ -17,6 +24,17 @@
 ---
 
 **Vertical Farm Energy Designer (VFED)** is an open-source framework for optimizing the integration of photovoltaic and battery energy storage systems (PVBES) with Plant Factories with Artificial Lighting (PFALs).
+
+## Paper Summary
+
+This code accompanies the published study on PV-Battery integration in plant factories:
+
+- **Problem:** PFALs consume 200–500 kWh/m²/year; grid electricity dominates operating costs. Optimal PV+BESS sizing depends on location, climate, building design, and tariff structure.
+- **Methodology:** EnergyPlus simulation for hourly building load generation → genetic-algorithm (DEAP) optimisation of PV array size and battery capacity → LCOE minimisation across 5 climate zones.
+- **Scope:** Validated across Shanghai, Harbin, Urumqi, Dubai, and Paris — representing hot-humid, cold-dry, continental, arid, and maritime climates.
+- **Key Finding:** Photoperiod schedules aligned with peak solar hours (3:00–5:00 start) consistently outperform other options, achieving LCOE of $0.032–0.042/kWh and 59–93% grid dependency reduction.
+
+> **Current VFED (`src/`)** extends this work by replacing EnergyPlus with a pure-Python first-principles ODE solver, making the tool faster and dependency-free while preserving the same PVBES optimisation methodology.
 
 ## Key Features
 
@@ -210,8 +228,23 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ## Citation
 
-If you use Vertical Farm Energy Designer in your research, please cite:
+If you use this code in your research, please cite:
 
+**Paper:**
+```bibtex
+@article{xiong2026photovoltaic,
+  title={Photovoltaic-battery integration strategy in plant factories with artificial lighting},
+  author={Xiong, Tianzheng and Cai, Wenxin and Hu, Yue and Song, Mingxuan and Qian, Tao and Bao, Huashan},
+  journal={Energy and Buildings},
+  volume={361},
+  pages={117462},
+  year={2026},
+  publisher={Elsevier},
+  doi={10.1016/j.enbuild.2026.117462}
+}
+```
+
+**Software:**
 ```bibtex
 @software{vertical-farm-energy-designer,
   title = {Vertical Farm Energy Designer (VFED)},

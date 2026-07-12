@@ -29,5 +29,5 @@ def preset_609() -> DesignProject:
             V_room=200.0,
             C_z=499597.0,
         ),
-        led=LEDConfig(start_hour=6, end_hour=22, heat_fraction=1.0),
+        led=LEDConfig(light_start_hour=6, photoperiod_hours=16, heat_fraction=1.0),
     )
