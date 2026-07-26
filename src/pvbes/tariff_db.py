@@ -1,0 +1,132 @@
+"""
+Regional electricity tariff database.
+
+Provides pre-populated hourly price profiles for major Chinese provinces
+and a few international regions.  Prices are commercial/industrial Time-of-Use
+(TOU) rates (generic reference values, not legally binding).
+
+Each entry returns a 24-element list (index = hour of day) plus an optional
+feed-in (export) price for PV surplus.
+"""
+
+from typing import Dict, List, Optional
+
+__all__ = ["lookup_tariff", "list_regions", "TARIFF_DB"]
+
+TariffRecord = Dict[str, object]
+
+TARIFF_DB: Dict[str, TariffRecord] = {
+    "Shanghai": {
+        "label": "Shanghai (General Industry & Commerce)",
+        "hourly_prices": [
+            # Peak 08:00-11:00, 18:00-21:00
+            # Normal 06:00-08:00, 11:00-18:00, 21:00-22:00
+            # Valley 22:00-06:00
+            0.30, 0.30, 0.30, 0.30, 0.30, 0.30, 0.60, 0.60,
+            1.00, 1.00, 1.00, 0.60, 0.60, 0.60, 0.60, 0.60,
+            0.60, 0.60, 1.00, 1.00, 1.00, 0.60, 0.30, 0.30,
+        ],
+        "export_price": 0.4155,
+    },
+    "Beijing": {
+        "label": "Beijing (General Industry & Commerce)",
+        "hourly_prices": [
+            0.32, 0.32, 0.32, 0.32, 0.32, 0.32, 0.66, 0.66,
+            1.05, 1.05, 1.05, 0.66, 0.66, 0.66, 0.66, 0.66,
+            0.66, 0.66, 1.05, 1.05, 1.05, 0.66, 0.32, 0.32,
+        ],
+        "export_price": 0.4018,
+    },
+    "Jiangsu": {
+        "label": "Jiangsu (General Industry)",
+        "hourly_prices": [
+            0.28, 0.28, 0.28, 0.28, 0.28, 0.28, 0.55, 0.55,
+            0.90, 0.90, 0.90, 0.55, 0.55, 0.55, 0.55, 0.55,
+            0.55, 0.55, 0.90, 0.90, 0.90, 0.55, 0.28, 0.28,
+        ],
+        "export_price": 0.391,
+    },
+    "Zhejiang": {
+        "label": "Zhejiang (General Industry)",
+        "hourly_prices": [
+            0.32, 0.32, 0.32, 0.32, 0.32, 0.32, 0.65, 0.65,
+            1.03, 1.03, 1.03, 0.65, 0.65, 0.65, 0.65, 0.65,
+            0.65, 0.65, 1.03, 1.03, 1.03, 0.65, 0.32, 0.32,
+        ],
+        "export_price": 0.4153,
+    },
+    "Guangdong": {
+        "label": "Guangdong (Pearl River Delta, 10kV)",
+        "hourly_prices": [
+            0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.50, 0.50,
+            0.85, 0.85, 0.85, 0.50, 0.50, 0.50, 0.50, 0.50,
+            0.50, 0.50, 0.85, 0.85, 0.85, 0.50, 0.25, 0.25,
+        ],
+        "export_price": 0.453,
+    },
+    "Sichuan": {
+        "label": "Sichuan (General Industry)",
+        "hourly_prices": [
+            0.24, 0.24, 0.24, 0.24, 0.24, 0.24, 0.55, 0.55,
+            0.88, 0.88, 0.88, 0.55, 0.55, 0.55, 0.55, 0.55,
+            0.55, 0.55, 0.88, 0.88, 0.88, 0.55, 0.24, 0.24,
+        ],
+        "export_price": 0.4012,
+    },
+    "Hubei": {
+        "label": "Hubei (General Industry)",
+        "hourly_prices": [
+            0.30, 0.30, 0.30, 0.30, 0.30, 0.30, 0.60, 0.60,
+            0.95, 0.95, 0.95, 0.60, 0.60, 0.60, 0.60, 0.60,
+            0.60, 0.60, 0.95, 0.95, 0.95, 0.60, 0.30, 0.30,
+        ],
+        "export_price": 0.4161,
+    },
+    "Japan": {
+        "label": "Japan (Commercial, TEPCO)",
+        "hourly_prices": [
+            0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.15, 0.15,
+            0.18, 0.18, 0.18, 0.15, 0.15, 0.15, 0.15, 0.15,
+            0.15, 0.15, 0.18, 0.18, 0.18, 0.15, 0.12, 0.12,
+        ],
+        "export_price": 0.08,
+    },
+    "Singapore": {
+        "label": "Singapore (Low Tension)",
+        "hourly_prices": [0.14] * 24,
+        "export_price": 0.0,
+    },
+    "USA": {
+        "label": "USA (National Avg Commercial)",
+        "hourly_prices": [
+            0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.10, 0.10,
+            0.13, 0.13, 0.13, 0.10, 0.10, 0.10, 0.10, 0.10,
+            0.10, 0.10, 0.13, 0.13, 0.13, 0.10, 0.08, 0.08,
+        ],
+        "export_price": 0.03,
+    },
+}
+
+
+def lookup_tariff(region: str) -> Optional[TariffRecord]:
+    """Return ``{label, hourly_prices, export_price}`` or ``None``."""
+    if not region:
+        return None
+    key = region.strip()
+    if key in TARIFF_DB:
+        return TARIFF_DB[key]
+    kl = key.lower()
+    for k, v in TARIFF_DB.items():
+        if k.lower() == kl:
+            return v
+    for k, v in TARIFF_DB.items():
+        if kl in k.lower():
+            return v
+    return None
+
+
+def list_regions() -> List[Dict[str, object]]:
+    return [
+        {"id": k, "label": v["label"]}
+        for k, v in TARIFF_DB.items()
+    ]

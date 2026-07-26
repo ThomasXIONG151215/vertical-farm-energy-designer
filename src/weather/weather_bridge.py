@@ -38,6 +38,20 @@ def _cache_path(cache_dir: Path, lat: float, lon: float, year: int) -> Path:
     return cache_dir / f"weather_{lat:.3f}_{lon:.3f}_{year}.csv"
 
 
+def _find_city_csv(city: str, year: int) -> Optional[Path]:
+    """Search for a pre-downloaded city weather CSV.
+
+    Checks ``data/weather/{city}_{year}.csv`` relative to the project root
+    (``vfed`` package parent).  Returns ``None`` if the file does not exist.
+    """
+    # Project root = directory containing src/
+    root = Path(__file__).resolve().parent.parent.parent
+    candidate = root / "data" / "weather" / f"{city}_{year}.csv"
+    if candidate.exists():
+        return candidate
+    return None
+
+
 def _solar_geometry(lat: float, lon: float, tz_hours: float,
                     dt: pd.DatetimeIndex) -> Tuple[np.ndarray, np.ndarray]:
     """Return solar zenith and azimuth (degrees) for each timestamp."""
@@ -98,7 +112,10 @@ def add_poa(df: pd.DataFrame, tilt: float = 20.0, azimuth: float = 180.0,
     out = df.copy()
     ghi = out["shortwave_radiation"].values.astype(float)
     has_components = ("direct_radiation" in out.columns and
-                      not np.allclose(out.get("direct_radiation", 0).fillna(0).values, 0))
+                      not np.allclose(
+                          out["direct_radiation"] if "direct_radiation" in out.columns
+                          else pd.Series(0.0, index=out.index),
+                          0))
     if has_components:
         diffuse_h = out["diffuse_radiation"].values.astype(float)
         dni = out["direct_radiation"].values.astype(float) / np.maximum(
@@ -139,13 +156,33 @@ def fetch_weather(
     cache_dir: Optional[Path] = None,
     force: bool = False,
     use_forecast: bool = False,
+    city: Optional[str] = None,
 ) -> pd.DataFrame:
     """Fetch (and cache) hourly weather for a calendar year.
 
-    Falls back to cached CSV if present and ``force`` is False.
+    When ``city`` is provided and a pre-downloaded CSV exists in
+    ``data/weather/{city}_{year}.csv`` (relative to project root), it is
+    loaded directly without any API call.  Falls back to Open-Meteo if
+    the local file is not found.
     """
     cache_dir = Path(cache_dir) if cache_dir else Path("weather_cache")
     cp = _cache_path(cache_dir, lat, lon, year)
+
+    # ── City-based local CSV (no API) ──
+    if city:
+        local = _find_city_csv(city, year)
+        if local is not None:
+            df = pd.read_csv(local, parse_dates=["timestamp"])
+            df = df.set_index("timestamp")
+            if "poa_radiation" not in df.columns:
+                df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+            # Also write to the standard cache so subsequent calls hit quickly
+            if not cp.exists():
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                df.to_csv(cp)
+            return df
+
+    # ── Standard lat/lon cache ──
     if cp.exists() and not force:
         df = pd.read_csv(cp, parse_dates=["timestamp"])
         df = df.set_index("timestamp")
@@ -165,7 +202,7 @@ def fetch_weather(
         "longitude": lon,
         "start_date": start,
         "end_date": end,
-        "hourly": ("temperature_2m,relative_humidity_2m,wind_speed_10m,"
+        "hourly": ("temperature_2m,relative_humidity_2m,surface_pressure,"
                    "shortwave_radiation,direct_radiation,diffuse_radiation"),
         "timezone": "UTC",
         "wind_speed_unit": "ms",
@@ -177,7 +214,7 @@ def fetch_weather(
         "timestamp": pd.to_datetime(data["time"], utc=True),
         "temperature_2m": data["temperature_2m"],
         "relative_humidity_2m": data["relative_humidity_2m"],
-        "wind_speed_10m": data["wind_speed_10m"],
+        "surface_pressure": data.get("surface_pressure", [101.325] * len(data["time"])),
         "shortwave_radiation": data.get("shortwave_radiation", [0] * len(data["time"])),
         "direct_radiation": data.get("direct_radiation", [0] * len(data["time"])),
         "diffuse_radiation": data.get("diffuse_radiation", [0] * len(data["time"])),

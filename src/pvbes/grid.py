@@ -29,10 +29,10 @@ class Tariff:
         return np.array([self.price_for_hour(h) for h in hours])
 
     def annual_cost(self, grid_import: np.ndarray, grid_export: np.ndarray,
-                    hours: np.ndarray) -> Dict[str, float]:
+                    hours: np.ndarray, dt: float = 1.0) -> Dict[str, float]:
         price = self.price_array(hours)
-        import_cost = float(np.sum(grid_import * price))
-        export_credit = float(np.sum(grid_export * self.export_price))
+        import_cost = float(np.sum(grid_import * price * dt))
+        export_credit = float(np.sum(grid_export * self.export_price * dt))
         return {
             "grid_import_cost": import_cost,
             "grid_export_credit": export_credit,

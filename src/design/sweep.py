@@ -68,7 +68,7 @@ def _derived_led_power(project: DesignProject) -> float:
     """LED electrical power (W) as actually run (auto-deduced or direct)."""
     if project.led.auto_deduce:
         return (project.led.ppfd_target * project.led.covered_area
-                / max(project.led.efficacy, 0.1) / 4.57)
+                / max(project.led.efficacy, 0.1))
     return project.led.power_w
 
 
@@ -95,8 +95,8 @@ def _total_capital(project: DesignProject, pv_area: float,
                    battery_kwh: float) -> Dict[str, float]:
     """Compute per-component capital breakdown, including legacy fallbacks."""
     led_w = _derived_led_power(project)
-    # PV peak Wp = pv_area (m2) * area_to_power (Wp/m2)
-    pv_kwp = pv_area * project.pv.area_to_power
+    # PV peak kWp = pv_area (m²) / area_to_power (m²/kWp)
+    pv_kwp = pv_area / project.pv.area_to_power
 
     breakdown = {
         "LED":       _resolve_capital(project.led.capital, led_w),
@@ -111,6 +111,14 @@ def _total_capital(project: DesignProject, pv_area: float,
     }
     breakdown["total"] = sum(breakdown.values())
     return breakdown
+
+
+def _crf(i: float, n: float) -> float:
+    """Capital Recovery Factor.  Handles i=0 (division-safe)."""
+    n = max(n, 1.0)
+    if abs(i) < 1e-12:
+        return 1.0 / n
+    return i * (1 + i) ** n / ((1 + i) ** n - 1)
 
 
 def _annualized_capital(project: DesignProject,
@@ -128,9 +136,7 @@ def _annualized_capital(project: DesignProject,
     i = project.interest_rate
     total = 0.0
     for comp, dep in dep_map.items():
-        n = max(dep, 1.0)
-        crf = i * (1 + i) ** n / ((1 + i) ** n - 1)
-        total += crf * capital_breakdown[comp]
+        total += _crf(i, dep) * capital_breakdown[comp]
     return total
 
 
@@ -143,9 +149,10 @@ def _compute_lcoe(annual_capital: float, annual_om: float,
 
 
 def _compute_cost_per_kg_fresh(annual_capital: float, annual_om: float,
-                                net_grid_cost: float, biomass_kg: float) -> float:
+                                net_grid_cost: float, biomass_kg: float,
+                                dry_matter_fraction: float = 0.05) -> float:
     """$/kg fresh-mass cost."""
-    fresh_kg = biomass_kg * 0.05  # ~5% dry matter for lettuce
+    fresh_kg = biomass_kg / dry_matter_fraction
     if fresh_kg <= 0:
         return float("inf")
     return (annual_capital + annual_om + net_grid_cost) / fresh_kg
@@ -300,7 +307,8 @@ def sweep_design(project: DesignProject,
                     net_grid = m["annual_grid_cost"]
                     lcoe = _compute_lcoe(annual_cap, annual_om, net_grid, annual_load)
                     cost_kg = _compute_cost_per_kg_fresh(
-                        annual_cap, annual_om, net_grid, biomass_kg)
+                        annual_cap, annual_om, net_grid, biomass_kg,
+                        p.growth.dry_matter_fraction)
 
                     row = {
                         **base,
@@ -336,7 +344,8 @@ def sweep_design(project: DesignProject,
             annual_om = cap["total"] * maintenance_rate
             lcoe = _compute_lcoe(annual_cap, annual_om, 0.0, annual_load)
             cost_kg = _compute_cost_per_kg_fresh(
-                annual_cap, annual_om, 0.0, biomass_kg)
+                annual_cap, annual_om, 0.0, biomass_kg,
+                p.growth.dry_matter_fraction)
 
             row = {
                 **base,

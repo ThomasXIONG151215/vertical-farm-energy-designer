@@ -5,6 +5,20 @@ A ``DesignProject`` is a fully declarative description of a vertical-farm design
 site, envelope, HVAC, dehumidifier, LED, transpiration law, control setpoints
 and the PV-Battery-Grid (PVBES) system plus the design search space. It is
 serialised to/from YAML for easy creation and versioning.
+
+Strategy Modes (planned)
+------------------------
+Four predefined control strategy presets govern how the HVAC/DEH/LED devices
+coordinate during simulation:
+
+* ``default``      — basic thermostat + dehumidifier, standard photoperiod
+* ``conservative`` — wider deadband, higher dehum setpoint, longer min cycle times
+* ``progressive``  — tighter deadband, lower dehum setpoint, shorter min cycles
+* ``aggressive``   — minimum deadband, aggressive dehum, shortest min cycles
+
+These modes are applied via ``ScenarioConfig`` and **must not** be extended
+beyond these four. Scenario logic is isolated from energy-optimisation code
+and the data layer. Actual implementation is pending.
 """
 
 from dataclasses import dataclass, field, asdict
@@ -13,8 +27,9 @@ from typing import Optional
 import yaml
 
 __all__ = [
-    "CapitalCostConfig",
+    "CapitalCostConfig", "OpexConfig",
     "SiteConfig", "EnvelopeConfig", "HVACConfig", "DEHConfig", "LEDConfig",
+    "VanHentenConfig",
     "TranspirationConfig", "SetpointConfig", "PVConfig", "BatteryConfig",
     "TariffConfig", "DesignSpace", "DesignProject",
 ]
@@ -37,13 +52,32 @@ class CapitalCostConfig:
 
 
 @dataclass
+class OpexConfig:
+    """Annual operating expenditure for the farm.
+
+    All costs are in the project's currency unit (see ``DesignProject.currency``
+    and ``exchange_rate`` for conversion).
+
+    * ``water_cost_per_m3``: water price (irrigation + makeup).
+    * ``labor_cost_per_year``: total annual labor cost.
+    * ``maintenance_pct``: annual maintenance as fraction of total CAPEX.
+    * ``misc_opex_per_year``: other operating costs (seeds, nutrients, etc.).
+    """
+    water_cost_per_m3: float = 2.0
+    labor_cost_per_year: float = 30000.0
+    maintenance_pct: float = 0.02
+    misc_opex_per_year: float = 5000.0
+
+
+@dataclass
 class SiteConfig:
     lat: float = 31.2
     lon: float = 121.5
     tz_hours: float = 8.0
     tilt: float = 20.0
     azimuth: float = 180.0
-    year: int = 2023
+    year: int = 2025
+    city: Optional[str] = None      # optional: pre-downloaded city name
 
 
 @dataclass
@@ -61,9 +95,13 @@ class EnvelopeConfig:
 
 @dataclass
 class HVACConfig:
-    P_rated_w: float = 3000.0
+    # ── primary sizing (new, industry-standard) ──
+    Q_cool_nom: float = 0.0        # nominal cooling capacity (kW); 0 → use P_rated_w or auto_size
+    P_rated_max: float = 0.0       # max electrical input (kW); 0 → derived from Q_cool_nom/COP_design
+    # ── legacy (kept for backward compat) ──
+    P_rated_w: float = 3000.0       # rated electrical power (W), used if Q_cool_nom == 0
     cop_value: float = 4.0
-    cop_mode: str = "constant"   # constant | linear | table
+    cop_mode: str = "carnot"   # carnot | constant | linear | table
     cop_k: float = 0.02
     cop_T_ref: float = 25.0
     cop_heat: float = 3.0
@@ -76,11 +114,22 @@ class HVACConfig:
     shr_BF: float = 0.15
     tau_q: float = 90.0
     tau_m: float = 60.0
+    eta_II: float = 0.35
+    delta_T_evap: float = 8.0
+    delta_T_cond: float = 15.0
+    auto_size: bool = False
+    design_T_ext: float = 35.0
+    shr_design: float = 0.80
+    safety_factor: float = 1.2
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 
 @dataclass
 class DEHConfig:
+    # ── primary sizing (new, industry-standard) ──
+    M_deh_nom: float = 0.0         # nominal dehumidification (L/day); 0 → use P_ref_w or auto_size
+    P_rated_max: float = 0.0       # max electrical input (kW); 0 → derived from M_deh_nom/SMER
+    # ── legacy (kept for backward compat) ──
     P_ref_w: float = 2233.0
     poly_e: tuple = (1.0, 0.02, 0.0, 0.05, 0.0, 0.0)
     T_mean: float = 22.0
@@ -91,9 +140,6 @@ class DEHConfig:
     eta_max: float = 0.15
     ah_min: float = 0.0054
     ah_ref: float = 0.0099
-    # Specific Moisture Extraction Rate (kg water / kWh electricity) — realistic
-    # refrigeration dehumidifiers achieve 1.5–3.0 kg/kWh. Replaces the ASHRAE
-    # bypass-factor eta (which gave SMER≈0.1, 10–30× too low).
     smer: float = 2.0
     deadband_rh: float = 3.0
     min_on_s: float = 180.0
@@ -101,6 +147,8 @@ class DEHConfig:
     fan_power_w: float = 40.0
     tau_q: float = 90.0
     tau_m: float = 120.0
+    auto_size: bool = False
+    safety_factor: float = 1.2
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 
@@ -115,17 +163,45 @@ class LEDConfig:
     efficacy: float = 2.5       # µmol/J  (LED photon efficacy)
     ppfd_target: float = 400.0  # µmol/(m²·s)
     covered_area: float = 45.0  # m²
+    spectrum: str = "white"      # white | rb_3to1 | rb_4to1 | rb_2to1
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 
 @dataclass
+class VanHentenConfig:
+    """Van Henten 2003 one-state carbon-balance plant growth model.
+
+    Reference: Van Henten, E.J. (2003). Sensitivity analysis of an optimal
+    control problem in greenhouse climate management. Biosystems Engineering,
+    85(3), 355-364.
+
+    All parameters are in SI units.
+    """
+    c_alpha_beta: float = 0.544        # conversion efficiency (dimensionless)
+    c_resp_d: float = 2.65e-7          # dark respiration at 25°C (s⁻¹)
+    dry_matter_fraction: float = 0.05  # dry→fresh weight conversion (−)
+    c_pl_d: float = 53.0               # light extinction per LAI (m²/kg)
+    c_rad_phot: float = 1e-8           # radiation use efficiency (kg/J)
+    c_co2_1: float = 5.11e-6           # CO₂ assimilation coef (m/(s·°C²))
+    c_co2_2: float = 2.3e-4            # CO₂ assimilation coef (m/(s·°C))
+    c_co2_3: float = 6.29e-4           # CO₂ assimilation coef (m/s)
+    c_Gamma: float = 5.2e-5            # CO₂ compensation point (kg/m³)
+    initial_dry_weight: float = 0.001   # initial dry biomass (kg/m²)
+
+
+@dataclass
 class TranspirationConfig:
-    method: str = "vpd"          # constant | vpd | stomatal | van_henten
-    # Rates are PER m²; the model multiplies by canopy area at runtime.
+    method: str = "vpd"          # constant | daily | per_plant | vpd | stomatal | van_henten
     E_max_kgs: float = 1.0e-4    # peak transpiration (kg/s per m²), constant method
-    k_vpd: float = 1.0e-4        # VPD gain (kg/s per m² per kPa), vpd/van_henten
+    daily_water_L: float = 40.0  # daily water for whole canopy (L/day), "daily" method
+    plant_count: int = 0         # number of plants, "per_plant" method
+    ml_per_plant_day: float = 80.0  # mL water per plant per day, "per_plant" method
+    photoperiod_hours: float = 16.0  # light hours per day
+    k_vpd: float = 2.0e-5        # VPD gain (kg/s per m² per kPa), vpd method
+    k_van_henten: float = 4.0e-4 # biomass-scaled gain (m²/(s·kPa)), van_henten method
     stage_factor: float = 1.0
     g_stomata: float = 1.0e-3
+    r_n_canopy: float = 250.0    # net canopy radiation (W/m²) for "stomatal"
 
 
 @dataclass
@@ -146,12 +222,13 @@ class PVConfig:
     V_oc_stc: float = 57.34
     I_mp_stc: float = 13.33
     V_mp_stc: float = 46.0
-    alpha_sc: float = 0.045
+    alpha_sc: float = 0.00045
     beta_voc: float = -0.25
     NOCT: float = 45.0
     eta_inv: float = 0.97
     C_pv: float = 110.0
     degradation: float = 0.004
+    maintenance: float = 0.005
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 
@@ -199,6 +276,7 @@ class DesignProject:
     led: LEDConfig = field(default_factory=LEDConfig)
     transpiration: TranspirationConfig = field(default_factory=TranspirationConfig)
     setpoints: SetpointConfig = field(default_factory=SetpointConfig)
+    growth: VanHentenConfig = field(default_factory=VanHentenConfig)
     pv: PVConfig = field(default_factory=PVConfig)
     battery: BatteryConfig = field(default_factory=BatteryConfig)
     tariff: TariffConfig = field(default_factory=TariffConfig)
@@ -206,9 +284,15 @@ class DesignProject:
     equipment_power_w: float = 0.0   # constant facility electrical base load (W)
     equipment_capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
     envelope_capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
+    pump_capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
+    opex: OpexConfig = field(default_factory=OpexConfig)
     interest_rate: float = 0.06          # annual discount rate (fraction)
     currency: str = "USD"                # monetary unit for all costs
     exchange_rate: float = 1.0           # conversion factor to USD (7.2 for RMB)
+
+    # ── sizing decisions (energy system) ──
+    pv_area_m2: float = 0.0             # PV array area (m²); 0 = skip energy system
+    battery_kwh: float = 0.0            # battery energy capacity (kWh); 0 = no battery
 
     # ---- (de)serialisation ---------------------------------------------
     def to_dict(self) -> dict:
@@ -220,14 +304,43 @@ class DesignProject:
 
     @classmethod
     def from_dict(cls, d: dict) -> "DesignProject":
-        # Build sub-dataclasses, ignoring unknown keys defensively.
+        # Build sub-dataclasses; raise on unrecognised keys.
+        _TOP_KEYS = {
+            "name", "site", "envelope", "hvac", "deh", "led",
+            "transpiration", "setpoints", "pv", "battery", "tariff", "space",
+            "growth",
+            "equipment_power_w", "equipment_capital", "envelope_capital",
+            "pump_capital", "opex",
+            "interest_rate", "currency", "exchange_rate",
+            "pv_area_m2", "battery_kwh",
+        }
+        unknown_top = set(d.keys()) - _TOP_KEYS
+        if unknown_top:
+            raise ValueError(
+                f"Unrecognised top-level YAML keys: {sorted(unknown_top)}. "
+                f"Valid keys: {sorted(_TOP_KEYS)}"
+            )
+
         def sub(target, data, *, has_nested_capital: bool = False):
             known = {f.name for f in getattr(target, '__dataclass_fields__').values()}
+            # 'capital' is a valid nested field handled separately
+            unknown = set(data.keys()) - known - ({"capital"} if has_nested_capital else set())
+            if unknown:
+                raise ValueError(
+                    f"Unrecognised keys in '{target.__name__}': "
+                    f"{sorted(unknown)}. Valid keys: {sorted(known)}"
+                )
             filtered = {k: data[k] for k in data if k in known}
             if has_nested_capital:
                 cap_data = data.get("capital", {})
                 if isinstance(cap_data, dict) and cap_data:
                     c_fields = {f.name for f in CapitalCostConfig.__dataclass_fields__.values()}
+                    cap_unknown = set(cap_data.keys()) - c_fields
+                    if cap_unknown:
+                        raise ValueError(
+                            f"Unrecognised keys in 'capital': {sorted(cap_unknown)}. "
+                            f"Valid keys: {sorted(c_fields)}"
+                        )
                     filtered["capital"] = CapitalCostConfig(
                         **{k: cap_data[k] for k in cap_data if k in c_fields}
                     )
@@ -261,6 +374,7 @@ class DesignProject:
                                has_nested_capital=True)),
             transpiration=TranspirationConfig(**sub(TranspirationConfig, d.get("transpiration", {}))),
             setpoints=SetpointConfig(**sub(SetpointConfig, d.get("setpoints", {}))),
+            growth=VanHentenConfig(**sub(VanHentenConfig, d.get("growth", {}))),
             pv=PVConfig(**sub(PVConfig, d.get("pv", {}),
                               has_nested_capital=True)),
             battery=BatteryConfig(**sub(BatteryConfig, d.get("battery", {}),
@@ -270,9 +384,13 @@ class DesignProject:
             equipment_power_w=d.get("equipment_power_w", 0.0),
             equipment_capital=CapitalCostConfig(**sub(CapitalCostConfig, d.get("equipment_capital", {}))),
             envelope_capital=CapitalCostConfig(**sub(CapitalCostConfig, d.get("envelope_capital", {}))),
+            pump_capital=CapitalCostConfig(**sub(CapitalCostConfig, d.get("pump_capital", {}))),
+            opex=OpexConfig(**sub(OpexConfig, d.get("opex", {}))),
             interest_rate=d.get("interest_rate", 0.06),
             currency=d.get("currency", "USD"),
             exchange_rate=d.get("exchange_rate", 1.0),
+            pv_area_m2=d.get("pv_area_m2", 0.0),
+            battery_kwh=d.get("battery_kwh", 0.0),
         )
 
     @classmethod

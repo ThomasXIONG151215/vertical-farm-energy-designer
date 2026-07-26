@@ -77,7 +77,7 @@ class BatterySystem:
             "battery_soc": battery_soc,
             "total_charged": total_charged,
             "total_discharged": total_discharged,
-            "battery_cycles": (total_charged + total_discharged) / (2.0 * E_bat) if E_bat > 0 else 0.0,
+            "battery_cycles": (total_charged * self.eta_ch + total_discharged / max(self.eta_dis, 0.01)) / (2.0 * E_bat) if E_bat > 0 else 0.0,
         }
 
     def calculate_costs(self, E_bat: float) -> Dict[str, float]:

@@ -26,9 +26,8 @@ class PVSystem:
     V_oc_stc: float = 57.34        # V
     I_mp_stc: float = 13.33        # A
     V_mp_stc: float = 46.0         # V (derived)
-    alpha_sc: float = 0.045        # A/K
+    alpha_sc: float = 0.00045      # /K  (relative, ~0.045 %/K for Jinko 78HL4-BDV)
     beta_voc: float = -0.25        # V/K
-    beta: float = -0.0029          # power temp coeff (1/K)
     NOCT: float = 45.0             # C
     T_stc: float = 25.0            # C
     eta_inv: float = 0.97          # inverter efficiency
@@ -49,12 +48,14 @@ class PVSystem:
         V_oc = self.V_oc_stc + self.beta_voc * (T_cell - self.T_stc)
         I_mp = self.I_mp_stc * (1 + self.alpha_sc * (T_cell - self.T_stc)) * (G / 1000.0)
         I_mp = np.clip(I_mp, 0.0, None)
-        k_v = np.clip(0.86 - 0.0005 * (G - 1000.0), 0.6, 0.9)
+        k_v_stc = self.V_mp_stc / self.V_oc_stc
+        k_v = k_v_stc * (1.0 + 0.03 * np.log(np.maximum(G, 1.0) / 1000.0))
+        k_v = np.clip(k_v, 0.5, 0.95)
         V_mp = V_oc * k_v
         return I_mp * V_mp
 
     def calculate_pv_output(self, weather: Dict[str, np.ndarray],
-                            A_pv: float) -> np.ndarray:
+                            A_pv: float, year: int = 0) -> np.ndarray:
         """Hourly PV AC output (kW).
 
         weather keys: 'direct_radiation', 'diffuse_radiation', 'temperature_2m'.
@@ -66,10 +67,14 @@ class PVSystem:
         G = np.clip(G, 0.0, None)
         T_cell = self.cell_temperature(G, T_amb)
         P_module_w = self._sd_mpp(G, T_cell)
-        n_modules = A_pv / self.area_to_power
+        total_kwp = A_pv / self.area_to_power
+        P_module_at_STC = self.V_mp_stc * self.I_mp_stc
+        n_modules = total_kwp * 1000.0 / max(1e-9, P_module_at_STC)
         P_ac_w = P_module_w * n_modules * self.eta_inv
         P_ac_w = np.where(G <= 0.0, 0.0, P_ac_w)
-        return P_ac_w / 1000.0
+        P_ac_w = P_ac_w / 1000.0
+        P_ac_w *= (1.0 - self.degradation) ** year
+        return P_ac_w
 
     def calculate_costs(self, A_pv: float) -> Dict[str, float]:
         peak_power_kwp = A_pv / self.area_to_power

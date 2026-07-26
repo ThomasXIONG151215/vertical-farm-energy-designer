@@ -6,13 +6,13 @@ Parametric, design-time re-implementation of the vendored
 
 Architecture:
     P_comp   = P_ref * poly(T, W) * S_DH
-    m_DH     = eta * P_comp / h_fg          (moisture removal, kg/s)
-    Q_DH     = P_comp + m_DH * h_fg         (condenser heat released to room, W)
+    m_DH     = SMER * P_comp / 3.6e6         (moisture removal, kg/s)
+    Q_DH     = P_comp + m_DH * h_fg          (condenser heat released to room, W)
 
-S_DH is the on/off modulation driven by a humidity setpoint (hysteresis); the
-moisture removal efficiency ``eta`` follows the ASHRAE saturation model
-(bypass-factor approach), which rises with absolute humidity but saturates at
-``eta_max`` (compressor capacity limit).
+S_DH is the on/off modulation driven by a humidity setpoint (hysteresis).
+Moisture removal is governed solely by SMER (Specific Moisture Extraction Rate,
+kg water / kWh electricity). The EnthalpyEfficiency class is deprecated and
+retained only for backward compatibility.
 """
 
 from dataclasses import dataclass, field
@@ -22,11 +22,15 @@ from ..physics.psychrometrics import temp_rh_to_ah
 from .compressor import CompressorState
 from .lag import FirstOrderLag
 
-__all__ = ["DEHDevice", "EnthalpyEfficiency"]
+__all__ = ["DEHDevice", "EnthalpyEfficiency", "size_deh"]
 
 
 class EnthalpyEfficiency:
-    """ASHRAE saturation DEH efficiency: eta = min(eta_ref*drive/ref_drive, eta_max)."""
+    """DEPRECATED: ASHRAE saturation DEH efficiency model (no longer used by DEHDevice).
+
+    SMER (Specific Moisture Extraction Rate) is now the sole moisture model.
+    Kept for backward compatibility only — may be removed in a future version.
+    """
 
     def __init__(
         self,
@@ -72,7 +76,8 @@ class DEHDevice:
         self.poly_e = poly_e
         self.T_mean, self.T_std = T_mean, T_std
         self.W_mean, self.W_std = W_mean, W_std
-        self.eff = efficiency or EnthalpyEfficiency()
+        # efficiency parameter is deprecated; SMER is the sole moisture model
+        # self.eff deliberately not stored — EnthalpyEfficiency is unused dead code
         self.smer = smer
         self.h_fg = h_fg
         self.fan_power_w = fan_power_w
@@ -136,3 +141,20 @@ class DEHDevice:
             "S_DH": s_dh,
             "eta": eta,
         }
+
+
+def size_deh(
+    moisture_load_kgs: float,
+    smer: float = 2.0,
+    safety_factor: float = 1.2,
+) -> float:
+    """Calculate required DEH P_ref (W) from design moisture load.
+
+    ``moisture_load_kgs`` is the peak moisture gain rate (kg/s) the
+    dehumidifier must remove: transpiration + infiltration moisture +
+    envelope permeance at design conditions.
+
+    P_ref [W] = moisture [kg/s] * 3.6e6 [J/kWh] / SMER [kg/kWh]
+    """
+    p_comp = moisture_load_kgs * 3.6e6 / max(smer, 0.1)
+    return p_comp * safety_factor

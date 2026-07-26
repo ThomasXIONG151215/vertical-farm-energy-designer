@@ -81,6 +81,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=src --cov-report=term-missing"
+markers = [
+    "slow: slow tests (weather API calls, full sweeps)",
+]
 
 [tool.black]
 line-length = 100

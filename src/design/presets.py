@@ -8,7 +8,7 @@ presets provide convenient starting points.
 
 from .project import DesignProject, EnvelopeConfig, LEDConfig, SiteConfig
 
-__all__ = ["preset_default", "preset_609"]
+__all__ = ["preset_default", "preset_609", "PRESETS"]
 
 
 def preset_default() -> DesignProject:
@@ -31,3 +31,9 @@ def preset_609() -> DesignProject:
         ),
         led=LEDConfig(light_start_hour=6, photoperiod_hours=16, heat_fraction=1.0),
     )
+
+
+PRESETS = {
+    "609": {"label": "609 — Fengxian Lettuce PFAL", "factory": preset_609},
+    "default": {"label": "Default", "factory": preset_default},
+}

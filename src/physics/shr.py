@@ -37,9 +37,11 @@ class DynamicSHR:
     def calc_shr(self, T_return: float, RH_return: float, T_supply: float) -> float:
         if T_supply >= T_return:
             return 1.0
-        W_return = temp_rh_to_ah(T_return, max(0.1, RH_return))
-        T_dp = temp_rh_to_dewpoint(T_return, max(0.1, RH_return))
+        W_return = temp_rh_to_ah(T_return, RH_return)
+        T_dp = temp_rh_to_dewpoint(T_return, max(0.01, RH_return))
         T_adp = (T_supply - self.BF * T_return) / (1.0 - self.BF)
+        if T_adp < 0.0:
+            T_adp = 0.0
         if T_adp >= T_dp:
             return 1.0
         W_adp_sat = saturation_humidity(T_adp, self.P_atm)

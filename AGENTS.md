@@ -30,11 +30,11 @@ pytest --cov=src
 | Directory | Purpose | Key file |
 |-----------|---------|----------|
 | `src/physics/` | Psychrometrics, envelope, ODE solver, SHR | `engine.py` consumes all |
-| `src/devices/` | HVAC, dehumidifier, LED, compressor, lag | Built by `engine.py` |
+| `src/devices/` | HVAC (Carnot COP default), dehumidifier (auto-size), LED, compressor, lag | Built by `engine.py` |
 | `src/pvbes/` | PV, battery, grid, energy system | Consumed by `sweep.py` |
 | `src/design/` | Project config, engine, presets, sweep | `engine.py` is the hub |
 | `src/weather/` | Open-Meteo fetch, geocoding | `engine.py` calls `fetch_weather` |
-| `src/plants/` | Transpiration, Van Henten growth | `engine.py` steps each hour |
+| `src/plants/` | Transpiration (6 methods: vpd/stomatal/van_henten/constant/daily/per_plant), Van Henten growth | `engine.py` steps each hour |
 | `src/agent/` | Evaluator (agent-cli contract) | Entry point for CLI |
 
 ## Constraints
@@ -44,6 +44,8 @@ pytest --cov=src
 - **Python >= 3.8** — core deps: `numpy`, `pandas`, `pyyaml`, `requests`.
 - **`src/design/engine.py` is the hub** — it imports from every other module. Changes to physics/devices/plants/weather may affect it.
 - **Strategy modes are exactly 4** — `default` / `conservative` / `progressive` / `aggressive`. No fifth.
+- **HVAC COP mode is 4** — `carnot` (default: η_II × T_evap/(T_cond-T_evap)), `constant`, `linear`, `table`. Carnot depends on both indoor and outdoor temperature.
+- **Transpiration method is 6** — 3 model-calculated (`vpd`, `stomatal`, `van_henten`) + 3 direct-set (`constant`, `daily`, `per_plant`).
 - **Scenario/routine logic stays isolated** from energy-optimisation code and from the data layer.
 
 ## Boundaries

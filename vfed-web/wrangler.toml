@@ -1,0 +1,9 @@
+name = "vfed-web"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "."
+
+# No Worker bindings needed - everything runs in browser via Pyodide
+# If you need server-side APIs later, add them here
+
+[build]
+command = "echo 'Static site - no build step'"

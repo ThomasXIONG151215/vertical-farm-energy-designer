@@ -30,7 +30,7 @@ class VanHenten:
     # literature defaults  (all SI)
     _defaults = {
         "c_alpha_beta": 0.544,      # dimensionless conversion efficiency
-        "c_resp_d": 2.65e-7,        # s⁻¹  dark respiration coefficient (20 °C)
+        "c_resp_d": 2.65e-7,        # s⁻¹  dark respiration coefficient (25 °C)
         "c_pl_d": 53.0,             # m²/kg  light extinction per LAI
         "c_rad_phot": 1e-8,         # kg/J  radiation use efficiency (calibratable)
         "c_co2_1": 5.11e-6,         # m/(s·°C²)

@@ -20,6 +20,8 @@ from .design.engine import DesignEngine
 from .design.sweep import sweep_design
 from .agent.evaluator import agent_evaluate
 from .weather.geocode import geocode_city
+from .weather.city_db import lookup_city, list_cities
+from .pvbes.tariff_db import lookup_tariff, list_regions
 
 
 def _currency_label(project: DesignProject) -> str:
@@ -33,14 +35,23 @@ def _currency_label(project: DesignProject) -> str:
 def _cmd_design_new(args):
     preset = preset_609() if args.preset == "609" else preset_default()
     preset.name = args.name
+    preset.site.year = args.year if args.year is not None else 2025
     if args.city is not None:
+        canonical = lookup_city(args.city)
+        if canonical is None:
+            print(f"City '{args.city}' not found. Available cities:",
+                  file=sys.stderr)
+            for c in list_cities():
+                print(f"  {c['name']}", file=sys.stderr)
+            sys.exit(1)
+        preset.site.city = canonical
         try:
-            lat, lon = geocode_city(args.city)
+            lat, lon = geocode_city(canonical)
             preset.site.lat = lat
             preset.site.lon = lon
-            print(f"Geocoded '{args.city}' -> lat={lat:.3f}, lon={lon:.3f}")
+            print(f"Geocoded '{canonical}' -> lat={lat:.3f}, lon={lon:.3f}")
         except Exception as e:
-            print(f"[WARN] Geocoding failed: {e}. Using preset defaults.",
+            print(f"[WARN] Geocoding failed: {e}. lat/lon may need manual override.",
                   file=sys.stderr)
     if args.lat is not None:
         preset.site.lat = args.lat
@@ -55,6 +66,49 @@ def _cmd_design_new(args):
 
 def _cmd_design_presets(args):
     print("Available presets: default, 609 (Fengxian lettuce PFAL)")
+
+
+def _cmd_cities(args):
+    print("Available cities for pre-downloaded weather (2025):")
+    for c in list_cities():
+        print(f"  {c['name']}")
+
+
+def _cmd_tariffs(args):
+    print("Available electricity tariff regions:")
+    for r in list_regions():
+        print(f"  {r['id']:15s}  {r['label']}")
+
+
+def _cmd_evaluate(args):
+    """Evaluate a single design — building simulation only (no sweep)."""
+    import numpy as np
+    try:
+        project = DesignProject.load(args.project)
+    except Exception as e:
+        print(f"[ERROR E001] invalid project config: {e}", file=sys.stderr)
+        return 1
+    engine = DesignEngine(cache_dir=args.cache)
+    try:
+        result = engine.run(project)
+    except Exception as e:
+        print(f"[ERROR E101] building simulation failed: {e}", file=sys.stderr)
+        return 1
+    summary = result.summary
+    annual_load = result.get("load", np.zeros(1)).sum()
+    print(f"Project: {project.name}")
+    print(f"  Annual load      = {annual_load:.0f} kWh/yr")
+    print(f"  Biomass (dry)    = {result.get('biomass_kg', 0):.1f} kg")
+    print(f"  kWh/kg (dry)     = {result.get('kwh_per_kg', 0):.1f}")
+    print(f"  kWh/kg (fresh)   = {result.get('kwh_per_kg_fresh', 0):.1f}")
+    if summary.get("lcoe"):
+        print(f"  LCOE             = {summary['lcoe']:.4f} {getattr(project, 'currency', 'USD')}/kWh")
+    pv_gen = summary.get("pv_generation_kwh", 0)
+    if pv_gen > 0:
+        print(f"  PV generation    = {pv_gen:.0f} kWh/yr")
+        print(f"  Grid import      = {summary.get('grid_import_kwh', 0):.0f} kWh/yr")
+        print(f"  Grid export      = {summary.get('grid_export_kwh', 0):.0f} kWh/yr")
+    return 0
 
 
 def _cmd_sweep(args):
@@ -156,13 +210,23 @@ def build_parser() -> argparse.ArgumentParser:
     dn.add_argument("--preset", choices=["default", "609"], default="default")
     dn.add_argument("--out", default="project.yaml")
     dn.add_argument("--city", default=None,
-                    help="resolve lat/lon via Open-Meteo geocoding")
+                    help="pre-downloaded city name (use 'design cities' to list)")
     dn.add_argument("--lat", type=float, default=None)
     dn.add_argument("--lon", type=float, default=None)
     dn.add_argument("--year", type=int, default=None)
     dn.set_defaults(func=_cmd_design_new)
     dp = dsub.add_parser("presets", help="list presets")
     dp.set_defaults(func=_cmd_design_presets)
+    dc = dsub.add_parser("cities", help="list available cities for weather")
+    dc.set_defaults(func=_cmd_cities)
+
+    dc2 = dsub.add_parser("tariffs", help="list available electricity tariff regions")
+    dc2.set_defaults(func=_cmd_tariffs)
+
+    e = sub.add_parser("evaluate", help="evaluate a single design configuration")
+    e.add_argument("project")
+    e.add_argument("--cache", default="weather_cache")
+    e.set_defaults(func=_cmd_evaluate)
 
     s = sub.add_parser("sweep", help="run design sweep")
     s.add_argument("project")

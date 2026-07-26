@@ -9,10 +9,19 @@ thermal gain equals the electrical draw (scaled by ``heat_fraction``).
 When ``auto_deduce=True``, the electrical power is deduced from efficacy,
 target PPFD and covered area::
 
-    power_w = ppfd_target * covered_area / efficacy / 4.57
+    power_w = ppfd_target * covered_area / efficacy
 
-where 4.57 converts µmol/s of PAR photons to electrical Watts for a typical
-white-LED spectrum.  Override ``auto_deduce=False`` to set ``power_w`` directly.
+The ``_SPECTRUM_PAR_FACTOR`` table provides the standard PPFD-to-PAR
+conversion (µmol/J) used by other modules to compute PAR energy flux. 
+Standard values are based on McCree (1972):
+
+    spectrum  | µmol/J_PAR | typical efficacy | notes
+    white     | 4.57       | 2.5 µmol/J       | phosphor-converted white LED
+    rb_3to1   | 2.45       | 3.2 µmol/J       | red:blue = 3:1
+    rb_4to1   | 2.35       | 3.5 µmol/J       | red:blue = 4:1
+    rb_2to1   | 2.60       | 2.9 µmol/J       | red:blue = 2:1
+
+Override ``auto_deduce=False`` to set ``power_w`` directly.
 """
 
 from dataclasses import dataclass, field
@@ -20,7 +29,12 @@ from typing import Tuple
 
 __all__ = ["LEDDevice"]
 
-_PAR_TO_WATTS: float = 4.57   # µmol/J → W  (PAR photon energy conversion)
+_SPECTRUM_PAR_FACTOR = {
+    "white":   4.57,
+    "rb_3to1": 2.45,
+    "rb_4to1": 2.35,
+    "rb_2to1": 2.60,
+}
 
 
 @dataclass
@@ -33,17 +47,25 @@ class LEDDevice:
     efficacy: float = 2.5            # µmol/J
     ppfd_target: float = 400.0       # µmol/(m²·s)
     covered_area: float = 45.0       # m²
+    spectrum: str = "white"          # white | rb_3to1 | rb_4to1 | rb_2to1
+
+    @property
+    def par_factor(self) -> float:
+        """Spectrum-specific PPFD-to-PAR conversion factor (µmol/J)."""
+        return _SPECTRUM_PAR_FACTOR.get(self.spectrum, 4.57)
 
     def __post_init__(self):
         if self.auto_deduce:
             self.power_w = (self.ppfd_target * self.covered_area
-                            / max(self.efficacy, 0.1) / _PAR_TO_WATTS)
+                            / max(self.efficacy, 0.1))
 
     def is_light(self, hour: float) -> bool:
         """True if ``hour`` (0–23, supports fractional) falls within the photoperiod.
 
         Supports wrap-around photoperiods (e.g. start=22, photoperiod=6h → 22–4).
         """
+        if self.photoperiod_hours <= 0:
+            return False
         h = hour % 24
         end = (self.light_start_hour + self.photoperiod_hours) % 24
         if end > self.light_start_hour:

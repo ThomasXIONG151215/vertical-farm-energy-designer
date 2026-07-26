@@ -51,9 +51,9 @@ def ah_to_temp_rh(temp_c: float, ah: float) -> float:
 
 def temp_rh_to_dewpoint(temp_c: float, rh_pct: float) -> float:
     """Dew point temperature (C) via Magnus inversion."""
-    a, b = 17.27, 237.7
+    a, b = 17.27, 237.3
     if rh_pct <= 0.0:
-        return -273.15
+        raise ValueError(f"RH must be > 0%, got {rh_pct:.2f}")
     if rh_pct >= 100.0:
         return temp_c
     alpha = ((a * temp_c) / (b + temp_c)) + math.log(rh_pct / 100.0)
@@ -83,6 +83,10 @@ def temp_rh_to_wetbulb(temp_c: float, rh_pct: float,
         if abs(t_wb_new - t_wb) < tol:
             return t_wb_new
         t_wb = t_wb_new
+    else:
+        raise RuntimeError(
+            f"Wet-bulb iteration did not converge after {max_iter} iterations "
+            f"(T={temp_c:.1f}°C, RH={rh_pct:.1f}%)")
     return t_wb
 
 
