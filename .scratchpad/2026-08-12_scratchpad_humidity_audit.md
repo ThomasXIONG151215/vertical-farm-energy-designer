@@ -25,14 +25,15 @@
 
 - [x] 并行调研 5 路（psychrometrics/ode、plants、devices/envelope、engine、tests）
 - [x] 数值核算负湿度触发条件（已复现：夜间 DEH+HVAC 联合除湿）
-- [ ] 输出最终整合报告
+- [x] 输出最终整合报告
+- [x] A 级问题复查与修复（2026-08-13）：A1 stomatal PM 单位误报澄清、A2 van_henten 高温守卫、A3 气压一致性
 
 ## 4. Project Status Dashboard
 
 - 调研完成度：100%（5 路并行调研 + 数值核算 + 最终报告已完结）
 - 负湿度根因：已确认（设备级无钳位 + ODE 只钳结果）
-- 修复状态：P0/P1 修复已全部完成并通过全量测试
-- 待办：输出最终报告给用户（已完成）
+- 修复状态：P0/P1 + A 级（A1/A2/A3）修复已全部完成并通过全量测试（169 passed，覆盖率 75%）
+- 待办：A 级改动 git commit（心理测量/植物/引擎/测试 5 文件单独提交）
 
 ### 已完成任务（P0/P1 修复）
 
@@ -52,10 +53,30 @@
 
 - Git 状态：本次修复尚未提交（未做 git commit）
 
+### 已完成任务（A 级修复，2026-08-13）
+
+1. **A1 stomatal PM 单位误报澄清** — 已完成
+   - 复查结论：调研早期判断 stomatal Penman-Monteith 气动项 kPa→Pa 缺失 1000 倍是**误报**——Δ/γ/VPD 三者均 kPa 时单位自洽，kPa 与 Pa 表示数值等价（25°C/50%RH 验证均 206.1 W/m²）。
+   - 处置：`src/plants/transpiration.py` stomatal 分支加单位防御注释块，**代码不变**；新增数值不变性测试 `test_stomatal_pm_unit_invariance`。
+2. **A2 van_henten 高温奇异点** — 已完成
+   - 根因：`co2_term` 在 T>42.1°C 为负，`den` 在 ~44.5°C 过零导致 φ 变号/爆炸、X_d 塌缩。
+   - 修复：`src/plants/van_henten.py` `_phi_phot_c` 在 `co2_term<=0` 时 `return 0.0`（净光合不可能为负）。
+3. **A3 气压一致性** — 已完成
+   - `src/physics/psychrometrics.py` `temp_rh_to_ah`/`ah_to_temp_rh` 新增 `pressure_kpa=101.325` 参数。
+   - `src/design/engine.py` 三处运行期调用（251 初始化、318 W_ext、366 子步 RH）传 `P_atm`（run() 内 surface_pressure nanmean/10）。
+   - 选型处与其它设备调用保持默认气压（101.325），不受影响。
+4. **A 级回归测试** — 已完成
+   - `tests/test_03_numerical.py` 新增 4 个测试：`test_stomatal_pm_unit_invariance`、van_henten 高温守卫、psychrometrics 气压参数化、引擎级 950hPa 高原运行不崩溃且 RH 非负。
+5. **全量 pytest** — 已完成
+   - `tests/test_03_numerical.py` 28 passed；全量 **169 passed**（基线 165 + 新 4），覆盖率 75%。
+
+- Git 状态：A 级改动尚未提交（将单独 commit：psychrometrics.py/van_henten.py/transpiration.py/engine.py/test_03_numerical.py）
+
 ## 5. Executor Feedback
 
 无阻塞。所有调研在 src/ 活跃代码完成，未修改任何代码。
 - P0/P1 修复阶段完成：6 项任务全部落盘并通过全量测试（163 passed，覆盖率 75%）。修复尚未 git commit，待用户确认后提交。
+- A 级修复阶段完成（2026-08-13）：A1（误报澄清，代码不变+注释块+不变性测试）、A2（van_henten 高温守卫）、A3（气压一致性）全部落盘，全量 169 passed（基线 165 + 新 4），覆盖率 75%。A 级改动尚未 commit，将单独提交 5 个文件。
 
 ---
 
@@ -105,3 +126,51 @@
 ### Dashboard 状态补充
 - 除湿量记账/性能反馈功能：✅ 已完成落盘（engine.py + tests）
 - 待办：git commit（HEAD 仍为 1a985cb，工作区含本次与历史 P0/P1 改动未提交）
+
+---
+
+## 记录：A 级问题修复完成（2026-08-13）
+
+### A1 — stomatal Penman-Monteith 单位误报澄清（非代码修复）
+
+- **复查结论**：早期调研认为 stomatal PM 气动项缺 kPa→Pa 1000 倍换算，经复核为**误报**。
+  - Δ/γ（kPa/°C）与 VPD（kPa）三者同为 kPa 时公式单位自洽；kPa 与 Pa 表示只是数值 1000 倍关系，但比值（Δ/γ、VPD/γ）不变。
+  - 数值验证：25°C、50%RH 下用 kPa 与 Pa 两组单位分别代入，结果均为 206.1 W/m²。
+- **处置**：`src/plants/transpiration.py` stomatal 分支仅加**单位防御注释块**，代码逻辑不变；新增 `test_stomatal_pm_unit_invariance` 验证两种单位制数值等价。
+
+### A2 — van_henten 高温奇异点修复（代码修复）
+
+- **根因**：`co2_term` 在 T>42.1°C 时为负；`den` 在 ~44.5°C 过零，导致光合同化速率 φ 变号/爆炸，干物质 X_d 塌缩。
+- **修复**：`src/plants/van_henten.py` `_phi_phot_c` 在 `co2_term<=0` 时 `return 0.0`（净光合不可能为负），消除变号与过零爆炸。
+
+### A3 — 气压一致性（代码修复）
+
+- **改动**：
+  - `src/physics/psychrometrics.py`：`temp_rh_to_ah` / `ah_to_temp_rh` 新增可选参数 `pressure_kpa=101.325`，缺省保持原行为。
+  - `src/design/engine.py`：三处运行期调用传 `P_atm`（run() 内由 `surface_pressure` nanmean/10 得到）：
+    - 251 行（初始化 W_z）
+    - 318 行（W_ext 室外含湿量）
+    - 366 行（子步 RH 计算）
+  - 选型处与其它设备调用保持默认 101.325 kPa，不受影响。
+
+### 测试（tests/test_03_numerical.py）
+
+- 新增 4 个测试：
+  - `test_stomatal_pm_unit_invariance`（A1 单位不变性）
+  - van_henten 高温守卫（A2，co2_term<=0 时 φ=0）
+  - psychrometrics 气压参数化（A3，不同 pressure_kpa 输出不同且合理）
+  - 引擎级 950hPa 高原运行不崩溃且 RH 非负（A3 端到端）
+
+### 验证
+
+- `tests/test_03_numerical.py`：**28 passed**
+- 全量 pytest：**169 passed**（基线 165 + 新 4），覆盖率 75%
+
+### Git
+
+- A 级改动**尚未提交**（5 个文件：`src/physics/psychrometrics.py`、`src/plants/van_henten.py`、`src/plants/transpiration.py`、`src/design/engine.py`、`tests/test_03_numerical.py`）。
+- 将单独 commit，与 P0/P1 修复及除湿量记账改动分开。
+
+### Dashboard 状态补充
+- A1/A2/A3 修复：✅ 全部落盘，169 passed，覆盖率 75%
+- 待办：A 级 5 文件 git commit（工作区另有 vfed-web/cli/presets 等无关改动，需分开提交）

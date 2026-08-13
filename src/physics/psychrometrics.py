@@ -52,23 +52,25 @@ def saturation_vapor_pressure(temp_c: float) -> float:
     return 0.61078 * math.exp((17.27 * temp_c) / (temp_c + 237.3))
 
 
-def temp_rh_to_ah(temp_c: float, rh_pct: float) -> float:
+def temp_rh_to_ah(temp_c: float, rh_pct: float,
+                  pressure_kpa: float = 101.325) -> float:
     """Convert temperature (C) and RH (%) to absolute humidity (kg/kg)."""
     # Guard: RH outside [0,100] would otherwise produce negative AH or a
     # physically impossible one — clamp to the physical range.
     rh_pct = max(0.0, min(100.0, rh_pct))
     p_sat = saturation_vapor_pressure(temp_c)
     p_vapor = p_sat * rh_pct / 100.0
-    return 0.622 * p_vapor / (101.325 - p_vapor)
+    return 0.622 * p_vapor / (pressure_kpa - p_vapor)
 
 
-def ah_to_temp_rh(temp_c: float, ah: float) -> float:
+def ah_to_temp_rh(temp_c: float, ah: float,
+                  pressure_kpa: float = 101.325) -> float:
     """Convert temperature (C) and absolute humidity (kg/kg) to RH (%)."""
     if ah < 0.0:
         raise ValueError(
             f"absolute humidity cannot be negative, got {ah:.6f} kg/kg")
     p_sat = saturation_vapor_pressure(temp_c)
-    p_vapor = ah * 101.325 / (0.622 + ah)
+    p_vapor = ah * pressure_kpa / (0.622 + ah)
     rh = (p_vapor / p_sat) * 100.0
     return max(0.0, min(100.0, rh))
 

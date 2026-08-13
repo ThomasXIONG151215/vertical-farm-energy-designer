@@ -340,3 +340,126 @@ def test_engine_reports_actual_dehumidification():
     assert perf["removal_limited_water_kg"] > 0.0
     assert perf["removal_limited_water_kg"] <= (
         perf["deh_nominal_dehum_kg"] + perf["hvac_nominal_dehum_kg"])
+
+
+# ---------------------------------------------------------------------------
+# 3.9  A-level fixes: Penman–Monteith units, Van Henten high-T singularity,
+#      psychrometrics station-pressure parameterisation
+# ---------------------------------------------------------------------------
+def test_stomatal_pm_unit_invariance():
+    """Penman–Monteith is invariant to the *consistent* pressure unit: the
+    all-kPa (Δ, γ, VPD all in kPa) and all-Pa representations give identical
+    λE.  Guards against a future regression that mixes VPD(Pa) with Δ, γ in
+    kPa, which would overstate the aerodynamic term by 1000×."""
+    from src.plants.transpiration import TranspirationModel
+    from src.physics.psychrometrics import (
+        saturation_vapor_pressure, compute_vpd)
+
+    T, RH = 25.0, 50.0
+    model = TranspirationModel(method="stomatal", area_m2=45.0)
+    E_model = model.step(T, RH, True, 600.0)          # all terms in kPa
+
+    e_sat = saturation_vapor_pressure(T)              # kPa
+    delta = 4098.0 * e_sat / (T + 237.3) ** 2         # kPa/K
+    gamma = 0.0655                                    # kPa/K
+    vpd = compute_vpd(T, RH)                          # kPa
+    r_a = max(1.0, model.r_a)
+    r_s = 1.0 / max(1e-9, model.g_stomata)
+    rho_cp = model.rho_cp()
+    R_n = model.r_n_canopy * 1.0                      # light on
+
+    numerator = delta * R_n + rho_cp * max(0.0, vpd) / r_a
+    denominator = delta + gamma * (1.0 + r_s / r_a)
+    E_hand = (numerator / denominator) / model.h_fg * model.area_m2
+
+    assert E_model == pytest.approx(E_hand, rel=1e-9)
+
+    # All-Pa recomputation (every pressure term ×1000) → identical λE.
+    num_pa = (delta * 1000.0) * R_n + rho_cp * (vpd * 1000.0) / r_a
+    den_pa = (delta * 1000.0) + (gamma * 1000.0) * (1.0 + r_s / r_a)
+    assert (num_pa / den_pa) == pytest.approx(numerator / denominator, rel=1e-12)
+
+    # The *wrong* mixed-unit version (VPD in Pa only) must be clearly
+    # distinguishable from the correct result — the regression signature.
+    num_mixed = delta * R_n + rho_cp * (vpd * 1000.0) / r_a
+    assert abs(num_mixed / denominator - numerator / denominator) > 1.0
+
+
+def test_van_henten_high_temp_no_singularity():
+    """Above ~42 °C the CO₂-response quadratic turns negative and the
+    photosynthesis denominator crosses zero (~44.5 °C).  Net photosynthesis
+    must stop cleanly (return 0) instead of flipping sign / blowing up and
+    collapsing the biomass state."""
+    from src.plants.van_henten import VanHenten
+
+    grow = VanHenten(co2_ppm=800)
+
+    # T=50 °C: co2_term < 0 → photosynthesis returns 0, growth = -respiration.
+    assert grow._phi_phot_c(X_d=0.05, T_z=50.0, light=87.5) == 0.0
+
+    dX_d, X_d_new = grow.step(T_z=50.0, light=87.5, X_d=0.05, dt=600.0)
+    assert np.isfinite(dX_d) and np.isfinite(X_d_new)
+    assert dX_d < 0.0                     # respiration only — no collapse
+    assert X_d_new == pytest.approx(0.05 + dX_d * 600.0, rel=1e-9)
+    assert X_d_new > 0.0
+
+    # Around the former singularity nothing blows up or NaNs.
+    for T in (42.0, 43.0, 44.0, 44.5, 45.0, 46.0):
+        dd, xnew = grow.step(T_z=T, light=87.5, X_d=0.05, dt=600.0)
+        assert np.isfinite(dd) and np.isfinite(xnew)
+        assert xnew >= 0.0
+        assert dd <= 1e-6                 # no spurious growth burst
+
+    # Positive control: normal growing temperature still photosynthesis.
+    dX_good, _ = grow.step(T_z=22.0, light=87.5, X_d=0.05, dt=600.0)
+    assert dX_good > 0.0
+
+
+def test_psychrometrics_pressure_parameterization():
+    """temp_rh_to_ah / ah_to_temp_rh accept an explicit station pressure;
+    lower pressure (higher altitude) raises AH for the same RH."""
+    from src.physics.psychrometrics import (
+        temp_rh_to_ah, ah_to_temp_rh, saturation_vapor_pressure)
+
+    pv = saturation_vapor_pressure(25.0) * 0.5
+    w_sea = 0.622 * pv / (101.325 - pv)
+    w_alt = 0.622 * pv / (95.0 - pv)
+
+    assert temp_rh_to_ah(25.0, 50.0) == pytest.approx(w_sea, rel=1e-12)
+    assert temp_rh_to_ah(25.0, 50.0, pressure_kpa=95.0) == pytest.approx(w_alt, rel=1e-12)
+    assert w_alt > w_sea
+
+    # Default argument keeps the legacy behaviour.
+    assert temp_rh_to_ah(25.0, 50.0, pressure_kpa=101.325) == pytest.approx(w_sea, rel=1e-12)
+
+    # Round-trip inverse at altitude.
+    assert ah_to_temp_rh(25.0, w_alt, pressure_kpa=95.0) == pytest.approx(50.0, abs=1e-9)
+
+
+def test_engine_altitude_pressure_consistent():
+    """A low surface-pressure run (950 hPa ≈ 0.6 km altitude) must convert
+    AH↔RH with the actual P_atm everywhere and never emit negative RH."""
+    import pandas as pd
+
+    from src.design.engine import DesignEngine
+    from src.design.presets import preset_609
+
+    p = preset_609()
+    p.envelope.V_room = 80.0
+    p.envelope.C_z = 50000.0
+
+    idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
+    weather = pd.DataFrame({
+        "temperature_2m": 20.0,
+        "relative_humidity_2m": 60.0,
+        "shortwave_radiation": 0.0,
+        "direct_radiation": 0.0,
+        "diffuse_radiation": 0.0,
+        "surface_pressure": 950.0,
+    }, index=idx)
+
+    sim = DesignEngine().run(p, weather=weather)
+    ts = sim.timeseries
+    assert float(np.min(ts["RH_z"])) >= 0.0
+    assert float(np.max(ts["RH_z"])) <= 100.0
+    assert np.all(np.isfinite(ts["RH_z"]))

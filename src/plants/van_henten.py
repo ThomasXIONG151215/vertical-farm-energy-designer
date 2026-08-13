@@ -51,6 +51,12 @@ class VanHenten:
         co2_term = (-p["c_co2_1"] * T_z ** 2
                     + p["c_co2_2"] * T_z
                     - p["c_co2_3"])
+        # Guard: the CO₂ response quadratic turns negative above ~42 °C.  Past
+        # that, the denominator `c_rad_phot*light + co2_term*(X_c - Γ)` crosses
+        # zero (~44.5 °C) and φ flips sign / blows up, collapsing X_d.  Net
+        # canopy photosynthesis cannot be negative, so stop cleanly here.
+        if co2_term <= 0.0:
+            return 0.0
         X_c = self.co2_kgm3
         Gamma = p["c_Gamma"]
         num = p["c_rad_phot"] * light * co2_term * (X_c - Gamma)

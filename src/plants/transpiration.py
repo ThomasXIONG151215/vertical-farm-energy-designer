@@ -82,8 +82,14 @@ class TranspirationModel:
             gamma = 0.0655                   # psychrometric constant (kPa/K) at 20°C
             r_s = 1.0 / max(1e-9, self.g_stomata)
             r_a = max(1.0, self.r_a)
-            rho_cp = self.rho_cp()
+            rho_cp = self.rho_cp()  # volumetric heat capacity, J/(m³·K) ≡ Pa/K
             R_n = self.r_n_canopy * light_factor  # net canopy radiation (W/m²)
+            # Penman–Monteith: λE = (Δ·R_n + ρ·c_p·VPD/r_a) / (Δ + γ(1 + r_s/r_a))
+            # Δ (kPa/K), γ (kPa/K) and VPD (kPa) must share ONE pressure unit.
+            # With all three in kPa the ratio is invariant — the kPa and Pa
+            # representations give identical λE (verified numerically) — so no
+            # kPa→Pa factor is applied.  Only a *mixed* VPD(Pa) with Δ, γ in
+            # kPa would overstate the aerodynamic term by 1000×.
             numerator = delta * R_n + rho_cp * max(0.0, vpd) / r_a
             denominator = delta + gamma * (1.0 + r_s / r_a)
             lambda_E = numerator / denominator

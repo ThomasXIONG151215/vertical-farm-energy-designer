@@ -248,7 +248,7 @@ class DesignEngine:
         total_harvest_kg = 0.0
 
         T_z = p.setpoints.T_light
-        W_z = temp_rh_to_ah(T_z, p.setpoints.RH)
+        W_z = temp_rh_to_ah(T_z, p.setpoints.RH, pressure_kpa=P_atm)
         RH_z = p.setpoints.RH
 
         # ── hourly output arrays ───────────────────────────────────────────
@@ -315,7 +315,7 @@ class DesignEngine:
                 light_wm2 = (p.led.ppfd_target / led.par_factor
                              if is_light_h else 0.0)
                 _, X_d = grow.step(T_z, light_wm2, X_d, dt)
-                W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h])
+                W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h], pressure_kpa=P_atm)
                 Q_wall = env.Q_wall(T_ext[h], T_z)
                 Q_solar = env.Q_solar(GHI[h])
                 Q_inf, M_inf = env.infiltration(T_ext[h], T_z, W_ext, W_z)
@@ -363,7 +363,7 @@ class DesignEngine:
                     T_z_new = ode.step_temperature(T_z, Q_total + q_corr, dt)
                 T_z = T_z_new
                 W_z = W_z_new
-                RH_z = ah_to_temp_rh(T_z, W_z)
+                RH_z = ah_to_temp_rh(T_z, W_z, pressure_kpa=P_atm)
                 if wmeta["floor_clipped_kg"] > 0.0:
                     clamp_stats["floor_clip_events"] += 1
                     clamp_stats["floor_clip_water_kg"] += wmeta["floor_clipped_kg"]
