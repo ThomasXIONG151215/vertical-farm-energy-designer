@@ -52,14 +52,44 @@ class RoomODESolver:
                 f"(Q_total={Q_total_W:.0f}W, T_current={T_z:.1f}°C)")
         return max(self.T_min, min(self.T_max, T_new))
 
-    def step_humidity(self, W_z: float, M_total_kgs: float, T_z: float = None, dt: float = 60.0) -> float:
-        """Advance absolute humidity (kg/kg) by dt seconds under net moisture flow (kg/s)."""
-        dW = M_total_kgs * dt / (self.V_room * self.rho_air)
+    def step_humidity(self, W_z: float, M_total_kgs: float, T_z: float = None,
+                      dt: float = 60.0, return_meta: bool = False):
+        """Advance absolute humidity (kg/kg) by dt seconds under net moisture flow (kg/s).
+
+        The moisture state is hard-clamped to [0, W_sat(T_z)].  The clamps are
+        no longer silent: with ``return_meta=True`` the amount of moisture (kg)
+        each clamp removed from the balance is reported so the caller can keep
+        the room energy balance consistent (latent heat of the phantom /
+        condensed water) and expose the events to the user.
+
+        Returns:
+            float: the new absolute humidity, OR if ``return_meta`` is True a
+            ``(W_new, meta)`` tuple where ``meta`` is a dict with
+            ``floor_clipped_kg`` (water removed beyond the 0 kg/kg floor) and
+            ``sat_clipped_kg`` (water condensed at the saturation cap).
+        """
+        air_mass = self.V_room * self.rho_air
+        if air_mass <= 0.0:
+            raise ValueError("V_room * rho_air must be > 0 for humidity integration")
+        dW = M_total_kgs * dt / air_mass
         W_new = W_z + dW
+        sat_clipped_kg = 0.0
         if T_z is not None:
             from .psychrometrics import saturation_vapor_pressure
             P_atm = self.P_atm
             p_sat = saturation_vapor_pressure(T_z)
-            W_sat_max = 0.622 * p_sat / (P_atm - p_sat)
-            W_new = min(W_new, W_sat_max)
-        return max(0.0, W_new)
+            if P_atm - p_sat > 0.0:
+                W_sat_max = 0.622 * p_sat / (P_atm - p_sat)
+                if W_new > W_sat_max:
+                    sat_clipped_kg = (W_new - W_sat_max) * air_mass
+                    W_new = W_sat_max
+        floor_clipped_kg = 0.0
+        if W_new < 0.0:
+            floor_clipped_kg = -W_new * air_mass
+            W_new = 0.0
+        if return_meta:
+            return W_new, {
+                "floor_clipped_kg": floor_clipped_kg,
+                "sat_clipped_kg": sat_clipped_kg,
+            }
+        return W_new

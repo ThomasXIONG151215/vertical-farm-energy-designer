@@ -104,6 +104,7 @@ class HVACConfig:
     cop_mode: str = "carnot"   # carnot | constant | linear | table
     cop_k: float = 0.02
     cop_T_ref: float = 25.0
+    cop_table: dict = field(default_factory=dict)  # key = T_ext(°C), value = COP
     cop_heat: float = 3.0
     heat_mode: str = "heat_pump"
     P_rated_heat_w: float = 3000.0
@@ -201,6 +202,7 @@ class TranspirationConfig:
     k_van_henten: float = 4.0e-4 # biomass-scaled gain (m²/(s·kPa)), van_henten method
     stage_factor: float = 1.0
     g_stomata: float = 1.0e-3
+    r_a: float = 50.0            # aerodynamic resistance (s/m) for "stomatal"
     r_n_canopy: float = 250.0    # net canopy radiation (W/m²) for "stomatal"
 
 
@@ -362,18 +364,45 @@ class DesignProject:
                 )
             return TariffConfig(**sub(TariffConfig, d))
 
+        def _require_nonnegative(fields, data, cfg_name):
+            """Reject negative config values (a negative moisture gain/removal
+            coefficient would silently flip the humidity source into a sink)."""
+            for f in fields:
+                v = data.get(f)
+                if v is not None and v < 0:
+                    raise ValueError(
+                        f"{cfg_name}.{f} must be >= 0, got {v}")
+
+        # ── humidity-related sub-configs (validated, then applied) ──
+        transp_cfg = sub(TranspirationConfig, d.get("transpiration", {}))
+        deh_cfg = sub(DEHConfig, d.get("deh", {}), has_nested_capital=True)
+        sp_cfg = sub(SetpointConfig, d.get("setpoints", {}))
+        _require_nonnegative(
+            ["E_max_kgs", "daily_water_L", "plant_count", "ml_per_plant_day",
+             "k_vpd", "k_van_henten", "stage_factor", "g_stomata",
+             "r_a", "r_n_canopy"],
+            transp_cfg, "transpiration",
+        )
+        _require_nonnegative(
+            ["smer", "M_deh_nom", "P_ref_w", "P_rated_max"],
+            deh_cfg, "deh",
+        )
+        rh_sp = sp_cfg.get("RH")
+        if rh_sp is not None and not (0.0 <= rh_sp <= 100.0):
+            raise ValueError(
+                f"setpoints.RH must be in [0,100] %, got {rh_sp}")
+
         return cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**sub(SiteConfig, d.get("site", {}))),
             envelope=EnvelopeConfig(**sub(EnvelopeConfig, d.get("envelope", {}))),
             hvac=HVACConfig(**sub(HVACConfig, d.get("hvac", {}),
                                  has_nested_capital=True)),
-            deh=DEHConfig(**sub(DEHConfig, d.get("deh", {}),
-                                has_nested_capital=True)),
+            deh=DEHConfig(**deh_cfg),
             led=LEDConfig(**sub(LEDConfig, d.get("led", {}),
                                has_nested_capital=True)),
-            transpiration=TranspirationConfig(**sub(TranspirationConfig, d.get("transpiration", {}))),
-            setpoints=SetpointConfig(**sub(SetpointConfig, d.get("setpoints", {}))),
+            transpiration=TranspirationConfig(**transp_cfg),
+            setpoints=SetpointConfig(**sp_cfg),
             growth=VanHentenConfig(**sub(VanHentenConfig, d.get("growth", {}))),
             pv=PVConfig(**sub(PVConfig, d.get("pv", {}),
                               has_nested_capital=True)),

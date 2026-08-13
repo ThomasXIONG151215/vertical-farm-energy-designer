@@ -29,13 +29,34 @@ __all__ = [
 ]
 
 
+# Magnus formula is empirically valid roughly over -45..+60 °C; the guard
+# below is deliberately wider so real-world weather and the room temperature
+# clamp ([-20, 60] in ode.py) always pass, while absurd direct calls that
+# would make the formula diverge (division by zero at T=-237.3 °C, overflow
+# below that, or non-physical saturation pressure far above boiling) fail fast.
+_MAGNUS_T_MIN = -100.0
+_MAGNUS_T_MAX = 100.0
+
+
+def _check_temp(temp_c: float) -> None:
+    if not (_MAGNUS_T_MIN <= temp_c <= _MAGNUS_T_MAX):
+        raise ValueError(
+            f"saturation_vapor_pressure valid for "
+            f"{_MAGNUS_T_MIN:.0f}..{_MAGNUS_T_MAX:.0f} °C, got {temp_c:.1f} °C"
+        )
+
+
 def saturation_vapor_pressure(temp_c: float) -> float:
     """Saturation vapour pressure over water (Magnus), kPa."""
+    _check_temp(temp_c)
     return 0.61078 * math.exp((17.27 * temp_c) / (temp_c + 237.3))
 
 
 def temp_rh_to_ah(temp_c: float, rh_pct: float) -> float:
     """Convert temperature (C) and RH (%) to absolute humidity (kg/kg)."""
+    # Guard: RH outside [0,100] would otherwise produce negative AH or a
+    # physically impossible one — clamp to the physical range.
+    rh_pct = max(0.0, min(100.0, rh_pct))
     p_sat = saturation_vapor_pressure(temp_c)
     p_vapor = p_sat * rh_pct / 100.0
     return 0.622 * p_vapor / (101.325 - p_vapor)
@@ -43,6 +64,9 @@ def temp_rh_to_ah(temp_c: float, rh_pct: float) -> float:
 
 def ah_to_temp_rh(temp_c: float, ah: float) -> float:
     """Convert temperature (C) and absolute humidity (kg/kg) to RH (%)."""
+    if ah < 0.0:
+        raise ValueError(
+            f"absolute humidity cannot be negative, got {ah:.6f} kg/kg")
     p_sat = saturation_vapor_pressure(temp_c)
     p_vapor = ah * 101.325 / (0.622 + ah)
     rh = (p_vapor / p_sat) * 100.0

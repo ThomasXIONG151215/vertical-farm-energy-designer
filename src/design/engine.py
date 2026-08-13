@@ -31,6 +31,31 @@ from .result import SimulationResult
 __all__ = ["DesignEngine", "run_project"]
 
 
+def _limit_removal_by_inventory(M_deh_kgs, M_hvac_kgs, W_z, air_mass, dt):
+    """Cap nominal dehumidifier/HVAC moisture removal (kg/s) to what the room
+    air can actually yield in this sub-step.
+
+    Physical basis: a dehumidifier cannot remove more water than currently
+    exists as vapour in the air.  Removing beyond the inventory (down to
+    W_z -> 0) is unphysical and previously had to be silently clamped by the
+    ODE floor.  By capping the *flow* here instead, the actual moisture
+    removed is reported honestly and the phantom condensation heat can be
+    backed out of the heat balance.
+
+    Returns (M_deh_actual, M_hvac_actual, scale) where scale = actual/nominal
+    (1.0 when unconstrained).  Both devices are scaled by the same factor so
+    the ratio between them is preserved.
+    """
+    removal_nom = M_deh_kgs + M_hvac_kgs
+    if removal_nom <= 0.0 or dt <= 0.0:
+        return M_deh_kgs, M_hvac_kgs, 1.0
+    available = max(0.0, W_z * air_mass) / dt  # kg/s
+    if removal_nom <= available:
+        return M_deh_kgs, M_hvac_kgs, 1.0
+    scale = available / removal_nom
+    return M_deh_kgs * scale, M_hvac_kgs * scale, scale
+
+
 def _build_devices(p, P_atm: float = 101.325):
     env = Envelope(
         U_wall_A=p.envelope.U_wall_A, A_window=p.envelope.A_window,
@@ -45,14 +70,16 @@ def _build_devices(p, P_atm: float = 101.325):
                     auto_deduce=p.led.auto_deduce,
                     efficacy=p.led.efficacy,
                     ppfd_target=p.led.ppfd_target,
-                    covered_area=p.led.covered_area)
+                    covered_area=p.led.covered_area,
+                    spectrum=p.led.spectrum)
     led_heat = led.power_w * p.led.heat_fraction
 
     cop = COPModel(mode=p.hvac.cop_mode, value=p.hvac.cop_value,
                    k=p.hvac.cop_k, T_ref=p.hvac.cop_T_ref,
                    eta_II=p.hvac.eta_II,
                    delta_T_evap=p.hvac.delta_T_evap,
-                   delta_T_cond=p.hvac.delta_T_cond)
+                   delta_T_cond=p.hvac.delta_T_cond,
+                   table=p.hvac.cop_table)
     cop_design = cop(p.hvac.design_T_ext, p.setpoints.T_light)
 
     P_rated = p.hvac.P_rated_w
@@ -107,10 +134,10 @@ def _build_devices(p, P_atm: float = 101.325):
         if p.transpiration.method == "constant":
             m_transp = p.transpiration.E_max_kgs * led.covered_area
         elif p.transpiration.method == "daily":
-            pph = max(p.transpiration.photoperiod_hours, 0.1)
+            pph = max(p.led.photoperiod_hours, 0.1)
             m_transp = p.transpiration.daily_water_L / (pph * 3600.0)
         elif p.transpiration.method == "per_plant":
-            pph = max(p.transpiration.photoperiod_hours, 0.1)
+            pph = max(p.led.photoperiod_hours, 0.1)
             daily_L = p.transpiration.plant_count * p.transpiration.ml_per_plant_day / 1000.0
             m_transp = daily_L / (pph * 3600.0)
         else:
@@ -127,6 +154,7 @@ def _build_devices(p, P_atm: float = 101.325):
         W_std=p.deh.W_std,
         deadband_rh=p.deh.deadband_rh, min_on_s=p.deh.min_on_s,
         min_off_s=p.deh.min_off_s, fan_power_w=p.deh.fan_power_w,
+        smer=p.deh.smer,
         tau_q=p.deh.tau_q, tau_m=p.deh.tau_m,
     )
     transp = TranspirationModel(
@@ -134,11 +162,12 @@ def _build_devices(p, P_atm: float = 101.325):
         daily_water_L=p.transpiration.daily_water_L,
         plant_count=p.transpiration.plant_count,
         ml_per_plant_day=p.transpiration.ml_per_plant_day,
-        photoperiod_hours=p.transpiration.photoperiod_hours,
+        photoperiod_hours=p.led.photoperiod_hours,
         k_vpd=p.transpiration.k_vpd,
         k_van_henten=p.transpiration.k_van_henten,
         stage_factor=p.transpiration.stage_factor,
         g_stomata=p.transpiration.g_stomata,
+        r_a=p.transpiration.r_a,
         r_n_canopy=p.transpiration.r_n_canopy,
         area_m2=led.covered_area,
     )
@@ -242,6 +271,29 @@ class DesignEngine:
         typical_load_sum = np.zeros((12, 24))
         typical_count = np.zeros((12, 24))
 
+        total_water_kg = 0.0
+        # Moisture clamp accounting (P0-2): how often and how much water the
+        # humidity integrator had to clip at the [0, W_sat] bounds.  Exposed in
+        # summary["moisture_clamp_stats"] so over-dehumidification is visible.
+        clamp_stats = {
+            "floor_clip_events": 0,
+            "floor_clip_water_kg": 0.0,
+            "sat_clip_events": 0,
+            "sat_clip_water_kg": 0.0,
+        }
+        # Dehumidifier/HVAC performance accounting: nominal (full-capacity)
+        # vs actual moisture removal.  Nominal removal is capped to the room
+        # vapour inventory each sub-step, so `actual` reflects what the device
+        # could physically remove and `deh_utilization` reports how much of
+        # the nominal capacity is actually being used.
+        deh_perf = {
+            "deh_nominal_kg": 0.0,
+            "deh_actual_kg": 0.0,
+            "hvac_nominal_kg": 0.0,
+            "hvac_actual_kg": 0.0,
+            "removal_limited_events": 0,
+            "removal_limited_water_kg": 0.0,
+        }
         for h in range(n):
             energy_wh = 0.0
             hvac_wh = 0.0
@@ -259,6 +311,7 @@ class DesignEngine:
                                T_heat_setpoint=p.setpoints.T_dark)
                 dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH)
                 E_trans = transp.step(T_z, RH_z, is_light_h, dt, X_d=X_d)
+                total_water_kg += E_trans * dt
                 light_wm2 = (p.led.ppfd_target / led.par_factor
                              if is_light_h else 0.0)
                 _, X_d = grow.step(T_z, light_wm2, X_d, dt)
@@ -274,13 +327,59 @@ class DesignEngine:
                 # steady state, leaving only P_comp as net heat from moisture
                 # management.
                 L_v = latent_heat_vaporization(T_z) * 1000.0  # J/kg
+                # Actual moisture removal: cap nominal DEH/HVAC removal to the
+                # vapour inventory available this sub-step, so the devices
+                # report what they can physically remove and the phantom
+                # condensation heat is backed out of the heat balance.
+                air_mass = p.envelope.V_room * p.envelope.rho_air
+                M_deh_nom = dh["M_deh_kgs"]
+                M_hvac_nom = hv["M_hvac_kgs"]
+                M_deh_act, M_hvac_act, removal_scale = _limit_removal_by_inventory(
+                    M_deh_nom, M_hvac_nom, W_z, air_mass, dt)
+                # Heat-balance correction: the capped moisture would have
+                # released L_v into the room via the DEH condenser (+), or been
+                # carried out of the room as latent heat by the HVAC (−).  Back
+                # both out proportionally to the capped removal.
+                q_removal_corr = (1.0 - removal_scale) * (
+                    M_hvac_nom - M_deh_nom) * L_v
                 Q_total = (hv["Q_HVAC_W"] + dh["Q_DH_W"] + Q_LED +
-                           Q_wall + Q_solar + Q_inf - E_trans * L_v)
-                M_total = (E_trans - dh["M_deh_kgs"] - hv["M_hvac_kgs"]
+                           Q_wall + Q_solar + Q_inf - E_trans * L_v
+                           + q_removal_corr)
+                M_total = (E_trans - M_deh_act - M_hvac_act
                            + M_inf + M_perm)
-                T_z = ode.step_temperature(T_z, Q_total, dt)
-                W_z = ode.step_humidity(W_z, M_total, T_z=T_z, dt=dt)
+                # ── humidity step with conservation accounting ─────────────
+                # step_humidity clamps W_z to [0, W_sat].  The clamped water is
+                # reported back so the room heat balance stays consistent:
+                #   * sat_clip: moisture condensed at the saturation cap releases
+                #     L_v of latent heat into the room (add it back);
+                #   * floor_clip: moisture "removed" beyond what exists never
+                #     condensed — the phantom condenser heat (already in
+                #     Q_DEH / Q_HVAC) must be removed from the balance.
+                T_z_new = ode.step_temperature(T_z, Q_total, dt)
+                W_z_new, wmeta = ode.step_humidity(
+                    W_z, M_total, T_z=T_z_new, dt=dt, return_meta=True)
+                q_corr = (wmeta["sat_clipped_kg"] - wmeta["floor_clipped_kg"]) * L_v
+                if q_corr != 0.0:
+                    T_z_new = ode.step_temperature(T_z, Q_total + q_corr, dt)
+                T_z = T_z_new
+                W_z = W_z_new
                 RH_z = ah_to_temp_rh(T_z, W_z)
+                if wmeta["floor_clipped_kg"] > 0.0:
+                    clamp_stats["floor_clip_events"] += 1
+                    clamp_stats["floor_clip_water_kg"] += wmeta["floor_clipped_kg"]
+                if wmeta["sat_clipped_kg"] > 0.0:
+                    clamp_stats["sat_clip_events"] += 1
+                    clamp_stats["sat_clip_water_kg"] += wmeta["sat_clipped_kg"]
+                # Dehumidifier performance bookkeeping: nominal vs actual
+                # moisture removal (kg) and how often the inventory cap bound.
+                deh_perf["deh_nominal_kg"] += M_deh_nom * dt
+                deh_perf["deh_actual_kg"] += M_deh_act * dt
+                deh_perf["hvac_nominal_kg"] += M_hvac_nom * dt
+                deh_perf["hvac_actual_kg"] += M_hvac_act * dt
+                if removal_scale < 1.0:
+                    deh_perf["removal_limited_events"] += 1
+                    deh_perf["removal_limited_water_kg"] += (
+                        (1.0 - removal_scale) * (M_deh_nom + M_hvac_nom) * dt)
                 P_tot = (hv["P_elec_W"] + dh["P_elec_W"] + P_led_s +
                          p.equipment_power_w)
                 energy_wh += P_tot * dt / 3600.0
@@ -337,6 +436,8 @@ class DesignEngine:
             harvested = (X_d - X_d_init) * crop_area
             total_harvest_kg += max(harvested, 0.0)
             monthly_harvest[months[-1] - 1] += max(harvested, 0.0)
+
+        annual_water_m3 = total_water_kg / 1000.0
 
         # ── monthly averages ───────────────────────────────────────────────
         monthly_hours_safe = np.maximum(monthly_hours, 1)
@@ -398,6 +499,25 @@ class DesignEngine:
             "specific_energy_kwh_per_kg": round(kwh_per_kg_fresh, 4),
             "harvest_per_month_avg_kg": round(float(np.mean(monthly_harvest)), 2),
             "dry_matter_fraction": dry_fraction,
+            "annual_water_m3": round(annual_water_m3, 2),
+            "moisture_clamp_stats": {
+                "floor_clip_events": clamp_stats["floor_clip_events"],
+                "floor_clip_water_kg": round(clamp_stats["floor_clip_water_kg"], 3),
+                "sat_clip_events": clamp_stats["sat_clip_events"],
+                "sat_clip_water_kg": round(clamp_stats["sat_clip_water_kg"], 3),
+            },
+            "dehumidifier_performance": {
+                "deh_nominal_dehum_kg": round(deh_perf["deh_nominal_kg"], 1),
+                "deh_actual_dehum_kg": round(deh_perf["deh_actual_kg"], 1),
+                "hvac_nominal_dehum_kg": round(deh_perf["hvac_nominal_kg"], 1),
+                "hvac_actual_dehum_kg": round(deh_perf["hvac_actual_kg"], 1),
+                "removal_limited_events": deh_perf["removal_limited_events"],
+                "removal_limited_water_kg": round(
+                    deh_perf["removal_limited_water_kg"], 3),
+                "deh_utilization": round(
+                    deh_perf["deh_actual_kg"] / deh_perf["deh_nominal_kg"], 4)
+                    if deh_perf["deh_nominal_kg"] > 0 else 1.0,
+            },
         }
 
         # ── monthly dict ───────────────────────────────────────────────────
@@ -504,7 +624,10 @@ class DesignEngine:
                 from .sweep import _total_capital, _annualized_capital, _compute_lcoe
                 cap = _total_capital(p, p.pv_area_m2, p.battery_kwh)
                 annual_cap = _annualized_capital(p, cap)
-                annual_om = cap["total"] * es.maintenance
+                annual_om = (p.opex.maintenance_pct * cap["total"]
+                             + p.opex.water_cost_per_m3 * annual_water_m3
+                             + p.opex.labor_cost_per_year
+                             + p.opex.misc_opex_per_year)
                 annual_load = float(np.sum(perf["load"]))
 
                 # Grid cost
@@ -544,10 +667,10 @@ class DesignEngine:
                 summary["free_energy_kwh"] = round(free_energy_kwh, 2)
                 summary["grid_independence_pct"] = round(float(grid_independence) * 100, 1)
                 summary["specific_cost_per_kg"] = round(
-                    total_electricity_cost / max(annual_harvest_fw_kg, 1e-6), 4,
+                    (annual_cap + annual_om + net_grid_cost) / max(annual_harvest_fw_kg, 1e-6), 4,
                 )
-                summary["capital_pv_battery"] = round(float(capital_cost), 2)
-                summary["annual_om_pv_battery"] = round(float(annual_om), 2)
+                summary["capital_total"] = round(float(capital_cost), 2)
+                summary["annual_om"] = round(float(annual_om), 2)
                 summary["annual_grid_cost_net"] = round(float(net_grid_cost), 2)
             except Exception as e:
                 summary["energy_system_status"] = f"failed: {e}"
@@ -555,6 +678,8 @@ class DesignEngine:
 
         return SimulationResult(
             project_name=p.name,
+            currency=p.currency,
+            exchange_rate=p.exchange_rate,
             summary=summary,
             climate=climate_summary,
             timeseries=ts,

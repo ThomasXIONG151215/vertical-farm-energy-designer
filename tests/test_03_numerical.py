@@ -81,3 +81,262 @@ def test_transpiration_unknown_method_returns_zero():
     tm = TranspirationModel(method="flute_serenade", area_m2=45.0)
     result = tm.step(T_z=22.0, RH_z=65.0, is_light=True, dt=600.0)
     assert result == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 3.4  Humidity ODE — clamps must never be silent (P0)
+# ---------------------------------------------------------------------------
+class TestHumidityODEClamps:
+    """step_humidity [0, W_sat] clamps must (a) keep W >= 0, (b) report the
+    clipped water mass so the engine can preserve the energy balance, and
+    (c) keep the legacy float-return signature working."""
+
+    AIR_MASS = 200.0 * 1.2  # default V_room x rho_air = 240 kg
+
+    def _solver(self, V_room=200.0, rho_air=1.2, P_atm=101.325):
+        from src.physics.ode import RoomODESolver
+        return RoomODESolver(C_z=1000.0, V_room=V_room, rho_air=rho_air, P_atm=P_atm)
+
+    def test_floor_clamp_reports_clipped_water(self):
+        """Over-dehumidification must clamp W to 0 AND report the phantom
+        water (0.004 kg/kg - 0.005 kg/kg step -> 0.24 kg) instead of silently
+        destroying it."""
+        s = self._solver()
+        W_new, meta = s.step_humidity(
+            0.004, -0.002, T_z=22.0, dt=600.0, return_meta=True)
+        assert W_new == 0.0
+        assert meta["floor_clipped_kg"] == pytest.approx(0.24, rel=1e-9)
+        assert meta["sat_clipped_kg"] == 0.0
+
+    def test_saturation_cap_reports_condensed_water(self):
+        """W above W_sat(T) must be capped to W_sat AND report the condensed
+        water instead of silently discarding it."""
+        from src.physics.psychrometrics import saturation_vapor_pressure
+
+        s = self._solver()
+        W_sat = 0.622 * saturation_vapor_pressure(25.0) / (
+            101.325 - saturation_vapor_pressure(25.0))
+        W_new, meta = s.step_humidity(
+            0.05, 0.0, T_z=25.0, dt=600.0, return_meta=True)
+        assert W_new == pytest.approx(W_sat, rel=1e-9)
+        assert meta["sat_clipped_kg"] == pytest.approx(
+            (0.05 - W_sat) * self.AIR_MASS, rel=1e-9)
+        assert meta["floor_clipped_kg"] == 0.0
+
+    def test_mass_conservation_books_clip_as_water(self):
+        """Bookkeeping identity: unclamped state == clamped state
+        + (sat_clipped - floor_clipped)/air_mass.  This is the exact invariant
+        the engine uses to recover the latent heat of the clipped water
+        (q_corr = (sat_clipped - floor_clipped) * L_v)."""
+        s = self._solver()
+        W_z, M, T, dt = 0.004, -0.002, 22.0, 600.0
+        unclamped = W_z + M * dt / self.AIR_MASS
+        W_new, meta = s.step_humidity(
+            W_z, M, T_z=T, dt=dt, return_meta=True)
+        bookkeeping = W_new + (meta["sat_clipped_kg"]
+                               - meta["floor_clipped_kg"]) / self.AIR_MASS
+        assert bookkeeping == pytest.approx(unclamped, rel=1e-12)
+
+    def test_never_negative_for_any_input(self):
+        """Even a violent over-dehumidification must never yield a negative
+        humidity state (regression guard for the reported bug)."""
+        s = self._solver(V_room=50.0)  # tiny room -> very strong removal
+        W_new, _ = s.step_humidity(
+            0.001, -0.005, T_z=22.0, dt=600.0, return_meta=True)
+        assert W_new >= 0.0
+
+    def test_legacy_signature_still_returns_float(self):
+        """Without return_meta the API keeps returning a plain float."""
+        s = self._solver()
+        out = s.step_humidity(0.004, -0.002, T_z=22.0, dt=600.0)
+        assert isinstance(out, float)
+        assert out == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 3.5  Psychrometrics public-function guards (P1-1)
+# ---------------------------------------------------------------------------
+class TestPsychrometricsGuards:
+    def test_saturation_vapor_pressure_rejects_extreme_temps(self):
+        """Magnus formula is only valid in a bounded temperature range;
+        out-of-range inputs must raise instead of dividing by zero / overflowing."""
+        from src.physics.psychrometrics import saturation_vapor_pressure
+
+        with pytest.raises(ValueError):
+            saturation_vapor_pressure(-300.0)   # would ZeroDivisionError at -237.3
+        with pytest.raises(ValueError):
+            saturation_vapor_pressure(150.0)    # beyond validity / p_sat >= P_atm
+
+    def test_ah_to_temp_rh_rejects_negative_ah(self):
+        """Negative absolute humidity must raise, not silently emit a fake
+        positive RH (p_vapor changes sign when ah < -0.622)."""
+        from src.physics.psychrometrics import ah_to_temp_rh
+
+        with pytest.raises(ValueError):
+            ah_to_temp_rh(22.0, -0.001)
+
+    def test_temp_rh_to_ah_clamps_out_of_range_rh(self):
+        """Negative RH input would previously yield negative AH; it is now
+        clamped to [0, 100] (defensive: engine always passes in-range RH)."""
+        from src.physics.psychrometrics import temp_rh_to_ah
+
+        assert temp_rh_to_ah(25.0, -10.0) == 0.0
+        assert temp_rh_to_ah(25.0, 150.0) == pytest.approx(
+            temp_rh_to_ah(25.0, 100.0), rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# 3.6  Config validation — negative humidity coefficients rejected (P1-2)
+# ---------------------------------------------------------------------------
+class TestConfigValidation:
+    def test_negative_stage_factor_rejected(self):
+        """A negative stage_factor silently flips transpiration into a moisture
+        sink; from_dict must reject it."""
+        from src.design.project import DesignProject
+
+        with pytest.raises(ValueError, match="transpiration.stage_factor"):
+            DesignProject.from_dict({"transpiration": {"stage_factor": -1.0}})
+
+    def test_negative_smer_rejected(self):
+        """A negative SMER would make the dehumidifier 'inject' water."""
+        from src.design.project import DesignProject
+
+        with pytest.raises(ValueError, match="deh.smer"):
+            DesignProject.from_dict({"deh": {"smer": -2.0}})
+
+    def test_rh_out_of_range_rejected(self):
+        from src.design.project import DesignProject
+
+        with pytest.raises(ValueError, match="setpoints.RH"):
+            DesignProject.from_dict({"setpoints": {"RH": 120.0}})
+
+    def test_empty_dict_uses_sane_defaults(self):
+        from src.design.project import DesignProject
+
+        p = DesignProject.from_dict({})
+        assert p.transpiration.stage_factor == 1.0
+        assert p.deh.smer == 2.0
+        assert p.setpoints.RH == 65.0
+
+
+# ---------------------------------------------------------------------------
+# 3.7  Engine-level regression — no negative RH, clamps reported (P0)
+# ---------------------------------------------------------------------------
+def test_engine_over_dehumidification_never_negative_rh():
+    """Small room + low RH setpoint + aggressive latent removal is the exact
+    configuration that previously drove the humidity intermediate state
+    negative. The engine must (a) never output RH < 0 and (b) report the
+    floor-clamp events in the summary instead of hiding them."""
+    import pandas as pd
+
+    from src.design.engine import DesignEngine
+    from src.design.presets import preset_609
+
+    p = preset_609()
+    p.envelope.V_room = 80.0
+    p.envelope.C_z = 50000.0
+    p.setpoints.RH = 40.0
+    p.deh.P_ref_w = 3000.0
+    p.hvac.P_rated_w = 3000.0
+
+    # Deterministic synthetic weather: hot & dry outdoor all year.
+    idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
+    weather = pd.DataFrame({
+        "temperature_2m": 30.0,
+        "relative_humidity_2m": 30.0,
+        "shortwave_radiation": 0.0,
+        "direct_radiation": 0.0,
+        "diffuse_radiation": 0.0,
+        "surface_pressure": 1013.25,
+    }, index=idx)
+
+    sim = DesignEngine().run(p, weather=weather)
+    ts = sim.timeseries
+
+    assert float(np.min(ts["RH_z"])) >= 0.0
+    stats = sim.summary["moisture_clamp_stats"]
+    assert set(stats.keys()) == {
+        "floor_clip_events", "floor_clip_water_kg",
+        "sat_clip_events", "sat_clip_water_kg",
+    }
+    # With inventory-capped removal the ODE floor clamp no longer fires from
+    # device over-dehumidification (the flow itself is capped first).  The
+    # limitation is now reported through the dehumidifier performance stats.
+    assert stats["floor_clip_events"] >= 0
+    assert stats["floor_clip_water_kg"] >= 0.0
+    assert stats["sat_clip_water_kg"] >= 0.0
+    perf = sim.summary["dehumidifier_performance"]
+    assert perf["removal_limited_events"] > 0
+    assert perf["removal_limited_water_kg"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# 3.8  Actual-dehumidification accounting — devices capped to vapour inventory
+# ---------------------------------------------------------------------------
+def test_limit_removal_by_inventory():
+    """Nominal DEH/HVAC removal is capped to the room vapour inventory; the
+    same scale factor applies to both devices so their ratio is preserved."""
+    from src.design.engine import _limit_removal_by_inventory
+
+    air_mass = 240.0  # V=200 × rho=1.2
+
+    # Unconstrained: removal below inventory → unchanged.
+    d, h, s = _limit_removal_by_inventory(0.001, 0.001, 0.01, air_mass, 600.0)
+    assert (d, h, s) == (0.001, 0.001, 1.0)
+
+    # Constrained: available = W_z*air_mass/dt = 0.004*240/600 = 1.6e-3 kg/s.
+    d, h, s = _limit_removal_by_inventory(0.002, 0.001, 0.004, air_mass, 600.0)
+    assert abs(s - 1.6e-3 / 3.0e-3) < 1e-12
+    assert abs(d - 0.002 * s) < 1e-12
+    assert abs(h - 0.001 * s) < 1e-12
+
+    # Zero inventory → full clamp to zero removal.
+    d, h, s = _limit_removal_by_inventory(0.002, 0.001, 0.0, air_mass, 600.0)
+    assert (d, h, s) == (0.0, 0.0, 0.0)
+
+    # No removal requested / invalid dt → scale stays 1.
+    assert _limit_removal_by_inventory(0.0, 0.0, 0.01, air_mass, 600.0) == (0.0, 0.0, 1.0)
+    assert _limit_removal_by_inventory(0.001, 0.001, 0.01, air_mass, 0.0)[2] == 1.0
+
+
+def test_engine_reports_actual_dehumidification():
+    """summary['dehumidifier_performance'] must expose nominal vs actual
+    moisture removal and a utilization ratio, with actual <= nominal always."""
+    import pandas as pd
+
+    from src.design.engine import DesignEngine
+    from src.design.presets import preset_609
+
+    p = preset_609()
+    p.envelope.V_room = 80.0
+    p.envelope.C_z = 50000.0
+    p.setpoints.RH = 40.0
+    p.deh.P_ref_w = 3000.0
+    p.hvac.P_rated_w = 3000.0
+
+    idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
+    weather = pd.DataFrame({
+        "temperature_2m": 30.0,
+        "relative_humidity_2m": 30.0,
+        "shortwave_radiation": 0.0,
+        "direct_radiation": 0.0,
+        "diffuse_radiation": 0.0,
+        "surface_pressure": 1013.25,
+    }, index=idx)
+
+    sim = DesignEngine().run(p, weather=weather)
+    perf = sim.summary["dehumidifier_performance"]
+
+    assert set(perf.keys()) == {
+        "deh_nominal_dehum_kg", "deh_actual_dehum_kg",
+        "hvac_nominal_dehum_kg", "hvac_actual_dehum_kg",
+        "removal_limited_events", "removal_limited_water_kg",
+        "deh_utilization",
+    }
+    assert 0.0 <= perf["deh_actual_dehum_kg"] <= perf["deh_nominal_dehum_kg"]
+    assert 0.0 <= perf["hvac_actual_dehum_kg"] <= perf["hvac_nominal_dehum_kg"]
+    assert 0.0 <= perf["deh_utilization"] <= 1.0
+    assert perf["removal_limited_events"] > 0
+    assert perf["removal_limited_water_kg"] > 0.0
+    assert perf["removal_limited_water_kg"] <= (
+        perf["deh_nominal_dehum_kg"] + perf["hvac_nominal_dehum_kg"])
