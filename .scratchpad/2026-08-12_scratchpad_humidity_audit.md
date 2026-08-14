@@ -33,7 +33,9 @@
 - 调研完成度：100%（5 路并行调研 + 数值核算 + 最终报告已完结）
 - 负湿度根因：已确认（设备级无钳位 + ODE 只钳结果）
 - 修复状态：P0/P1 + A 级（A1/A2/A3）+ B 级（B1/B2/B3）修复已全部完成并通过全量测试（172 passed，覆盖率 75%）
-- 待办：B 级改动 git commit（拟 "fix(humidity): B-level — sample-YAML k_vpd parity, auto-size transpiration delegation, stomatal LED-PAR response"；A 级已随 a72aa9f 提交，HEAD 当前 a72aa9f）
+- 待办：~~B 级改动 git commit~~ ✅ 已随 e220645 提交；docs 同步已随 bf28941 提交；HEAD 当前 bf28941
+- 空调除湿校准（2026-08-14）：✅ 完成（shr.py T_coil_drop 14→9、shr_min 0.30→0.45，见下方记录章节）；C1/C2/C3/C4 收尾全部闭合；172 passed 无回归
+- 待办：本次 C 级收尾改动（shr.py / engine.py / dehumidifier.py）尚未 git commit，待用户确认后提交
 
 ### 已完成任务（P0/P1 修复）
 
@@ -211,3 +213,40 @@
 ### Dashboard 状态补充
 - B1/B2/B3 修复：✅ 全部落盘，172 passed（test_03 31 passed），覆盖率 75%
 - 待办：B 级改动 git commit（A 级已随 a72aa9f 提交）
+
+---
+
+## 记录：C 级收尾与空调除湿校准（2026-08-14）
+
+### 背景
+
+用户反馈"空调除湿太厉害，真实没这么会除湿"。核算确认：12kW 制冷量空调在 24°C/65%RH 工况下，旧模型 SHR=0.53、除湿 8.1 kg/h；真实空调 5-7 kg/h（SHR 0.6-0.7）。根源是 `calc_shr_fallback` 硬编码 T_coil_drop=14（送风=设定点−14=8°C，盘管表面 5.2°C，凝结过强）。
+
+### 用户决策与修改（src/physics/shr.py）
+
+- **T_coil_drop=14 → 9**（送风 13°C，SHR≈0.61、M≈6.8 kg/h，与真实空调 5-7 kg/h 对齐）；加注释：真实送风温差 8-12°C，9 为中值。
+- **shr_min 0.30 → 0.45**（潜热占比上限 70%→55%）；加注释：真实空调潜热占比极限 ~55%。
+- `T_adp>=T_dp` 处加"湿度自限"注释（SHR=1.0 停止除湿，非设定点控制 —— C2 关闭依据）。
+- 验证：全量 pytest **172 passed**，无回归。
+
+### C1 收尾 — 凝结水核算（src/design/engine.py）
+
+- `total_water_kg` 累加处加注释：凝结水直接排放不回收，蒸腾量即供水量，`annual_water_m3` 不扣 sat_clip（用户决策"凝结水直接排掉"）。
+
+### C3 收尾 — 除湿机残流（src/devices/dehumidifier.py）
+
+- lag 残流处加注释：停机后残流 = 盘管挂水惯性（M_act>0、Q_act>0、P_elec=0 均物理自洽）。
+
+### C4 检查 — README 表述
+
+- 根 README.md:33 与 src/plants/README.md 均已为 **6 种方法**，无残留"4 种"表述，**无需修改**。
+
+### C2 结论 — HVAC 无 RH 设定点
+
+- SHR（BF-ADP 盘管模型）已内置露点自限湿度反馈（T_adp>=T_dp → SHR=1.0），干涸平衡点 ~30%RH 而非 0%。
+- "HVAC 无 RH 设定点"不是 bug——真实空调确实不管湿度。**C2 关闭，不引入 RH 设定点控制。**
+
+### Git 状态
+
+- 本次 C 级收尾改动**尚未提交**（工作区含 shr.py / engine.py / dehumidifier.py 的注释与参数改动；另有 vfed-web、cli、presets 等无关改动需分开提交）。
+- 相关已提交记录：e220645（B 级）、bf28941（docs 同步），HEAD 当前 bf28941。

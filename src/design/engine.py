@@ -308,6 +308,9 @@ class DesignEngine:
                              if is_light_h else 0.0)
                 E_trans = transp.step(T_z, RH_z, is_light_h, dt, X_d=X_d,
                                       light_wm2=light_wm2)
+                # Water accounting: condensate (sat_clipped_kg) is assumed to be
+                # drained and NOT recovered, so transpiration is the water demand —
+                # total_water_kg keeps the full E_trans tally (no sat_clip deduction).
                 total_water_kg += E_trans * dt
                 _, X_d = grow.step(T_z, light_wm2, X_d, dt)
                 W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h], pressure_kpa=P_atm)

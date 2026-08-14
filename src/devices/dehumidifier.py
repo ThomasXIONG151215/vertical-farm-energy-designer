@@ -131,6 +131,11 @@ class DEHDevice:
             M_target = m_dh
             eta = m_dh * self.h_fg / max(P_comp, 1e-6)  # latent COP for reporting
 
+        # Post-shutdown residual (lag_m/lag_q exponential decay) models coil
+        # retained-condensate inertia, NOT electrical inertia: after the
+        # compressor stops, already-condensed water keeps dripping (M_act>0)
+        # and keeps releasing latent heat (Q_act>0), while P_elec=0 is correct
+        # because the compressor/fan are off.
         Q_act = self.lag_q.step(Q_target, dt)
         M_act = self.lag_m.step(M_target, dt)
         return {
