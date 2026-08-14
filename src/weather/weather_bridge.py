@@ -27,6 +27,12 @@ try:
 except ImportError:
     _HAS_REQUESTS = False
 
+try:
+    from pyodide.http import open_url as _py_open_url
+    _HAS_PYODIDE = True
+except ImportError:
+    _HAS_PYODIDE = False
+
 OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
 OPEN_METEO_FCST = "https://api.open-meteo.com/v1/forecast"
 
@@ -190,7 +196,7 @@ def fetch_weather(
             df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
         return df
 
-    if not _HAS_REQUESTS:
+    if not _HAS_REQUESTS and not _HAS_PYODIDE:
         raise ImportError("The 'requests' package is required to fetch weather "
                           "from Open-Meteo. Install it or provide a cached CSV.")
 
@@ -207,9 +213,22 @@ def fetch_weather(
         "timezone": "UTC",
         "wind_speed_unit": "ms",
     }
-    resp = requests.get(url, params=params, timeout=120)
-    resp.raise_for_status()
-    data = resp.json()["hourly"]
+
+    if _HAS_REQUESTS:
+        resp = requests.get(url, params=params, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()["hourly"]
+    else:
+        # Pyodide fallback: use browser-native HTTP via open_url.
+        # open_url returns the body as a file-like object; non-2xx raises.
+        import json as _json
+        from urllib.parse import urlencode
+        full_url = f"{url}?{urlencode(params)}"
+        try:
+            body = _py_open_url(full_url).read()
+        except Exception as e:
+            raise RuntimeError(f"Weather API request failed: {e}")
+        data = _json.loads(body)["hourly"]
     df = pd.DataFrame({
         "timestamp": pd.to_datetime(data["time"], utc=True),
         "temperature_2m": data["temperature_2m"],

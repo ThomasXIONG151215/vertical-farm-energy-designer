@@ -523,6 +523,11 @@
         }
         .modal-field-row { display: flex; align-items: center; gap: 6px; }
         .modal-field-row .unit { font-size: 0.7rem; color: var(--text-secondary); }
+        .kvlist { display: flex; flex-direction: column; gap: 3px; }
+        .kvrow { display: flex; align-items: center; gap: 4px; }
+        .kvrow input { width: 60px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; padding: 2px 4px; color: var(--text); font-size: 0.75rem; }
+        .kvdel, .kvadd { background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; color: var(--text-secondary); cursor: pointer; font-size: 0.7rem; padding: 0 5px; }
+        .kvdel:hover, .kvadd:hover { color: var(--text); background: var(--bg-hover); }
 
         /* ── Section Summary Card ── */
         .sec-summary {
@@ -561,6 +566,19 @@
             cursor: pointer; flex-shrink: 0;
         }
         .sec-gear:hover { background: var(--bg-hover); color: var(--text); }
+
+        /* ── Panel Headers ── */
+        .panel-label {
+            display: flex; align-items: center; gap: 10px;
+            padding: 7px 14px; background: var(--bg-card);
+            border-bottom: 2px solid var(--primary); flex-shrink: 0;
+            font-size: 0.82rem; font-weight: 600; color: var(--primary);
+            letter-spacing: 0.02em;
+        }
+        .panel-label svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.8; }
+        .dashboard > .panel-label {
+            border-bottom-color: var(--secondary); color: var(--secondary);
+        }
     </style>
 </head>
 <body>
@@ -590,26 +608,34 @@
 
 <div class="scene-bar">
     <div class="scene-group">
-        <span class="sb-label">Scene</span>
+        <span class="sb-label" data-label="Scene">Scene</span>
         <div class="sb-fields">
-            <div class="sb-field"><label>City</label><select data-key="city" id="scene-city">
-                <option value="">-- Pick --</option>
+            <div class="sb-field"><label data-label="City">City</label><select data-key="site.city" id="scene-city">
+                <option data-label="-- Pick --" value="">-- Pick --</option>
             </select></div>
-            <div class="sb-field"><label>Area</label><input type="number" data-key="led.covered_area" value="100" step="10" class="wide"><span style="font-size:0.72rem;color:var(--text-secondary)">m²</span></div>
+            <div class="sb-field"><label data-label="Area">Area</label><input type="number" data-key="led.covered_area" value="100" step="10" class="wide"><span style="font-size:0.72rem;color:var(--text-secondary)">m²</span></div>
         </div>
     </div>
     <div class="scene-group">
-        <span class="sb-label">Economic</span>
+        <span class="sb-label" data-label="Economic">Economic</span>
         <div class="sb-fields">
-            <div class="sb-field"><label>Rate</label><input type="number" data-key="interest_rate" value="0.05" step="0.01"><span style="font-size:0.72rem;color:var(--text-secondary)">%</span></div>
-            <div class="sb-field"><label>Currency</label><select data-key="currency">
+            <div class="sb-field"><label data-label="Rate">Rate</label><input type="number" data-key="interest_rate" value="0.05" step="0.01"><span style="font-size:0.72rem;color:var(--text-secondary)">%</span></div>
+            <div class="sb-field"><label data-label="Currency">Currency</label><select data-key="currency">
                 <option value="USD">USD</option>
                 <option value="CNY">CNY</option>
                 <option value="EUR">EUR</option>
                 <option value="JPY">JPY</option>
             </select></div>
-            <div class="sb-field"><label>FX</label><input type="number" data-key="exchange_rate" value="1.0" step="0.1" class="wide"></div>
-            <div class="sb-field"><label>Equip</label><input type="number" data-key="equipment_power_w" value="2000" step="100"><span style="font-size:0.72rem;color:var(--text-secondary)">W</span></div>
+            <div class="sb-field"><label data-label="FX">FX</label><input type="number" data-key="exchange_rate" value="1.0" step="0.1" class="wide"></div>
+            <div class="sb-field"><label data-label="Equip">Equip</label><input type="number" data-key="equipment_power_w" value="2000" step="100"><span style="font-size:0.72rem;color:var(--text-secondary)">W</span></div>
+        </div>
+    </div>
+    <div class="scene-group">
+        <span class="sb-label" data-label="OPEX">OPEX</span>
+        <div class="sb-fields">
+            <div class="sb-field"><label data-label="Water">Water</label><input type="number" data-key="opex.water_cost_per_m3" value="2.0" step="0.5"><span class="sb-unit-cost" style="font-size:0.72rem;color:var(--text-secondary)">/m³</span></div>
+            <div class="sb-field"><label data-label="Labor">Labor</label><input type="number" data-key="opex.labor_cost_per_year" value="30000" step="1000" class="wide"><span class="sb-unit-cost" style="font-size:0.72rem;color:var(--text-secondary)">/yr</span></div>
+            <div class="sb-field"><label data-label="Misc">Misc</label><input type="number" data-key="opex.misc_opex_per_year" value="5000" step="500" class="wide"><span class="sb-unit-cost" style="font-size:0.72rem;color:var(--text-secondary)">/yr</span></div>
         </div>
     </div>
 </div>
@@ -617,6 +643,12 @@
 <main>
     <!-- ═══════ Sidebar ═══════ -->
     <aside class="sidebar">
+        <div class="panel-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/>
+            </svg>
+            <span id="panel-left-text">Energy System Design</span>
+        </div>
         <div class="sidebar-scroll" id="sidebar-scroll"></div>
 
         <div class="sidebar-footer">
@@ -641,6 +673,12 @@
 
     <!-- ═══════ Dashboard ═══════ -->
     <div class="dashboard">
+        <div class="panel-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+            <span id="panel-right-text">Energy Modeling Results</span>
+        </div>
         <!-- Mode Tabs -->
         <div class="mode-tabs" id="mode-tabs">
             <button class="mode-tab active" data-mode="perf">Performance</button>
@@ -726,6 +764,200 @@
 
 <script>
 /* ================================================================
+   I18N — English / Chinese global text replacement
+   ================================================================ */
+const _STR_ZH = {
+    // Header
+    'Untitled Project':'未命名项目','-- Load Preset --':'-- 加载预设 --',
+    'Copy shareable link':'复制分享链接','Toggle theme':'切换主题',
+    // Scene Bar
+    'Scene':'场景','City':'城市','-- Pick --':'-- 选择 --','Area':'面积',
+    'Economic':'经济','Rate':'利率','Currency':'货币','FX':'汇率','Equip':'设备',
+    'OPEX':'运营成本','Water':'水费','Labor':'人工','Misc':'杂项',
+    // Panels
+    'Energy System Design':'能源系统设计','Energy Modeling Results':'能源建模结果',
+    // Buttons
+    'Run Simulation':'运行模拟','Reset':'重置','Running...':'运行中...','Simulating...':'模拟中...','Initializing...':'初始化中...',
+    // Modals
+    'Full settings':'完整设置','Hourly Tariff':'分时电价',
+    '24h Price Profile':'24小时电价曲线','Export Price':'上网电价','Add Row':'添加行',
+    // Mode Tabs
+    'Performance':'性能分析','Climate Analysis':'气候分析',
+    // KPI Headers
+    'Annual Yield':'年产量','Annual Energy':'年用电量','Electricity Cost':'电费成本',
+    'Specific Energy':'单位能耗','Specific Cost':'单位成本','Avg Monthly Yield':'月均产量',
+    // KPI Units
+    'kg fresh/yr':'公斤/年','MWh/yr':'兆瓦时/年','$/yr':'元/年','kWh/kg fresh':'千瓦时/公斤',
+    '$/kg fresh':'元/公斤','kg/mo':'公斤/月',
+    // Chart Headers
+    'Monthly Energy Breakdown':'月度能耗分解','Energy Composition':'能耗构成',
+    'Typical Daily Load (12 Months)':'典型日负荷曲线 (12月)','Indoor &amp; Outdoor Climate':'室内外气候',
+    'Energy vs Outdoor Temp':'能耗 vs 室外温度','Energy vs Solar (GHI)':'能耗 vs 太阳辐射 (GHI)',
+    'Monthly Climate Data':'月度气候数据','Climate Overview':'气候概览',
+    // Climate Table
+    'Month':'月份',    // Climate chart labels
+    'T_in (°C)':'室内温度 (°C)','T_out (°C)':'室外温度 (°C)',
+    'RH_in (%)':'室内相对湿度 (%)','RH_out (%)':'室外相对湿度 (%)',
+    'Avg T (°C)':'平均温度 (°C)','Avg RH (%)':'平均相对湿度 (%)',
+    // Climate Analysis chart labels
+    'Avg Outdoor Temp (°C)':'室外平均温度 (°C)','GHI (kWh/m²/month)':'太阳辐射 (kWh/m²/月)',
+    'GHI (kWh/m²)':'GHI (千瓦时/平方米)','HDD':'采暖度日数','CDD':'制冷度日数',
+    'Run simulation to see climate data':'运行模拟以查看气候数据',
+    // Toasts
+    'VFED Design Explorer ready. Adjust parameters and run a simulation.':'VFED 设计探索器已就绪。调整参数并运行模拟。',
+    'Loaded preset: ':'已加载预设: ','Reset complete':'重置完成',
+    'Simulation failed: ':'模拟失败: ','Worker error: ':'Worker错误: ',
+    'Invalid simulation result':'无效的模拟结果',
+    'Params restored from share link.':'已从分享链接恢复参数。',
+    'Share link copied to clipboard!':'分享链接已复制到剪贴板！',
+    // Presets
+    '609 — Fengxian Strawberry PFAL':'609 — 奉贤草莓植物工厂',
+    'Lettuce — Standard PFAL':'生菜 — 标准植物工厂',
+    // SECTIONS — section labels
+    'Building Envelope':'建筑围护结构','LED Lighting':'LED照明','HVAC':'暖通空调',
+    'Dehumidifier':'除湿机','Setpoints':'设定点','Plant Growth (Van Henten)':'植物生长 (Van Henten)',
+    'PV System':'光伏系统','Battery':'电池储能','Economics':'经济参数','Site & Model':'场地与模型',
+    // SECTIONS — field labels
+    'Room Volume':'房间容积','Wall Conductance':'墙体热导','Window Area':'窗户面积',
+    'Solar Heat Gain':'太阳得热系数','Air Changes/h':'换气次数','Vapour Permeance':'水蒸气渗透率','Thermal Mass':'热容量',
+    'Auto Deduce':'自动推算','LED Power':'LED功率','PPFD Target':'PPFD目标','Efficacy':'光效','Spectrum':'光谱',
+    'Photoperiod':'光周期','Heat Fraction':'热分数','Light Start':'开灯时刻',
+    'COP Model':'COP模型','Heat Mode':'供暖模式','Nominal Cooling':'额定制冷量',
+    'Heating COP':'制热COP','Heater Power':'加热器功率','Second Law η':'第二定律效率',
+    'ΔT Evap':'蒸发温差','ΔT Cond':'冷凝温差','COP Nominal':'COP额定值','COP Degrade k':'COP衰减系数',
+    'COP Ref T':'COP参考温度','COP Table':'COP表格','Auto Size HVAC':'自动选型HVAC',
+    'Design T Ext':'设计室外温度','Design SHR':'设计显热比','Safety Factor':'安全系数',
+    'Deadband':'死区','Fan Power':'风机功率','SHR BF':'SHR旁通系数','Min On':'最小开启','Min Off':'最小关闭',
+    'Tau Q (Cooling)':'Tau Q (制冷)','Tau M (Moisture)':'Tau M (除湿)','Max Elec Power':'最大电功率',
+    'Nominal Dehumid.':'额定除湿量','Auto Size DEH':'自动选型除湿机',
+    'SMER':'单位除湿能耗比','Ref Efficiency':'参考效率','Min Abs Humidity':'最小含湿量','RH Deadband':'相对湿度死区',
+    'Tau Q (Dehum)':'Tau Q (除湿)','Tau M (Dehum)':'Tau M (除湿)',
+    'Light Temp':'光照温度','Dark Temp':'暗期温度','RH':'相对湿度','CO₂':'CO₂浓度',
+    'Transp Method':'蒸腾模型','Stage Factor':'阶段系数','Max Transp Rate':'最大蒸腾速率',
+    'Daily Water':'日用水量','Plant Count':'植株数量','mL/Plant/Day':'毫升/株/天',
+    'VPD Gain':'VPD增益','Van Henten Gain':'Van Henten增益','Stomatal Cond':'气孔导度',
+    'Aero Resistance':'空气阻力','Net Radiation':'净辐射','Cycle Days':'轮作天数',
+    'Conversion Eff':'转化效率','Dark Resp @20°C':'暗呼吸 @20°C','Light Extinction':'光衰减系数',
+    'Rad Use Eff':'辐射利用效率','CO₂ Param 1':'CO₂参数1','CO₂ Param 2':'CO₂参数2',
+    'CO₂ Param 3':'CO₂参数3','CO₂ Comp Pt':'CO₂补偿点',
+    'PV Area':'光伏面积','Cell Efficiency':'电池效率','Wp/m²':'峰瓦/平方米','PV Cost':'光伏成本',
+    'Degradation':'衰减率','Inverter η':'逆变器效率','Maintenance':'维护费','NOCT':'电池额定温度',
+    'Capacity':'容量','C-Rate':'充放电倍率','Charge η':'充电效率','Discharge η':'放电效率',
+    'SOC Min':'最小SOC','SOC Max':'最大SOC','Cycle Life':'循环寿命',
+    'HVAC Cap Mode':'HVAC投资模式','HVAC Cap Cost':'HVAC投资成本','HVAC Cap Rate':'HVAC单位投资','HVAC Depr.':'HVAC折旧年限',
+    'LED Cap Mode':'LED投资模式','LED Cap Cost':'LED投资成本','LED Cap Rate':'LED单位投资','LED Depr.':'LED折旧年限',
+    'DEH Cap Mode':'除湿机投资模式','DEH Cap Cost':'除湿机投资成本','DEH Cap Rate':'除湿机单位投资','DEH Depr.':'除湿机折旧年限',
+    'PV Cap Mode':'光伏投资模式','PV Cap Cost':'光伏投资成本','PV Cap Rate':'光伏单位投资','PV Depr.':'光伏折旧年限',
+    'Bat Cap Mode':'电池投资模式','Bat Cap Cost':'电池投资成本','Bat Cap Rate':'电池单位投资','Bat Depr.':'电池折旧年限',
+    'Water Cost':'水费单价','Labor Cost':'人工成本','Maintenance %':'维护费比例','Misc OPEX':'其他运营费',
+    'PV Tilt':'光伏倾角','PV Azimuth':'光伏方位角','Weather Year':'气象年份',
+    'Air Density':'空气密度','Air Specific Heat':'空气比热','Init Dry Wt':'初始干重','Dry Matter Frac':'干物质比',
+    // Tooltips
+    'Specific Moisture Extraction Rate':'单位除湿能耗比 (SMER)',
+    'Rated electrical input at full load (derived from Q_cool_nom / COP_design)':'满载额定电功率 (由 Q_cool_nom / COP_design 推算)',
+    'Rated electrical input (derived from M_deh_nom / SMER)':'额定电功率 (由 M_deh_nom / SMER 推算)',
+    // Units
+    'm³':'m³','W/K':'W/K','m²':'m²','h⁻¹':'h⁻¹','Wh/K':'Wh/K',
+    'μmol/m²/s':'μmol/m²/s','μmol/J':'μmol/J','W':'W','h':'h','kW':'kW','°C':'°C','s':'s',
+    'L/day':'L/天','kg/kWh':'kg/kWh','kg/kg':'kg/kg','%':'%','days':'天','kg/s':'kg/s',
+    'L/day':'L/天','mL/day':'mL/天','kg/s/m²/kPa':'kg/s/m²/kPa','1/(s·kPa)':'1/(s·kPa)',
+    'm/s':'m/s','s/m':'s/m','W/m²':'W/m²','kg/m³':'kg/m³','Wp/m²':'Wp/m²','$/Wp':'$/Wp',
+    '/yr':'/年','kWh':'kWh','$/W':'$/W','$/kWh':'$/kWh','$/m³':'$/m³','$/yr':'$/年',
+    'kg/J':'kg/J','kg/m²':'kg/m²','J/kg·K':'J/(kg·K)','s⁻¹':'s⁻¹','m²/kg':'m²/kg',
+    // Chart labels & misc
+    'Hour':'小时','Cost Breakdown':'费用明细','Heating':'供暖',
+    'Jan':'1月','Feb':'2月','Mar':'3月','Apr':'4月','May':'5月','Jun':'6月',
+    'Jul':'7月','Aug':'8月','Sep':'9月','Oct':'10月','Nov':'11月','Dec':'12月',
+};
+let _lang = (() => { const v = localStorage.getItem('vfed_lang'); return (v === 'zh') ? 'zh' : 'en'; })();
+function T(text) {
+    if (_lang !== 'zh') return text;
+    const t = _STR_ZH[text];
+    if (t !== undefined) return t;
+    // Try without leading/trailing whitespace
+    const trimmed = text.trim();
+    if (trimmed !== text) {
+        const tt = _STR_ZH[trimmed];
+        if (tt !== undefined) return text.replace(trimmed, tt);
+    }
+    return text;
+}
+function TL(text) { return T(text); } // alias for labels
+function setLang(l) {
+    if (l !== 'en' && l !== 'zh') return;
+    _lang = l; localStorage.setItem('vfed_lang', l);
+    document.getElementById('lang-select').value = l;
+    document.documentElement.lang = l;
+    refreshAllUI();
+}
+function refreshAllUI() {
+    renderForm();
+    // Save original English text on first call (before any T() is applied)
+    const _saveLabel = sel => document.querySelectorAll(sel + ':not([data-label])').forEach(el => el.dataset.label = el.textContent);
+    _saveLabel('.metric-card .label');
+    _saveLabel('.metric-card .unit');
+    _saveLabel('.panel-header');
+    _saveLabel('.chart-title');
+    _saveLabel('.cost-name');
+    _saveLabel('#climate-table th');
+    // Update all DOM text nodes
+    document.getElementById('panel-left-text').textContent = T('Energy System Design');
+    document.getElementById('panel-right-text').textContent = T('Energy Modeling Results');
+    document.getElementById('scene-name').placeholder = T('Untitled Project');
+    document.querySelector('#preset-select option[value=""]').textContent = T('-- Load Preset --');
+    document.getElementById('share-btn').title = T('Copy shareable link');
+    document.getElementById('theme-toggle').title = T('Toggle theme');
+    document.getElementById('run-btn-text').textContent = T('Run Simulation');
+    document.getElementById('reset-btn').textContent = T('Reset');
+    document.querySelectorAll('.mode-tab').forEach(b => {
+        b.textContent = T(b.dataset.mode === 'perf' ? 'Performance' : 'Climate Analysis');
+    });
+    document.querySelectorAll('.metric-card .label').forEach(el => {
+        el.textContent = T(el.dataset.label);
+    });
+    document.querySelectorAll('.metric-card .unit').forEach(el => {
+        el.textContent = T(el.dataset.label);
+    });
+    document.querySelectorAll('.panel-header').forEach(el => {
+        el.textContent = T(el.dataset.label);
+    });
+    document.querySelectorAll('.chart-title').forEach(el => {
+        el.textContent = T(el.dataset.label);
+    });
+    document.querySelectorAll('.cost-name').forEach(el => {
+        el.textContent = T(el.dataset.label);
+    });
+    // Scene-bar labels
+    document.querySelectorAll('.sb-label[data-label]').forEach(el => {
+        el.textContent = T(el.dataset.label);
+    });
+    document.querySelectorAll('.sb-field label[data-label]').forEach(el => {
+        el.textContent = T(el.dataset.label);
+    });
+    const pickOpt = document.querySelector('#scene-city option[data-label]');
+    if (pickOpt) pickOpt.textContent = T(pickOpt.dataset.label);
+    // Climate table headers
+    document.querySelectorAll('#climate-table th').forEach(el => {
+        el.textContent = T(el.dataset.label);
+    });
+    const ct = document.getElementById('climate-tbody');
+    if (ct && ct.children.length === 1 && ct.children[0].children.length === 1) {
+        ct.children[0].children[0].textContent = T('Run simulation to see climate data');
+    }
+    // Progress text
+    const pt = document.getElementById('progress-text');
+    if (pt && pt.textContent.includes('Initializing')) {
+        pt.innerHTML = '<span class="progress-spinner"></span>' + T('Initializing...');
+    }
+    populatePresetDropdown();
+    // Do not re-attach events that already exist from init
+}
+// Hook existing renders
+const _origRenderForm = renderForm;
+const _origOpenModal = openModal;
+// Overridden after definitions below
+
+/* ================================================================
    CITY DATABASE — name → [lat, lon, tz_hours]
    ================================================================ */
 const CITY_DB = {
@@ -775,8 +1007,11 @@ const SECTIONS = [
   ]},
   { id:'led', icon:'💡', label:'LED Lighting', vals:['led.ppfd_target','led.efficacy','led.spectrum'],
     fields:[
-    { key:'led.ppfd_target',      label:'PPFD Target',       unit:'µmol/m²/s', step:10 },
-    { key:'led.efficacy',         label:'Efficacy',          unit:'µmol/J',    step:0.1 },
+    { key:'led.auto_deduce',      label:'Auto Deduce',       type:'checkbox' },
+    { key:'led.power_w',          label:'LED Power',         unit:'W',         step:100, default:1300, visible:['false'], visibleKey:'led.auto_deduce' },
+    { key:'led.ppfd_target',      label:'PPFD Target',       unit:'µmol/m²/s', step:10,   visible:['true'], visibleKey:'led.auto_deduce' },
+    { key:'led.efficacy',         label:'Efficacy',          unit:'µmol/J',    step:0.1,  visible:['true'], visibleKey:'led.auto_deduce' },
+    { key:'led.spectrum',         label:'Spectrum',          type:'select', options:['white','rb_3to1','rb_4to1','rb_2to1'] },
     { key:'led.photoperiod_hours',label:'Photoperiod',       unit:'h',         step:1 },
     { key:'led.heat_fraction',   label:'Heat Fraction',     unit:'',         step:0.05 },
     { key:'led.light_start_hour', label:'Light Start',       unit:'h',         step:1 },
@@ -784,29 +1019,45 @@ const SECTIONS = [
   { id:'hvac', icon:'❄️', label:'HVAC', vals:['hvac.cop_mode','hvac.Q_cool_nom','hvac.deadband_c'],
     fields:[
     { key:'hvac.cop_mode',       label:'COP Model',         type:'select', options:['carnot','constant','linear','table'] },
+    { key:'hvac.heat_mode',      label:'Heat Mode',         type:'select', options:['heat_pump','resistive'] },
     { key:'hvac.Q_cool_nom',     label:'Nominal Cooling',   unit:'kW',    step:1 },
+    { key:'hvac.cop_heat',       label:'Heating COP',       unit:'',      step:0.1, default:3.0, visible:['heat_pump'], visibleKey:'hvac.heat_mode' },
+    { key:'hvac.P_rated_heat_w', label:'Heater Power',      unit:'W',     step:100, default:3000, visible:['resistive'], visibleKey:'hvac.heat_mode' },
     { key:'hvac.eta_II',         label:'Second Law η',      unit:'',      step:0.05, visible:['carnot'] },
     { key:'hvac.delta_T_evap',   label:'ΔT Evap',           unit:'°C',    step:1,    visible:['carnot'] },
     { key:'hvac.delta_T_cond',   label:'ΔT Cond',           unit:'°C',    step:1,    visible:['carnot'] },
     { key:'hvac.cop_value',      label:'COP Nominal',       unit:'',      step:0.1,  visible:['constant','linear','table'] },
     { key:'hvac.cop_k',          label:'COP Degrade k',     unit:'',      step:0.01, visible:['linear'] },
     { key:'hvac.cop_T_ref',      label:'COP Ref T',         unit:'°C',    step:1,    visible:['linear'] },
+    { key:'hvac.cop_table',      label:'COP Table',         type:'kvlist', step:1, visible:['table'] },
+    { key:'hvac.auto_size',      label:'Auto Size HVAC',    type:'checkbox' },
+    { key:'hvac.design_T_ext',   label:'Design T Ext',      unit:'°C',    step:1, default:35, visible:['true'], visibleKey:'hvac.auto_size' },
+    { key:'hvac.shr_design',     label:'Design SHR',        unit:'',      step:0.05, default:0.80, visible:['true'], visibleKey:'hvac.auto_size' },
+    { key:'hvac.safety_factor',  label:'Safety Factor',     unit:'',      step:0.05, default:1.2, visible:['true'], visibleKey:'hvac.auto_size' },
     { key:'hvac.deadband_c',     label:'Deadband',          unit:'°C',    step:0.5 },
     { key:'hvac.fan_power_w',    label:'Fan Power',         unit:'W',     step:50 },
     { key:'hvac.shr_BF',         label:'SHR BF',            unit:'',      step:0.01 },
     { key:'hvac.min_on_s',       label:'Min On',            unit:'s',     step:60 },
     { key:'hvac.min_off_s',      label:'Min Off',           unit:'s',     step:60 },
-    { key:'hvac.P_rated_max',    label:'Max Elec Power',    unit:'kW',    step:0.5, tooltip:'Rated electrical input at full load (derived from Q_cool_nom / COP_design)' },
+    { key:'hvac.tau_q',          label:'Tau Q (Cooling)',   unit:'s',     step:10, default:90 },
+    { key:'hvac.tau_m',          label:'Tau M (Moisture)',  unit:'s',     step:10, default:60 },
+    { key:'hvac.P_rated_max',    label:'Max Elec Power',    unit:'kW',    step:0.5, default:0, tooltip:'Rated electrical input at full load (derived from Q_cool_nom / COP_design)' },
   ]},
   { id:'deh', icon:'💧', label:'Dehumidifier', vals:['deh.M_deh_nom','deh.deadband_rh','deh.smer'],
     fields:[
     { key:'deh.M_deh_nom',      label:'Nominal Dehumid.',  unit:'L/day', step:10 },
+    { key:'deh.auto_size',      label:'Auto Size DEH',     type:'checkbox' },
+    { key:'deh.safety_factor',  label:'Safety Factor',     unit:'',      step:0.05, visible:['true'], visibleKey:'deh.auto_size', default:1.2 },
     { key:'deh.smer',           label:'SMER',              unit:'kg/kWh', step:0.1,  tooltip:'Specific Moisture Extraction Rate' },
     { key:'deh.eta_ref',        label:'Ref Efficiency',    unit:'',       step:0.1 },
     { key:'deh.ah_min',         label:'Min Abs Humidity',  unit:'kg/kg',  step:0.001 },
     { key:'deh.deadband_rh',    label:'RH Deadband',       unit:'%',      step:1 },
     { key:'deh.fan_power_w',    label:'Fan Power',         unit:'W',      step:50 },
-    { key:'deh.P_rated_max',    label:'Max Elec Power',    unit:'kW',     step:0.5, tooltip:'Rated electrical input (derived from M_deh_nom / SMER)' },
+    { key:'deh.min_on_s',       label:'Min On',            unit:'s',      step:60 },
+    { key:'deh.min_off_s',      label:'Min Off',           unit:'s',      step:60 },
+    { key:'deh.tau_q',          label:'Tau Q (Dehum)',     unit:'s',      step:10 },
+    { key:'deh.tau_m',          label:'Tau M (Dehum)',     unit:'s',      step:10 },
+    { key:'deh.P_rated_max',    label:'Max Elec Power',    unit:'kW',     step:0.5, default:0, tooltip:'Rated electrical input (derived from M_deh_nom / SMER)' },
   ]},
   { id:'setpoints', icon:'🎯', label:'Setpoints', vals:['setpoints.T_light','setpoints.RH','setpoints.co2_ppm'],
     fields:[
@@ -815,9 +1066,19 @@ const SECTIONS = [
     { key:'setpoints.RH',             label:'RH',            unit:'%',  step:1 },
     { key:'setpoints.co2_ppm',        label:'CO₂',           unit:'ppm', step:50 },
   ]},
-  { id:'growth', icon:'🌱', label:'Plant Growth (Van Henten)', vals:['transp.method','setpoints.crop_cycle_days','growth.c_alpha_beta'],
+  { id:'growth', icon:'🌱', label:'Plant Growth (Van Henten)', vals:['transpiration.method','setpoints.crop_cycle_days','growth.c_alpha_beta'],
     fields:[
-    { key:'transp.method',        label:'Transp Method',    type:'select', options:['vpd','stomatal','van_henten','constant','daily','per_plant'] },
+    { key:'transpiration.method',        label:'Transp Method',    type:'select', options:['vpd','stomatal','van_henten','constant','daily','per_plant'] },
+    { key:'transpiration.stage_factor',  label:'Stage Factor',    unit:'',       step:0.05, default:1.0 },
+    { key:'transpiration.E_max_kgs',     label:'Max Transp Rate', unit:'kg/s',    step:1e-5, visible:['constant'], visibleKey:'transpiration.method', default:1.0e-4 },
+    { key:'transpiration.daily_water_L', label:'Daily Water',     unit:'L/day',   step:5,     visible:['daily'], visibleKey:'transpiration.method', default:40 },
+    { key:'transpiration.plant_count',   label:'Plant Count',     unit:'',        step:10,    visible:['per_plant'], visibleKey:'transpiration.method', default:0 },
+    { key:'transpiration.ml_per_plant_day',label:'mL/Plant/Day',  unit:'mL/day',  step:10,    visible:['per_plant'], visibleKey:'transpiration.method', default:80 },
+    { key:'transpiration.k_vpd',         label:'VPD Gain',        unit:'kg/s/m²/kPa', step:1e-5, visible:['vpd'], visibleKey:'transpiration.method', default:2.0e-5 },
+    { key:'transpiration.k_van_henten',  label:'Van Henten Gain', unit:'1/(s·kPa)',    step:1e-4, visible:['van_henten'], visibleKey:'transpiration.method', default:4.0e-4 },
+    { key:'transpiration.g_stomata',     label:'Stomatal Cond',   unit:'m/s',     step:1e-3, visible:['stomatal'], visibleKey:'transpiration.method', default:1.0e-3 },
+    { key:'transpiration.r_a',           label:'Aero Resistance', unit:'s/m',     step:5,     visible:['stomatal'], visibleKey:'transpiration.method', default:50 },
+    { key:'transpiration.r_n_canopy',    label:'Net Radiation',   unit:'W/m²',    step:50,    visible:['stomatal'], visibleKey:'transpiration.method', default:250 },
     { key:'setpoints.crop_cycle_days', label:'Cycle Days',  unit:'days',   step:5 },
     { key:'growth.c_alpha_beta', label:'Conversion Eff',   unit:'',       step:0.01 },
     { key:'growth.c_resp_d',     label:'Dark Resp @20°C',  unit:'s⁻¹',    step:1e-7 },
@@ -827,16 +1088,17 @@ const SECTIONS = [
     { key:'growth.c_co2_2',      label:'CO₂ Param 2',      unit:'',        step:1e-5 },
     { key:'growth.c_co2_3',      label:'CO₂ Param 3',      unit:'',        step:1e-5 },
     { key:'growth.c_Gamma',      label:'CO₂ Comp Pt',      unit:'kg/m³',   step:1e-6 },
-    { key:'growth.co2_ppm',      label:'CO₂ Ambient',      unit:'ppm',     step:50 },
   ]},
-  { id:'pv', icon:'☀️', label:'PV System', vals:['pv_area','pv.eta_pv','pv.area_to_power'],
+  { id:'pv', icon:'☀️', label:'PV System', vals:['pv_area_m2','pv.eta_pv','pv.area_to_power'],
     fields:[
-    { key:'pv_area',           label:'PV Area',            unit:'m²',   step:5 },
+    { key:'pv_area_m2',        label:'PV Area',            unit:'m²',   step:5, default:200 },
     { key:'pv.eta_pv',         label:'Cell Efficiency',    unit:'',     step:0.01 },
-    { key:'pv.area_to_power',  label:'Wp/m²',             unit:'Wp/m²',step:10 },
-    { key:'pv.C_pv',           label:'PV Cost',            unit:'$/Wp', step:50 },
+    { key:'pv.area_to_power',  label:'Area-to-Power',     unit:'m²/kWp', step:0.5 },
+    { key:'pv.C_pv',    label:'PV Cost',   unit:'$/kWp', step:10, isCost:true },
     { key:'pv.degradation',    label:'Degradation',        unit:'/yr',  step:0.001 },
     { key:'pv.eta_inv',        label:'Inverter η',         unit:'',     step:0.005 },
+    { key:'pv.maintenance',    label:'Maintenance',        unit:'/yr',  step:0.005, default:0.005 },
+    { key:'pv.NOCT',           label:'NOCT',               unit:'°C',   step:1, default:45 },
   ]},
   { id:'battery', icon:'🔋', label:'Battery', vals:['battery.c_energy','battery.c_rate','battery.cycle_life'],
     fields:[
@@ -844,13 +1106,94 @@ const SECTIONS = [
     { key:'battery.c_rate',    label:'C-Rate',             unit:'',     step:0.1 },
     { key:'battery.eta_ch',    label:'Charge η',           unit:'',     step:0.01 },
     { key:'battery.eta_dis',   label:'Discharge η',        unit:'',     step:0.01 },
+    { key:'battery.soc_min',   label:'SOC Min',            unit:'',     step:0.05 },
+    { key:'battery.soc_max',   label:'SOC Max',            unit:'',     step:0.05 },
     { key:'battery.cycle_life',label:'Cycle Life',          unit:'',     step:500 },
     { key:'battery.maintenance',label:'Maintenance',       unit:'/yr',  step:0.005 },
+  ]},
+  { id:'economic', icon:'💰', label:'Economics', vals:['interest_rate','currency','opex.water_cost_per_m3'],
+    fields:[
+    { key:'hvac.capital.mode',        label:'HVAC Cap Mode',        type:'select', options:['direct','per_watt'] },
+    { key:'hvac.capital.cost',        label:'HVAC Cap Cost',       unit:'$', step:100, default:0, isCost:true },
+    { key:'hvac.capital.rate_per_watt',label:'HVAC Cap Rate',     unit:'$/W', step:0.1, default:1.0, isCost:true },
+    { key:'hvac.capital.depreciation_years',label:'HVAC Depr.',   unit:'yr', step:1, default:15 },
+    { key:'led.capital.mode',         label:'LED Cap Mode',        type:'select', options:['direct','per_watt'] },
+    { key:'led.capital.cost',         label:'LED Cap Cost',       unit:'$', step:100, default:0, isCost:true },
+    { key:'led.capital.rate_per_watt',label:'LED Cap Rate',       unit:'$/W', step:0.1, default:1.0, isCost:true },
+    { key:'led.capital.depreciation_years',label:'LED Depr.',     unit:'yr', step:1, default:15 },
+    { key:'deh.capital.mode',         label:'DEH Cap Mode',        type:'select', options:['direct','per_watt'] },
+    { key:'deh.capital.cost',         label:'DEH Cap Cost',       unit:'$', step:100, default:0, isCost:true },
+    { key:'deh.capital.rate_per_watt',label:'DEH Cap Rate',       unit:'$/W', step:0.1, default:1.0, isCost:true },
+    { key:'deh.capital.depreciation_years',label:'DEH Depr.',     unit:'yr', step:1, default:15 },
+    { key:'pv.capital.mode',          label:'PV Cap Mode',         type:'select', options:['direct','per_watt'] },
+    { key:'pv.capital.cost',          label:'PV Cap Cost',        unit:'$', step:100, default:0, isCost:true },
+    { key:'pv.capital.rate_per_watt', label:'PV Cap Rate',        unit:'$/Wp', step:0.1, default:1.0, isCost:true },
+    { key:'pv.capital.depreciation_years',label:'PV Depr.',       unit:'yr', step:1, default:15 },
+    { key:'battery.capital.mode',     label:'Bat Cap Mode',        type:'select', options:['direct','per_watt'] },
+    { key:'battery.capital.cost',     label:'Bat Cap Cost',       unit:'$', step:100, default:0, isCost:true },
+    { key:'battery.capital.rate_per_watt',label:'Bat Cap Rate',   unit:'$/kWh', step:1, default:1.0, isCost:true },
+    { key:'battery.capital.depreciation_years',label:'Bat Depr.', unit:'yr', step:1, default:15 },
+    { key:'opex.water_cost_per_m3',   label:'Water Cost',        unit:'$/m³', step:0.5, default:2.0, isCost:true },
+    { key:'opex.labor_cost_per_year', label:'Labor Cost',        unit:'$/yr', step:1000, default:30000, isCost:true },
+    { key:'opex.maintenance_pct',     label:'Maintenance %',     unit:'', step:0.005, default:0.02 },
+    { key:'opex.misc_opex_per_year',  label:'Misc OPEX',         unit:'$/yr', step:500, default:5000, isCost:true },
+  ]},
+  { id:'site', icon:'📍', label:'Site & Model', vals:['site.city','site.tilt','site.azimuth'],
+    fields:[
+    { key:'site.tilt',          label:'PV Tilt',           unit:'°',    step:5, default:20 },
+    { key:'site.azimuth',       label:'PV Azimuth',        unit:'°',    step:10, default:180 },
+    
+    { key:'envelope.rho_air',   label:'Air Density',      unit:'kg/m³', step:0.1, default:1.2 },
+    { key:'envelope.cp_air',    label:'Air Specific Heat', unit:'J/kg·K', step:50, default:1005 },
+    { key:'growth.initial_dry_weight',label:'Init Dry Wt', unit:'kg/m²', step:0.001, default:0.001 },
+    { key:'growth.dry_matter_fraction',label:'Dry Matter Frac', unit:'', step:0.01, default:0.05 },
   ]},
 ];
 
 const SCENE_KEYS = ['led.covered_area', 'interest_rate', 'currency',
-                     'exchange_rate', 'equipment_power_w'];
+                     'exchange_rate', 'equipment_power_w',
+                     'opex.water_cost_per_m3', 'opex.labor_cost_per_year', 'opex.misc_opex_per_year'];
+
+// Derive cost keys from SECTIONS — all fields with isCost:true
+const COST_KEYS = new Set(SECTIONS.flatMap(s => s.fields.filter(f => f.isCost).map(f => f.key)));
+// Also include non-section cost keys
+COST_KEYS.add('tariff.export_price');
+COST_KEYS.add('tariff.hourly_prices');
+COST_KEYS.add('battery.c_energy');     // cost per kWh, labeled as "Capacity" in SECTIONS (legacy)
+
+const CURRENCY_SYMBOL = { USD: '$', CNY: '¥', EUR: '€', JPY: '¥' };
+const DEFAULT_RATES = { USD: 1.0, CNY: 7.2, EUR: 0.92, JPY: 150.0 };
+function getCurSymbol() { return CURRENCY_SYMBOL[form.currency] || form.currency || '$'; }
+function getCurUnit() { return (form.currency || 'USD'); }
+
+/** Replace "$" prefix in a unit string with the current currency symbol */
+function curUnit(unitStr) {
+    if (!unitStr || !unitStr.startsWith('$')) return unitStr;
+    return getCurSymbol() + unitStr.slice(1);
+}
+
+/** Convert all monetary form values when exchange_rate changes */
+function convertFormCosts(oldRate, newRate) {
+    if (!oldRate || !newRate || oldRate === newRate) return;
+    const factor = newRate / oldRate;
+    let count = 0;
+    COST_KEYS.forEach(key => {
+        const v = form[key];
+        if (v === undefined || v === null) return;
+        if (Array.isArray(v)) {
+            form[key] = v.map(x => (typeof x === 'number' ? x * factor : x));
+            count++;
+        } else if (typeof v === 'number') {
+            form[key] = v * factor;
+            count++;
+        }
+    });
+    console.log('convertFormCosts: rate', oldRate, '→', newRate, '| factor:', factor.toFixed(4), '| keys converted:', count);
+    // Show first few converted keys for verification
+    const sample = [];
+    COST_KEYS.forEach(key => { if (typeof form[key] === 'number' && sample.length < 4) sample.push(key + '=' + form[key].toFixed(2)); });
+    console.log('  sample values:', sample.join(', '));
+}
 
 /* ================================================================
    FORM STATE
@@ -874,7 +1217,12 @@ function getDefaultFormValues(presetYaml) {
     const out = {};
     SECTIONS.forEach(s => s.fields.forEach(f => {
         const v = deepGet(d, f.key);
-        out[f.key] = v !== undefined ? v : (f.key === 'pv_area' ? (flat['pv.eta_pv'] || 0.2) * (flat['pv.area_to_power'] || 180) * 0.5 : undefined);
+        out[f.key] = v !== undefined ? v : (
+            f.default !== undefined ? f.default :
+            f.type === 'select' ? (f.options && f.options[0]) :
+            f.type === 'checkbox' || f.type === 'bool' ? false :
+            f.type === 'kvlist' ? {} :
+            undefined);
     }));
     return out;
 }
@@ -882,10 +1230,12 @@ function getDefaultFormValues(presetYaml) {
 function initFormState(presetYaml) {
     const defaults = getDefaultFormValues(presetYaml);
     Object.keys(form).forEach(k => delete form[k]);
-    Object.entries(defaults).forEach(([k,v]) => { form[k] = v; });
+    Object.entries(defaults).forEach(([k, v]) => {
+        if (v !== undefined) form[k] = v;
+    });
     const flat = baseYaml && typeof baseYaml === 'object' ? flattenObj(baseYaml) : {};
-    SCENE_KEYS.forEach(key => {
-        if (flat[key] !== undefined) form[key] = flat[key];
+    Object.entries(flat).forEach(([key, val]) => {
+        if (form[key] === undefined) form[key] = val;
     });
     syncSceneBar();
 }
@@ -894,19 +1244,17 @@ function initFormState(presetYaml) {
    YAML GENERATION
    ================================================================ */
 function generateYaml() {
-    const obj = JSON.parse(JSON.stringify(baseYaml));
-    const skipKeys = new Set(['pv_area']);
+    const obj = {};
     Object.entries(form).forEach(([key, val]) => {
-        if (skipKeys.has(key)) return;
+        if (val === undefined || val === null) return;
         deepSet(obj, key, val);
     });
     obj.tariff = obj.tariff || {};
-    obj.tariff.hourly_prices = form['tariff.hourly_prices'] || (obj.tariff && obj.tariff.hourly_prices) || [];
-    obj.tariff.export_price = form['tariff.export_price'] ?? (obj.tariff && obj.tariff.export_price) ?? 0.25;
-    obj.space = obj.space || {};
-    obj.space.timestep_s = 600;
-    obj.space.parameter_ranges = {};
-    obj.space.objective = 'lcoe'; // default, sweep tab removed
+    if (!Array.isArray(obj.tariff.hourly_prices) || obj.tariff.hourly_prices.length === 0) {
+        obj.tariff.hourly_prices = [0.3,0.3,0.3,0.3,0.3,0.3,0.6,0.8,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.8,0.6,0.4,0.3,0.3,0.3];
+    }
+    obj.tariff.export_price = obj.tariff.export_price ?? 0.25;
+    obj.space = { timestep_s: 600, parameter_ranges: {}, objective: 'lcoe' };
     return yamlStringify(obj);
 }
 
@@ -952,7 +1300,7 @@ function updateShareURL() {
 function copyShareLink() {
     updateShareURL();
     navigator.clipboard.writeText(window.location.href).then(() => {
-        Toast.info('Share link copied to clipboard!');
+        Toast.info(T('Share link copied to clipboard!'));
     }).catch(() => {
         prompt('Copy this link to share:', window.location.href);
     });
@@ -961,30 +1309,49 @@ function copyShareLink() {
 /* ================================================================
    FORM RENDERING
    ================================================================ */
+function renderUnit(f) {
+    if (!f.unit) return '';
+    const t = T(f.unit);
+    if (f.isCost) return t.replace('$', getCurSymbol());
+    return t;
+}
+function isFieldVisible(f) {
+    if (!f.visible) return true;
+    const vk = f.visibleKey || 'hvac.cop_mode';
+    return f.visible.includes(String(form[vk]));
+}
 function renderForm() {
     const container = document.getElementById('sidebar-scroll');
     container.innerHTML = '';
     SECTIONS.forEach(sec => {
-        const first3 = sec.fields.slice(0, 3);
+        const first3 = sec.fields.filter(f => isFieldVisible(f)).slice(0, 3);
         let fieldsHtml = first3.map(f => {
             const val = form[f.key] ?? '';
             let inp;
             if (f.type === 'select') {
                 inp = `<select data-key="${f.key}" class="sb-inline">${f.options.map(o => `<option value="${o}"${val===o?' selected':''}>${o}</option>`).join('')}</select>`;
+            } else if (f.type === 'checkbox' || f.type === 'bool') {
+                inp = `<input type="checkbox" data-key="${f.key}"${val ? ' checked' : ''}>`;
+            } else if (f.type === 'kvlist') {
+                const count = val && typeof val === 'object' ? Object.keys(val).length : 0;
+                return `<span class="sb-item"><label>${T(f.label)}</label><span class="sb-u">${count} entries</span></span>`;
             } else {
                 const stepStr = f.step ? ` step="${f.step}"` : '';
                 const minStr = f.key.includes('eta') || f.key === 'battery.c_rate' || f.key === 'interest_rate' ? ' min="0"' : '';
                 inp = `<input type="number" data-key="${f.key}" value="${val}"${stepStr}${minStr} class="sb-inline">`;
             }
-            return `<span class="sb-item"><label>${f.label}</label>${inp}${f.unit ? `<span class="sb-u">${f.unit}</span>` : ''}</span>`;
+            if (f.type === 'checkbox' || f.type === 'bool') {
+                return `<span class="sb-item"><label>${T(f.label)}</label>${inp}</span>`;
+            }
+            return `<span class="sb-item"><label>${T(f.label)}</label>${inp}${f.unit ? `<span class="sb-u">${renderUnit(f)}</span>` : ''}</span>`;
         }).join('');
         const html = `<div class="sec-summary" id="sec-${sec.id}">
             <span class="sec-icon">${sec.icon || '⚙'}</span>
             <div class="sec-meta">
-                <div class="sec-name">${sec.label}</div>
+                <div class="sec-name">${T(sec.label)}</div>
                 <div class="sec-fields">${fieldsHtml}</div>
             </div>
-            <button class="sec-gear" onclick="openModal('${sec.id}')" title="Full settings">⚙</button>
+            <button class="sec-gear" onclick="openModal('${sec.id}')" title="${T('Full settings')}">⚙</button>
         </div>`;
         container.insertAdjacentHTML('beforeend', html);
     });
@@ -999,7 +1366,22 @@ function renderForm() {
                 if (!isNaN(n)) val = n;
             }
             form[key] = val;
-            if (key === 'hvac.cop_mode') {
+            const selFields = ['hvac.cop_mode', 'hvac.heat_mode', 'transpiration.method', 'led.auto_deduce', 'led.spectrum', 'hvac.auto_size', 'deh.auto_size'];
+            if (selFields.includes(key)) {
+                closeModal();
+                renderForm();
+                return;
+            }
+            scheduleAutoSim();
+        });
+    });
+    container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', e => {
+            const key = e.target.dataset.key;
+            if (!key) return;
+            form[key] = e.target.checked;
+            const selFields = ['led.auto_deduce', 'hvac.auto_size', 'deh.auto_size'];
+            if (selFields.includes(key)) {
                 closeModal();
                 renderForm();
                 return;
@@ -1015,11 +1397,12 @@ function renderField(f, val) {
     const displayVal = (f.key === 'tariff.export_price') ? val : val;
     let visibleAttr = '';
     if (f.visible) {
-        visibleAttr = ` data-visible-for="${f.visible.join(',')}"`;
+        const vk = f.visibleKey || 'hvac.cop_mode';
+        visibleAttr = ` data-visible-key="${vk}" data-visible-for="${f.visible.join(',')}"`;
     }
-    const titleAttr = f.tooltip ? ` title="${f.tooltip}"` : '';
+    const titleAttr = f.tooltip ? ` title="${T(f.tooltip)}"` : '';
     let html = `<div class="form-field"${visibleAttr}>
-        <label${titleAttr}>${f.label}${f.tooltip ? '<span class="tooltip-icon" title="' + f.tooltip + '">ⓘ</span>' : ''}</label>
+        <label${titleAttr}>${T(f.label)}${f.tooltip ? '<span class="tooltip-icon" title="' + T(f.tooltip) + '">ⓘ</span>' : ''}</label>
         <div class="field-row">`;
     if (f.type === 'select') {
         html += `<select data-key="${f.key}">`;
@@ -1028,13 +1411,22 @@ function renderField(f, val) {
             html += `<option value="${opt}"${sel}>${opt}</option>`;
         });
         html += `</select>`;
+    } else if (f.type === 'checkbox' || f.type === 'bool') {
+        html += `<input type="checkbox" data-key="${f.key}"${val ? ' checked' : ''}>`;
+    } else if (f.type === 'kvlist') {
+        const entries = val && typeof val === 'object' ? Object.entries(val) : [];
+        html += `<div class="kvlist" data-key="${f.key}">`;
+        entries.forEach(([k, v]) => {
+            html += `<div class="kvrow"><input type="number" class="kvkey" value="${k}" placeholder="T(°C)" step="${f.step||1}"><span>=</span><input type="number" class="kvval" value="${v}" placeholder="COP" step="${f.step||0.1}"><button class="kvdel" onclick="this.closest('.kvrow').remove()">×</button></div>`;
+        });
+        html += `<button class="kvadd" onclick="addKvRow(this)" style="font-size:0.7rem;margin-top:3px;">+ ${T('Add Row')}</button></div>`;
     } else {
         const inputType = 'number';
         const stepStr = f.step ? `step="${f.step}"` : '';
         const minStr = f.key.includes('eta') || f.key === 'battery.c_rate' || f.key === 'interest_rate' ? 'min="0"' : '';
         html += `<input type="${inputType}" data-key="${f.key}" value="${displayVal}" ${stepStr} ${minStr}>`;
     }
-    if (f.unit) html += `<span class="unit">${f.unit}</span>`;
+    if (f.unit && f.type !== 'checkbox' && f.type !== 'bool' && f.type !== 'kvlist') html += `<span class="unit">${renderUnit(f)}</span>`;
     html += `</div>`;
     html += `</div>`;
     return html;
@@ -1042,11 +1434,11 @@ function renderField(f, val) {
 
 function renderTariffField() {
     return `<div class="form-field">
-        <label>24h Price Profile</label>
+        <label>${T('24h Price Profile')}</label>
         <div class="tariff-chart-wrap"><canvas id="tariff-chart"></canvas></div>
         <div class="tariff-grid" id="tariff-grid"></div>
         <div class="tariff-export">
-            <label>Export Price</label>
+            <label>${T('Export Price')}</label>
             <input type="number" data-key="tariff.export_price" value="${form['tariff.export_price'] ?? 0.25}" step="0.05" min="0">
         </div>
     </div>`;
@@ -1108,15 +1500,18 @@ function openModal(sectionId) {
     if (!sec) return;
     const body = document.getElementById('modal-body');
     let html = `<div class="modal-header">
-        <h3>${sec.icon || ''} ${sec.label}</h3>
+        <h3>${sec.icon || ''} ${T(sec.label)}</h3>
         <button class="modal-close" onclick="closeModal()">✕</button>
     </div>`;
     sec.fields.forEach(f => {
         const val = form[f.key] ?? '';
         let fv = '';
-        if (f.visible) fv = ` data-visible-for="${f.visible.join(',')}"`;
+        if (f.visible) {
+            const vk = f.visibleKey || 'hvac.cop_mode';
+            fv = ` data-visible-key="${vk}" data-visible-for="${f.visible.join(',')}"`;
+        }
         html += `<div class="form-field"${fv}>
-            <label>${f.label}</label>
+            <label>${T(f.label)}</label>
             <div class="modal-field-row">`;
         if (f.type === 'select') {
             html += `<select data-key="${f.key}">`;
@@ -1124,12 +1519,21 @@ function openModal(sectionId) {
                 html += `<option value="${opt}"${val === opt ? ' selected' : ''}>${opt}</option>`;
             });
             html += `</select>`;
+        } else if (f.type === 'checkbox' || f.type === 'bool') {
+            html += `<input type="checkbox" data-key="${f.key}"${val ? ' checked' : ''}>`;
+        } else if (f.type === 'kvlist') {
+            const entries = val && typeof val === 'object' ? Object.entries(val) : [];
+            html += `<div class="kvlist" data-key="${f.key}">`;
+            entries.forEach(([k, v]) => {
+                html += `<div class="kvrow"><input type="number" class="kvkey" value="${k}" placeholder="T(°C)" step="${f.step||1}"><span>=</span><input type="number" class="kvval" value="${v}" placeholder="COP" step="${f.step||0.1}"><button class="kvdel" onclick="this.closest('.kvrow').remove()">×</button></div>`;
+            });
+            html += `<button class="kvadd" onclick="addKvRow(this)" style="font-size:0.7rem;margin-top:3px;">+ ${T('Add Row')}</button></div>`;
         } else {
             const stepStr = f.step ? ` step="${f.step}"` : '';
             const minStr = f.key.includes('eta') || f.key === 'battery.c_rate' || f.key === 'interest_rate' ? ' min="0"' : '';
             html += `<input type="number" data-key="${f.key}" value="${val}"${stepStr}${minStr}>`;
         }
-        if (f.unit) html += `<span class="unit">${f.unit}</span>`;
+        if (f.unit && f.type !== 'checkbox' && f.type !== 'bool' && f.type !== 'kvlist') html += `<span class="unit">${renderUnit(f)}</span>`;
         html += `</div></div>`;
     });
     body.innerHTML = html;
@@ -1144,17 +1548,33 @@ function openModal(sectionId) {
             scheduleAutoSim();
         });
     });
+    document.querySelectorAll('.modal-body input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', e => {
+            const key = e.target.dataset.key;
+            if (!key) return;
+            form[key] = e.target.checked;
+            renderForm();
+            updateFieldVisibility();
+            scheduleAutoSim();
+        });
+    });
+    document.querySelectorAll('.modal-body .kvlist').forEach(kvl => {
+        // kvlist is read on save/modal close — no live update needed
+    });
     document.querySelectorAll('.modal-body select').forEach(sel => {
         sel.addEventListener('change', e => {
             const key = e.target.dataset.key;
             if (!key) return;
             form[key] = e.target.value;
-            renderForm();
-            updateFieldVisibility();
-            if (key === 'hvac.cop_mode') {
+            const selFields = ['hvac.cop_mode', 'hvac.heat_mode', 'transpiration.method', 'led.auto_deduce', 'led.spectrum', 'hvac.auto_size', 'deh.auto_size'];
+            if (selFields.includes(key)) {
+                renderForm();
+                updateFieldVisibility();
                 openModal(sectionId);
                 return;
             }
+            renderForm();
+            updateFieldVisibility();
             scheduleAutoSim();
         });
     });
@@ -1163,6 +1583,13 @@ function openModal(sectionId) {
 }
 
 function closeModal() {
+    // Save kvlist values before closing
+    document.querySelectorAll('.modal-body .kvlist').forEach(kvl => {
+        const key = kvl.dataset.key;
+        if (!key) return;
+        const obj = readKvList(kvl);
+        if (obj) form[key] = obj;
+    });
     document.getElementById('modal').classList.remove('open');
     document.getElementById('modal-body').innerHTML = '';
 }
@@ -1180,6 +1607,27 @@ function bindFormEvents() {
 /* ================================================================
    SCENE-BAR BINDING
    ================================================================ */
+function updateCurrencyLabels() {
+    const sym = getCurSymbol(), cur = getCurUnit();
+    // KPI card unit labels
+    const cost = document.querySelector('#p-cost')?.parentElement?.querySelector('.unit');
+    if (cost) cost.textContent = cur + '/yr';
+    const costkg = document.querySelector('#p-costkg')?.parentElement?.querySelector('.unit');
+    if (costkg) costkg.textContent = cur + '/kg fresh';
+    // Scene bar cost unit spans
+    document.querySelectorAll('.sb-unit-cost').forEach(span => {
+        const raw = span.getAttribute('data-raw-unit') || span.textContent;
+        if (!span.getAttribute('data-raw-unit')) span.setAttribute('data-raw-unit', raw);
+        span.textContent = sym + raw;
+    });
+    // Sidebar & modal cost unit labels (any .unit element inside a .form-field)
+    document.querySelectorAll('.form-field .unit').forEach(u => {
+        const raw = u.getAttribute('data-raw-unit') || u.textContent;
+        if (!u.getAttribute('data-raw-unit')) u.setAttribute('data-raw-unit', raw);
+        if (raw.startsWith('$')) u.textContent = sym + raw.slice(1);
+    });
+}
+
 function syncSceneBar() {
     document.querySelectorAll('.scene-bar [data-key]').forEach(el => {
         const key = el.dataset.key;
@@ -1200,9 +1648,36 @@ function bindSceneBarEvents() {
                 const n = parseFloat(val);
                 if (!isNaN(n)) val = n;
             }
+            if (key === 'exchange_rate') {
+                const oldRate = form[key] || 1.0;
+                const newRate = val;
+                if (oldRate !== newRate) {
+                    form[key] = newRate;
+                    convertFormCosts(oldRate, newRate);
+                    syncSceneBar();
+                    renderForm();
+                    updateCurrencyLabels();
+                    scheduleAutoSim();
+                    return;
+                }
+            }
             form[key] = val;
+            if (key === 'currency') {
+                // Currency change → auto-update exchange_rate to default for new currency
+                const oldRate = form['exchange_rate'] || 1.0;
+                const newRate = DEFAULT_RATES[val] || 1.0;
+                if (oldRate !== newRate) {
+                    console.log('Currency switch:', form.currency, '→', val, '| rate:', oldRate, '→', newRate);
+                    form['exchange_rate'] = newRate;
+                    convertFormCosts(oldRate, newRate);
+                    syncSceneBar();
+                }
+                updateCurrencyLabels();
+                renderForm();
+                if (state.lastResult) onSinglePointComplete({result: state.lastResult});
+            }
             // City selection: auto-fill lat/lon from CITY_DB
-            if (key === 'city' && CITY_DB[val]) {
+            if (key === 'site.city' && CITY_DB[val]) {
                 const [lat, lon, tz] = CITY_DB[val];
                 form['site.lat'] = lat;
                 form['site.lon'] = lon;
@@ -1247,9 +1722,9 @@ function renderMockData() {
     // KPI cards
     document.getElementById('p-harvest').textContent = '5,200';
     document.getElementById('p-energy').textContent = '142.0';
-    document.getElementById('p-cost').textContent = '$12,500';
+    document.getElementById('p-cost').textContent = getCurSymbol() + '12,500';
     document.getElementById('p-kwhkg').textContent = '27.3';
-    document.getElementById('p-costkg').textContent = '$2.40';
+    document.getElementById('p-costkg').textContent = getCurSymbol() + '2.40';
     document.getElementById('p-monharv').textContent = '433';
 
     renderAllCharts({
@@ -1262,11 +1737,31 @@ function renderMockData() {
 }
 
 function updateFieldVisibility() {
-    const copMode = form['hvac.cop_mode'] || 'carnot';
     document.querySelectorAll('.form-field[data-visible-for]').forEach(el => {
-        const modes = el.dataset.visibleFor.split(',');
-        el.style.display = modes.includes(copMode) ? '' : 'none';
+        const visibleKey = el.dataset.visibleKey || 'hvac.cop_mode';
+        const currentVal = form[visibleKey] || '';
+        const allowedVals = el.dataset.visibleFor.split(',');
+        el.style.display = allowedVals.includes(String(currentVal)) ? '' : 'none';
     });
+}
+
+function addKvRow(btn) {
+    const kvlist = btn.closest('.kvlist');
+    const row = document.createElement('div');
+    row.className = 'kvrow';
+    row.innerHTML = '<input type="number" class="kvkey" value="" placeholder="T(°C)"><span>=</span><input type="number" class="kvval" value="" placeholder="COP"><button class="kvdel" onclick="this.closest(\'.kvrow\').remove()">×</button>';
+    kvlist.insertBefore(row, btn);
+}
+
+function readKvList(el) {
+    const rows = el.querySelectorAll('.kvrow');
+    const obj = {};
+    rows.forEach(row => {
+        const k = parseFloat(row.querySelector('.kvkey').value);
+        const v = parseFloat(row.querySelector('.kvval').value);
+        if (!isNaN(k) && !isNaN(v)) obj[k] = v;
+    });
+    return Object.keys(obj).length > 0 ? obj : undefined;
 }
 
 function onFormInputChange(e) {
@@ -1294,7 +1789,10 @@ function scheduleAutoSim() {
 function runAutoSinglePoint() {
     if (!state.worker) return;
     const yaml = generateYaml();
+    console.debug('=== Auto-generated YAML ===\n' + yaml);
     updateShareURL();
+    showProgress();
+    updateProgressText(T('Simulating...'));
     const s = document.getElementById('p-kwhkg');
     if (s) s.style.opacity = '0.5';
     state.worker.postMessage({ type: 'simulate', projectYaml: yaml });
@@ -1383,7 +1881,8 @@ function yamlStringify(obj, indent) {
                 v.forEach(item => { out += `${pad}  - ${item}\n`; });
             }
         } else if (typeof v === 'object') {
-            out += `${pad}${k}:\n` + yamlStringify(v, indent + 1);
+            const childYaml = yamlStringify(v, indent + 1);
+            if (childYaml) out += `${pad}${k}:\n` + childYaml;
         } else if (typeof v === 'string') {
             out += `${pad}${k}: "${v}"\n`;
         } else {
@@ -1461,12 +1960,6 @@ const Toast = {
 /* ================================================================
    WEATHER CACHE
    ================================================================ */
-const WEATHER_TTL = 30*24*60*60*1000;
-function getCachedWeather(lat, lon, year) {
-    const k = `vfed_weather_${lat.toFixed(4)}_${lon.toFixed(4)}_${year}`;
-    try { const {data,ts} = JSON.parse(localStorage.getItem(k)||'{}'); if (Date.now()-ts<WEATHER_TTL) return data; } catch {}
-    return null;
-}
 
 /* ================================================================
    STATE
@@ -1488,7 +1981,7 @@ function initWorker() {
             state.worker.postMessage({ type: 'init' });
             state.worker.postMessage({ type: 'list_presets' });
         } else if (data.type === 'ready') {
-            updateRunButton(false, 'Run Simulation');
+            updateRunButton(false, T('Run Simulation'));
         } else if (data.type === 'status') {
             updateProgressText(data.message);
         } else if (data.type === 'presets') {
@@ -1496,15 +1989,16 @@ function initWorker() {
         } else if (data.type === 'simulate_complete') {
             onSinglePointComplete(data);
         } else if (data.type === 'simulate_error') {
-            Toast.error('Auto-sim failed: ' + (data.message || 'unknown'));
+            hideProgress();
+            Toast.error(T('Simulation failed: ') + (data.message || 'unknown'));
             document.getElementById('p-kwhkg').style.opacity = '1';
         } else if (data.type === 'error') {
-            Toast.error('Worker error: ' + (data.message || 'unknown'));
-            updateRunButton(false, 'Run Simulation');
+            Toast.error(T('Worker error: ') + (data.message || 'unknown'));
+            updateRunButton(false, T('Run Simulation'));
             hideProgress();
         }
     };
-    state.worker.onerror = (e) => { Toast.error('Worker error: ' + e.message); updateRunButton(false, 'Run Simulation'); hideProgress(); };
+    state.worker.onerror = (e) => { Toast.error(T('Worker error: ') + e.message); updateRunButton(false, T('Run Simulation')); hideProgress(); };
 }
 function updateRunButton(disabled, text) {
     document.getElementById('run-btn').disabled = disabled;
@@ -1531,9 +2025,9 @@ function updateElapsed() {
    ================================================================ */
 function onSinglePointComplete(data) {
     hideProgress();
-    updateRunButton(false, 'Run Simulation');
+    updateRunButton(false, T('Run Simulation'));
     const r = data.result;
-    if (!r || !r.summary) { Toast.error('Invalid simulation result'); return; }
+    if (!r || !r.summary) { Toast.error(T('Invalid simulation result')); return; }
     const s = r.summary;
 
     // ── Climate bar ──
@@ -1547,10 +2041,12 @@ function onSinglePointComplete(data) {
     // ── 6 KPI Cards ──
     document.getElementById('p-harvest').textContent = s.annual_harvest_fw_kg ? Number(s.annual_harvest_fw_kg).toLocaleString() : '--';
     document.getElementById('p-energy').textContent = s.annual_energy_kwh ? (s.annual_energy_kwh / 1000).toFixed(1) : '--';
-    document.getElementById('p-cost').textContent = s.total_electricity_cost != null ? '$' + Number(s.total_electricity_cost).toLocaleString() : '--';
+    document.getElementById('p-cost').textContent = s.total_electricity_cost != null ? getCurSymbol() + Number(s.total_electricity_cost).toLocaleString() : '--';
     document.getElementById('p-kwhkg').textContent = s.specific_energy_kwh_per_kg?.toFixed(2) ?? '--';
-    document.getElementById('p-costkg').textContent = s.specific_cost_per_kg != null ? '$' + Number(s.specific_cost_per_kg).toFixed(2) : '--';
+    document.getElementById('p-costkg').textContent = s.specific_cost_per_kg != null ? getCurSymbol() + Number(s.specific_cost_per_kg).toFixed(2) : '--';
     document.getElementById('p-monharv').textContent = s.harvest_per_month_avg_kg ? Number(s.harvest_per_month_avg_kg).toFixed(0) : '--';
+
+    updateCurrencyLabels();
 
     // ── Store result for Climate Analysis tab ──
     state.lastResult = r;
@@ -1584,7 +2080,7 @@ function onSinglePointComplete(data) {
 // CHART SYSTEM — unified theming, factory, and rendering
 // ══════════════════════════════════════════════════════════════
 
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(T);
 const MONTH_COLORS = [
     '#487980','#5a8f96','#3b9e4a','#22c55e','#a3c922','#d8a117',
     '#d85117','#f97316','#a34a1c','#598e94','#4a7a80','#3d6b70'
@@ -1666,10 +2162,10 @@ function renderEnergyBarChart(id, ek) {
     _charts[id] = new Chart(el.getContext('2d'), {
         type:'bar',
         data:{ labels:MONTHS, datasets:[
-            {label:'HVAC',data:ek.hvac,backgroundColor:CT.color.hvac,borderWidth:0},
-            {label:'DEH',data:ek.deh,backgroundColor:CT.color.deh,borderWidth:0},
-            {label:'LED',data:ek.led,backgroundColor:CT.color.led,borderWidth:0},
-            {label:'Misc',data:ek.misc,backgroundColor:CT.color.misc,borderWidth:0},
+            {label:T('HVAC'),data:ek.hvac,backgroundColor:CT.color.hvac,borderWidth:0},
+            {label:T('DEH'),data:ek.deh,backgroundColor:CT.color.deh,borderWidth:0},
+            {label:T('LED'),data:ek.led,backgroundColor:CT.color.led,borderWidth:0},
+            {label:T('Misc'),data:ek.misc,backgroundColor:CT.color.misc,borderWidth:0},
         ]},
         options:_base({scales:{x:_xAx({stacked:true}),y:_yAx({stacked:true,title:'kWh'})}})
     });
@@ -1680,7 +2176,7 @@ function renderDonutChart(id, values) {
     const el = document.getElementById(id); if (!el) return;
     _charts[id] = new Chart(el.getContext('2d'), {
         type:'doughnut',
-        data:{ labels:['HVAC','DEH','LED','Misc'], datasets:[{
+        data:{ labels:[T('HVAC'),T('DEH'),T('LED'),T('Misc')], datasets:[{
             data:values,
             backgroundColor:[CT.color.hvac,CT.color.deh,CT.color.led,CT.color.misc],
             borderColor:'var(--bg-card)', borderWidth:2,
@@ -1705,7 +2201,7 @@ function renderTypicalDailyChart(id, loadKw) {
         options:_base({
             pointStyle:true,
             legendFilter:(item,cd)=>cd.datasets[item.datasetIndex]&&!cd.datasets[item.datasetIndex].hidden,
-            scales:{x:_xAx({title:'Hour',maxTicks:12}),y:_yAx({title:'kW'})}
+            scales:{x:_xAx({title:T('Hour'),maxTicks:12}),y:_yAx({title:'kW'})}
         })
     });
 }
@@ -1716,10 +2212,10 @@ function renderClimateChart(id, inT, outT, inRH, outRH) {
     _charts[id] = new Chart(el.getContext('2d'), {
         type:'line',
         data:{ labels:MONTHS, datasets:[
-            {label:'T_in (°C)',data:inT,borderColor:CT.color.temp,backgroundColor:'transparent',borderWidth:2.5,tension:0.3,pointRadius:3,yAxisID:'y'},
-            {label:'T_out (°C)',data:outT,borderColor:CT.color.tempOut,backgroundColor:'transparent',borderWidth:2,tension:0.3,pointRadius:2,borderDash:[5,3],yAxisID:'y'},
-            {label:'RH_in (%)',data:inRH,borderColor:CT.color.rh,backgroundColor:'transparent',borderWidth:2.5,tension:0.3,pointRadius:3,yAxisID:'y1'},
-            {label:'RH_out (%)',data:outRH,borderColor:CT.color.rhOut,backgroundColor:'transparent',borderWidth:2,tension:0.3,pointRadius:2,borderDash:[5,3],yAxisID:'y1'},
+            {label:T('T_in (°C)'),data:inT,borderColor:CT.color.temp,backgroundColor:'transparent',borderWidth:2.5,tension:0.3,pointRadius:3,yAxisID:'y'},
+            {label:T('T_out (°C)'),data:outT,borderColor:CT.color.tempOut,backgroundColor:'transparent',borderWidth:2,tension:0.3,pointRadius:2,borderDash:[5,3],yAxisID:'y'},
+            {label:T('RH_in (%)'),data:inRH,borderColor:CT.color.rh,backgroundColor:'transparent',borderWidth:2.5,tension:0.3,pointRadius:3,yAxisID:'y1'},
+            {label:T('RH_out (%)'),data:outRH,borderColor:CT.color.rhOut,backgroundColor:'transparent',borderWidth:2,tension:0.3,pointRadius:2,borderDash:[5,3],yAxisID:'y1'},
         ]},
         options:_base({
             pointStyle:true,
@@ -1740,13 +2236,13 @@ function renderClimateOverviewChart(id, cm) {
     const ghiNorm = ghiRaw.map(v => Math.round(v/maxGHI*100));
     _charts[id] = new Chart(el.getContext('2d'), {
         data:{ labels:MONTHS, datasets:[
-            {label:'Avg T (°C)',data:cm.avg_temp_c,type:'line',
+            {label:T('Avg T (°C)'),data:cm.avg_temp_c,type:'line',
              borderColor:CT.color.temp,backgroundColor:'transparent',
              borderWidth:2.5,tension:0.3,pointRadius:4,pointHoverRadius:6,yAxisID:'yT',order:1},
-            {label:'Avg RH (%)',data:cm.avg_rh_pct,type:'line',
+            {label:T('Avg RH (%)'),data:cm.avg_rh_pct,type:'line',
              borderColor:CT.color.rh,backgroundColor:'transparent',
              borderWidth:2,tension:0.3,pointRadius:4,pointHoverRadius:6,yAxisID:'yRH',order:2},
-            {label:'GHI (kWh/m²)',data:ghiNorm,type:'bar',
+            {label:T('GHI (kWh/m²)'),data:ghiNorm,type:'bar',
              backgroundColor:CT.color.ghi+'15',borderColor:CT.color.ghi+'30',
              borderWidth:1,barPercentage:0.55,yAxisID:'yRH',order:3},
         ]},
@@ -1857,28 +2353,30 @@ document.getElementById('mode-tabs').addEventListener('click', (e) => {
 const BUILTIN_PRESETS = {
     '609': {
         label: '609 — Fengxian Strawberry PFAL',
-        yaml: `site:\n  lat: 31.0\n  lon: 121.5\n  year: 2023\n  tz_hours: 8\n  tilt: 10\n  azimuth: 180\nenvelope:\n  U_wall_A: 0.35\n  A_window: 0.0\n  eta_solar: 0.7\n  ach: 0.5\n  permeance: 0.0\n  rho_air: 1.2\n  cp_air: 1005\n  V_room: 5000\n  C_z: 1200000.0\nled:\n  auto_deduce: true\n  ppfd_target: 200\n  efficacy: 2.8\n  light_start_hour: 6\n  photoperiod_hours: 16\n  heat_fraction: 0.8\n  covered_area: 100\nhvac:\n  Q_cool_nom: 50\n  cop_mode: "carnot"\n  eta_II: 0.35\n  delta_T_evap: 8.0\n  delta_T_cond: 15.0\n  heat_mode: "heat_pump"\n  deadband_c: 1.0\n  min_on_s: 300\n  min_off_s: 300\n  fan_power_w: 500\n  shr_BF: 0.15\n  tau_q: 60\n  tau_m: 120\ndeh:\n  M_deh_nom: 384\n  smer: 2.0\n  eta_ref: 1.2\n  eta_max: 2.0\n  ah_min: 0.004\n  ah_ref: 0.01\n  deadband_rh: 5.0\n  min_on_s: 300\n  min_off_s: 300\n  fan_power_w: 200\n  tau_q: 60\n  tau_m: 120\nsetpoints:\n  T_light: 24\n  T_dark: 20\n  RH: 70\n  co2_ppm: 800\n  crop_cycle_days: 35\ngrowth:\n  c_alpha_beta: 0.544\n  c_resp_d: 2.65e-7\n  c_pl_d: 53.0\n  c_rad_phot: 1e-8\n  c_co2_1: 5.11e-6\n  c_co2_2: 2.3e-4\n  c_co2_3: 6.29e-4\n  c_Gamma: 5.2e-5\n  co2_ppm: 800\npv:\n  eta_pv: 0.20\n  area_to_power: 180\n  eta_inv: 0.96\n  C_pv: 800\n  degradation: 0.005\nbattery:\n  c_energy: 150\n  c_rate: 0.5\n  eta_ch: 0.95\n  eta_dis: 0.95\n  soc_min: 0.1\n  soc_max: 0.9\n  cycle_life: 6000\n  maintenance: 0.01\ntariff:\n  hourly_prices: [0.3,0.3,0.3,0.3,0.3,0.3,0.6,0.8,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.8,0.6,0.4,0.3,0.3,0.3]\n  export_price: 0.25\nequipment_power_w: 2000\ninterest_rate: 0.05\ncurrency: CNY\nexchange_rate: 1.0\nspace:\n  timestep_s: 600\n  parameter_ranges: {}\n  objective: lcoe\n`
+        yaml: `site:\n  lat: 31.0\n  lon: 121.5\n  city: Shanghai\n  tz_hours: 8\n  tilt: 10\n  azimuth: 180\nenvelope:\n  U_wall_A: 125.3\n  A_window: 0.0\n  eta_solar: 0.15\n  ach: 0.5\n  permeance: 0.0\n  rho_air: 1.2\n  cp_air: 1005\n  V_room: 200\n  C_z: 499597.0\nled:\n  auto_deduce: true\n  ppfd_target: 400\n  efficacy: 2.5\n  light_start_hour: 6\n  photoperiod_hours: 16\n  heat_fraction: 1.0\n  covered_area: 45\nhvac:\n  Q_cool_nom: 15\n  cop_mode: "carnot"\n  eta_II: 0.35\n  delta_T_evap: 8.0\n  delta_T_cond: 15.0\n  heat_mode: "heat_pump"\n  cop_table: {}\n  deadband_c: 1.0\n  min_on_s: 180\n  min_off_s: 180\n  fan_power_w: 70\n  shr_BF: 0.15\n  tau_q: 90\n  tau_m: 60\ndeh:\n  M_deh_nom: 70\n  smer: 2.0\n  eta_ref: 0.11\n  ah_min: 0.0054\n  deadband_rh: 3.0\n  min_on_s: 180\n  min_off_s: 180\n  fan_power_w: 40\n  tau_q: 90\n  tau_m: 120\nsetpoints:\n  T_light: 22\n  T_dark: 18\n  RH: 65\n  co2_ppm: 800\n  crop_cycle_days: 30\ntranspiration:\n  method: vpd\n  E_max_kgs: 1.0e-4\n  daily_water_L: 40\n  plant_count: 0\n  ml_per_plant_day: 80\n  k_vpd: 2.0e-5\n  k_van_henten: 4.0e-4\n  stage_factor: 1.0\n  g_stomata: 1.0e-3\n  r_a: 50\n  r_n_canopy: 250\ngrowth:\n  c_alpha_beta: 0.544\n  c_resp_d: 2.65e-7\n  c_pl_d: 53.0\n  c_rad_phot: 1e-8\n  c_co2_1: 5.11e-6\n  c_co2_2: 2.3e-4\n  c_co2_3: 6.29e-4\n  c_Gamma: 5.2e-5\npv:\n  eta_pv: 0.233\n  area_to_power: 4.3\n  eta_inv: 0.97\n  C_pv: 110\n  degradation: 0.004\nbattery:\n  c_energy: 220\n  c_rate: 1.0\n  eta_ch: 0.91\n  eta_dis: 0.91\n  soc_min: 0.1\n  soc_max: 0.9\n  cycle_life: 4000\n  maintenance: 0.01\ntariff:\n  hourly_prices: [0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.3,0.5,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.5,0.3,0.2,0.1,0.1,0.1]\n  export_price: 0.05\nequipment_power_w: 2000\ninterest_rate: 0.06\ncurrency: CNY\nexchange_rate: 7.2\nspace:\n  timestep_s: 600\n  parameter_ranges: {}\n  objective: lcoe\n`
     },
     'lettuce_standard': {
         label: 'Lettuce — Standard PFAL',
-        yaml: `site:\n  lat: 35.68\n  lon: 139.69\n  year: 2023\n  tz_hours: 9\n  tilt: 10\n  azimuth: 180\nenvelope:\n  U_wall_A: 0.3\n  A_window: 0.0\n  eta_solar: 0.7\n  ach: 0.3\n  permeance: 0.0\n  rho_air: 1.2\n  cp_air: 1005\n  V_room: 3000\n  C_z: 800000.0\nled:\n  auto_deduce: true\n  ppfd_target: 180\n  efficacy: 3.0\n  light_start_hour: 6\n  photoperiod_hours: 16\n  heat_fraction: 0.8\n  covered_area: 80\nhvac:\n  Q_cool_nom: 40\n  cop_mode: "carnot"\n  eta_II: 0.35\n  delta_T_evap: 8.0\n  delta_T_cond: 15.0\n  heat_mode: "heat_pump"\n  deadband_c: 1.0\n  min_on_s: 300\n  min_off_s: 300\n  fan_power_w: 400\n  shr_BF: 0.12\n  tau_q: 60\n  tau_m: 120\ndeh:\n  M_deh_nom: 288\n  smer: 2.0\n  eta_ref: 1.3\n  eta_max: 2.2\n  ah_min: 0.003\n  ah_ref: 0.008\n  deadband_rh: 5.0\n  min_on_s: 300\n  min_off_s: 300\n  fan_power_w: 150\n  tau_q: 60\n  tau_m: 120\nsetpoints:\n  T_light: 22\n  T_dark: 18\n  RH: 65\n  co2_ppm: 1000\n  crop_cycle_days: 30\ngrowth:\n  c_alpha_beta: 0.544\n  c_resp_d: 2.65e-7\n  c_pl_d: 53.0\n  c_rad_phot: 1e-8\n  c_co2_1: 5.11e-6\n  c_co2_2: 2.3e-4\n  c_co2_3: 6.29e-4\n  c_Gamma: 5.2e-5\n  co2_ppm: 800\npv:\n  eta_pv: 0.21\n  area_to_power: 190\n  eta_inv: 0.965\n  C_pv: 750\n  degradation: 0.005\nbattery:\n  c_energy: 120\n  c_rate: 0.5\n  eta_ch: 0.95\n  eta_dis: 0.95\n  soc_min: 0.1\n  soc_max: 0.9\n  cycle_life: 6000\n  maintenance: 0.01\ntariff:\n  hourly_prices: [0.25,0.25,0.25,0.25,0.25,0.25,0.5,0.7,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.7,0.5,0.35,0.25,0.25,0.25]\n  export_price: 0.2\nequipment_power_w: 1500\ninterest_rate: 0.05\ncurrency: USD\nexchange_rate: 1.0\nspace:\n  timestep_s: 600\n  parameter_ranges: {}\n  objective: lcoe\n`
+        yaml: `site:\n  lat: 35.68\n  lon: 139.69\n  city: Tokyo\n  tz_hours: 9\n  tilt: 10\n  azimuth: 180\nenvelope:\n  U_wall_A: 100\n  A_window: 0.0\n  eta_solar: 0.15\n  ach: 0.3\n  permeance: 0.0\n  rho_air: 1.2\n  cp_air: 1005\n  V_room: 200\n  C_z: 500000.0\nled:\n  auto_deduce: true\n  ppfd_target: 180\n  efficacy: 3.0\n  light_start_hour: 6\n  photoperiod_hours: 16\n  heat_fraction: 1.0\n  covered_area: 80\nhvac:\n  Q_cool_nom: 12\n  cop_mode: "carnot"\n  eta_II: 0.35\n  delta_T_evap: 8.0\n  delta_T_cond: 15.0\n  heat_mode: "heat_pump"\n  cop_table: {}\n  deadband_c: 1.0\n  min_on_s: 180\n  min_off_s: 180\n  fan_power_w: 70\n  shr_BF: 0.12\n  tau_q: 90\n  tau_m: 60\ndeh:\n  M_deh_nom: 60\n  smer: 2.0\n  eta_ref: 0.11\n  ah_min: 0.0054\n  deadband_rh: 3.0\n  min_on_s: 180\n  min_off_s: 180\n  fan_power_w: 40\n  tau_q: 90\n  tau_m: 120\nsetpoints:\n  T_light: 22\n  T_dark: 18\n  RH: 65\n  co2_ppm: 1000\n  crop_cycle_days: 30\ntranspiration:\n  method: vpd\n  E_max_kgs: 1.0e-4\n  daily_water_L: 40\n  plant_count: 0\n  ml_per_plant_day: 80\n  k_vpd: 2.0e-5\n  k_van_henten: 4.0e-4\n  stage_factor: 1.0\n  g_stomata: 1.0e-3\n  r_a: 50\n  r_n_canopy: 250\ngrowth:\n  c_alpha_beta: 0.544\n  c_resp_d: 2.65e-7\n  c_pl_d: 53.0\n  c_rad_phot: 1e-8\n  c_co2_1: 5.11e-6\n  c_co2_2: 2.3e-4\n  c_co2_3: 6.29e-4\n  c_Gamma: 5.2e-5\npv:\n  eta_pv: 0.21\n  area_to_power: 190\n  eta_inv: 0.965\n  C_pv: 750\n  degradation: 0.005\nbattery:\n  c_energy: 120\n  c_rate: 0.5\n  eta_ch: 0.95\n  eta_dis: 0.95\n  soc_min: 0.1\n  soc_max: 0.9\n  cycle_life: 6000\n  maintenance: 0.01\ntariff:\n  hourly_prices: [0.25,0.25,0.25,0.25,0.25,0.25,0.5,0.7,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.7,0.5,0.35,0.25,0.25,0.25]\n  export_price: 0.2\nequipment_power_w: 1500\ninterest_rate: 0.06\ncurrency: USD\nexchange_rate: 1.0\nspace:\n  timestep_s: 600\n  parameter_ranges: {}\n  objective: lcoe\n`
     }
 };
 
 function populatePresetDropdown() {
     const sel = document.getElementById('preset-select');
-    sel.innerHTML = '<option value="">-- Load Preset --</option>';
+    sel.innerHTML = `<option value="">${T('-- Load Preset --')}</option>`;
     Object.entries(BUILTIN_PRESETS).forEach(([id, p]) => {
         const opt = document.createElement('option');
         opt.value = id;
-        opt.textContent = p.label;
+        opt.textContent = T(p.label);
         sel.appendChild(opt);
     });
-    sel.addEventListener('change', (e) => {
-        const pid = e.target.value;
-        if (!pid || !BUILTIN_PRESETS[pid]) return;
-        loadPreset(pid);
-    });
+    sel.removeEventListener('change', _onPresetChange);
+    sel.addEventListener('change', _onPresetChange);
+}
+function _onPresetChange(e) {
+    const pid = e.target.value;
+    if (!pid || !BUILTIN_PRESETS[pid]) return;
+    loadPreset(pid);
 }
 
 function loadPreset(id) {
@@ -1886,7 +2384,7 @@ function loadPreset(id) {
     if (!p) return;
     initFormState(p.yaml);
     renderForm();
-    Toast.success('Loaded preset: ' + p.label);
+    Toast.success(T('Loaded preset: ') + T(p.label));
 }
 
 /* ================================================================
@@ -1895,6 +2393,7 @@ function loadPreset(id) {
 function runSimulation() {
     switchMode('perf');
     const yaml = generateYaml();
+    console.debug('=== Generated YAML ===\n' + yaml);
     updateShareURL();
     updateRunButton(true, 'Running...');
     showProgress();
@@ -1904,9 +2403,9 @@ function runSimulation() {
 function resetAll() {
     initFormState(null);
     renderForm();
-    updateRunButton(false, 'Run Simulation');
-    renderMockData();
-    Toast.info('Reset complete');
+    updateRunButton(false, T('Run Simulation'));
+    if (typeof Chart !== 'undefined') renderMockData();
+    Toast.info(T('Reset complete'));
 }
 
 /* ================================================================
@@ -1915,6 +2414,7 @@ function resetAll() {
 document.addEventListener('DOMContentLoaded', () => {
     applyTheme(localStorage.getItem('vfed_theme') || 'dark');
     document.getElementById('theme-toggle').addEventListener('click', () => applyTheme(document.documentElement.className === 'dark' ? 'light' : 'dark'));
+    document.getElementById('lang-select').addEventListener('change', (e) => setLang(e.target.value));
     document.getElementById('share-btn').addEventListener('click', copyShareLink);
     Toast.init();
     initWorker();
@@ -1929,16 +2429,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const stateStr = urlParams.get('state');
     if (stateStr && decodeState(stateStr)) {
-        Toast.info('Params restored from share link.');
+        Toast.info(T('Params restored from share link.'));
     } else {
         loadPreset('609');
     }
     bindSceneBarEvents();
-    renderMockData();
+    updateCurrencyLabels();
+    if (typeof Chart !== 'undefined') renderMockData();
 
     document.getElementById('run-btn').addEventListener('click', runSimulation);
     document.getElementById('reset-btn').addEventListener('click', resetAll);
-    Toast.info('VFED Design Explorer ready. Adjust parameters and run a simulation.');
+    // Apply saved language on initial page load
+    if (_lang === 'zh') refreshAllUI();
+    Toast.info(T('VFED Design Explorer ready. Adjust parameters and run a simulation.'));
 
     // Resizable sidebar — global listeners (no element blocking)
     (() => {

@@ -12,3 +12,13 @@ __pycache__/
 
 # Results (large data)
 results/
+
+# Code coverage
+.coverage
+htmlcov/
+
+# Node deps (vfed-web)
+node_modules/
+
+# Cached weather (regeneratable via fetch_weather)
+weather_cache/

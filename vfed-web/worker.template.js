@@ -34,8 +34,14 @@ async function initPyodide() {
                     await pyodide.loadPackage('micropip');
                     console.log('micropip loaded');
                 } catch (e) {
-                    console.error('micropip loadPackage failed, trying built-in:', e);
-                    // micropip may be built-in — verify via Python import
+                    // If micropip can't be loaded, verify it's available as built-in;
+                    // otherwise fail fast so the app doesn't half-init.
+                    try {
+                        await pyodide.runPythonAsync('import micropip');
+                        console.log('micropip is built-in, OK');
+                    } catch (_) {
+                        throw new Error('micropip is required but could not be loaded: ' + e.message);
+                    }
                 }
 
                 self.postMessage({ type: 'status', message: 'Loading numpy, pandas...' });
@@ -78,6 +84,8 @@ from src.design.engine import DesignEngine
                 self.postMessage({ type: 'ready' });
             } catch (e) {
                 console.error('Init error:', e);
+                pyodide = null;        // reset so retry is possible
+                initPromise = null;
                 self.postMessage({ type: 'error', message: String(e) });
                 throw e;
             }
@@ -111,9 +119,8 @@ async function fetchWeatherToCache(projectYaml) {
     url.searchParams.set('longitude', lon);
     url.searchParams.set('start_date', `${year}-01-01`);
     url.searchParams.set('end_date', `${year}-12-31`);
-    url.searchParams.set('hourly', 'temperature_2m,relative_humidity_2m,wind_speed_10m,shortwave_radiation,direct_radiation,diffuse_radiation');
+    url.searchParams.set('hourly', 'temperature_2m,relative_humidity_2m,surface_pressure,shortwave_radiation,direct_radiation,diffuse_radiation');
     url.searchParams.set('timezone', 'UTC');
-    url.searchParams.set('wind_speed_unit', 'ms');
 
     const resp = await fetch(url.toString());
     if (!resp.ok) throw new Error(`Weather API returned ${resp.status}`);
@@ -121,7 +128,7 @@ async function fetchWeatherToCache(projectYaml) {
     const hourly = data.hourly;
 
     // Build CSV (UTC → local time)
-    const lines = ['timestamp,temperature_2m,relative_humidity_2m,wind_speed_10m,shortwave_radiation,direct_radiation,diffuse_radiation'];
+    const lines = ['timestamp,temperature_2m,relative_humidity_2m,surface_pressure,shortwave_radiation,direct_radiation,diffuse_radiation'];
     for (let i = 0; i < hourly.time.length; i++) {
         const d = new Date(hourly.time[i] + 'Z');
         d.setUTCHours(d.getUTCHours() + Math.round(tz));
@@ -130,7 +137,7 @@ async function fetchWeatherToCache(projectYaml) {
             ts,
             hourly.temperature_2m[i],
             hourly.relative_humidity_2m[i],
-            hourly.wind_speed_10m[i],
+            hourly.surface_pressure?.[i] ?? 1013.25,
             hourly.shortwave_radiation?.[i] ?? 0,
             hourly.direct_radiation?.[i] ?? 0,
             hourly.diffuse_radiation?.[i] ?? 0,

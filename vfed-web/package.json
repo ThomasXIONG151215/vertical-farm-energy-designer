@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "main": "test.js",
   "scripts": {
+    "build": "python bundle.py",
+    "deploy": "npm run build && npx wrangler pages deploy --project-name vfed-web --branch main .",
+    "start": "python -m http.server 8000 --directory .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
