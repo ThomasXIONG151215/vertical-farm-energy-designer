@@ -113,6 +113,7 @@ class HVACConfig:
     min_off_s: float = 180.0
     fan_power_w: float = 70.0
     shr_BF: float = 0.15
+    t_coil_drop: float = 9.0   # supply-air temperature depression T_supply = T_setpoint - t_coil_drop (real ACs ~8-12°C)
     tau_q: float = 90.0
     tau_m: float = 60.0
     eta_II: float = 0.35

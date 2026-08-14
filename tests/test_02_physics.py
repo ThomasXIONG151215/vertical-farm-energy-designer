@@ -112,6 +112,19 @@ class TestSHR:
         result = shr.calc_shr(24.0, 50.0, 12.0)
         assert 0.0 <= result <= 1.0, f"SHR out of bounds: {result}"
 
+    def test_shr_fallback_uses_instance_t_coil_drop(self):
+        """calc_shr_fallback reads t_coil_drop from the instance by default."""
+        from src.physics.shr import DynamicSHR
+
+        shr = DynamicSHR(t_coil_drop=9.0)
+        assert shr.t_coil_drop == 9.0
+        s_default = shr.calc_shr_fallback(24.0, 65.0, 22.0)
+        s_explicit = shr.calc_shr_fallback(24.0, 65.0, 22.0, T_coil_drop=9.0)
+        assert s_default == s_explicit
+        # A colder coil (larger drop) dehumidifies more -> lower SHR
+        s_cold = DynamicSHR(t_coil_drop=14.0).calc_shr_fallback(24.0, 65.0, 22.0)
+        assert s_cold < s_default
+
 
 # ---------------------------------------------------------------------------
 # 2.4  Engine — energy is non-negative

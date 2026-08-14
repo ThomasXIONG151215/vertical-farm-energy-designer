@@ -88,6 +88,19 @@ class TestFromDictErrors:
         assert p.hvac.delta_T_evap == pytest.approx(8.0)
         assert p.hvac.delta_T_cond == pytest.approx(15.0)
 
+    def test_t_coil_drop_round_trip(self):
+        """Supply-air coil depression survives YAML round-trip."""
+        d = {"hvac": {"t_coil_drop": 12.0}}
+        p = DesignProject.from_dict(d)
+        assert p.hvac.t_coil_drop == pytest.approx(12.0)
+        p2 = DesignProject.from_dict(p.to_dict())
+        assert p2.hvac.t_coil_drop == pytest.approx(12.0)
+
+    def test_t_coil_drop_default(self):
+        """t_coil_drop defaults to 9 degC (real AC supply-air drop)."""
+        p = DesignProject.from_dict({"hvac": {}})
+        assert p.hvac.t_coil_drop == pytest.approx(9.0)
+
     def test_auto_size_defaults(self):
         """HVAC and DEH auto_size defaults to False."""
         p = DesignProject.from_dict({"hvac": {}, "deh": {}})

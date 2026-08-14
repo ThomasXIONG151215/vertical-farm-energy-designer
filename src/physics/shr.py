@@ -35,6 +35,7 @@ class DynamicSHR:
     shr_min: float = 0.45
     shr_max: float = 1.00
     P_atm: float = 101.325    # kPa
+    t_coil_drop: float = 9.0  # default supply-air depression (T_supply = T_setpoint - t_coil_drop)
 
     def calc_shr(self, T_return: float, RH_return: float, T_supply: float) -> float:
         if T_supply >= T_return:
@@ -63,12 +64,15 @@ class DynamicSHR:
         return max(self.shr_min, min(self.shr_max, shr))
 
     def calc_shr_fallback(self, T_return: float, RH_return: float,
-                          T_setpoint: float, T_coil_drop: float = 9.0) -> float:
+                          T_setpoint: float, T_coil_drop: Optional[float] = None) -> float:
         """Estimate SHR without measured supply temperature.
 
         T_coil_drop approximates the supply-air temperature depression
         (T_supply = T_setpoint - T_coil_drop).  Real split/unit ACs run
         supply-air drops of ~8-12 degC depending on fan speed; 9 degC is a
         mid-range value (a too-cold coil removes too much moisture).
+        Falls back to ``self.t_coil_drop`` when not passed explicitly.
         """
+        if T_coil_drop is None:
+            T_coil_drop = self.t_coil_drop
         return self.calc_shr(T_return, RH_return, T_setpoint - T_coil_drop)

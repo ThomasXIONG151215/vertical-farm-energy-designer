@@ -114,7 +114,8 @@ def _build_devices(p, P_atm: float = 101.325):
         heat_mode=p.hvac.heat_mode, P_rated_heat_w=P_rated_heat,
         deadband_c=p.hvac.deadband_c, min_on_s=p.hvac.min_on_s,
         min_off_s=p.hvac.min_off_s, fan_power_w=p.hvac.fan_power_w,
-        shr=DynamicSHR(BF=p.hvac.shr_BF, P_atm=P_atm),
+        shr=DynamicSHR(BF=p.hvac.shr_BF, P_atm=P_atm,
+                       t_coil_drop=p.hvac.t_coil_drop),
         tau_q=p.hvac.tau_q, tau_m=p.hvac.tau_m,
     )
 

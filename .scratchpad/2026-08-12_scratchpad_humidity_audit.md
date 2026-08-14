@@ -32,10 +32,11 @@
 
 - 调研完成度：100%（5 路并行调研 + 数值核算 + 最终报告已完结）
 - 负湿度根因：已确认（设备级无钳位 + ODE 只钳结果）
-- 修复状态：P0/P1 + A 级（A1/A2/A3）+ B 级（B1/B2/B3）修复已全部完成并通过全量测试（172 passed，覆盖率 75%）
-- 待办：~~B 级改动 git commit~~ ✅ 已随 e220645 提交；docs 同步已随 bf28941 提交；HEAD 当前 bf28941
+- 修复状态：P0/P1 + A 级（A1/A2/A3）+ B 级（B1/B2/B3）+ C 级收尾 + AC 除湿校准 已全部完成并通过全量测试（172 passed，覆盖率 75%）
+- 待办：~~B 级改动 git commit~~ ✅ 已随 e220645 提交；docs 同步已随 bf28941 提交；~~C 级收尾~~ ✅ 已随 25fa578 提交（另见 b357ea0）
 - 空调除湿校准（2026-08-14）：✅ 完成（shr.py T_coil_drop 14→9、shr_min 0.30→0.45，见下方记录章节）；C1/C2/C3/C4 收尾全部闭合；172 passed 无回归
-- 待办：本次 C 级收尾改动（shr.py / engine.py / dehumidifier.py）尚未 git commit，待用户确认后提交
+- 待办：~~本次 C 级收尾改动（shr.py / engine.py / dehumidifier.py）尚未 git commit~~ ✅ 已随 25fa578 提交（SHR floor/coil drop 随 b357ea0 提交）
+- T_coil_drop 配置化（2026-08-14）：✅ 完成（HVACConfig.t_coil_drop 字段 + DynamicSHR.t_coil_drop 实例字段，calc_shr_fallback 参数改为 Optional），相关测试通过
 
 ### 已完成任务（P0/P1 修复）
 
