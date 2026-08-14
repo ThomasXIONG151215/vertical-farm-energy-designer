@@ -6,10 +6,10 @@ Design orchestration — YAML project configuration, simulation engine, validate
 
 | File | Purpose |
 |------|---------|
-| `project.py` | Declarative design-project config (site, envelope, HVAC, DEH, LED, transpiration, PV, battery, tariff) serialised to/from YAML |
+| `project.py` | Declarative design-project config (site, envelope, HVAC, DEH, LED, transpiration, growth, PV, battery, tariff, space, opex, capital, currency) serialised to/from YAML |
 | `engine.py` | Core design engine — runs full digital-twin ODE simulation, produces hourly load profile + indoor climate timeseries |
 | `presets.py` | Pre-built presets: `preset_default()` and `preset_609()` (Fengxian lettuce PFAL) |
-| `sweep.py` | Design-space sweeper — enumerates PV area × battery capacity grid, returns LCOE-optimal design |
+| `sweep.py` | Design-space sweeper — enumerates `space.parameter_ranges` (any parameter within hard limits, e.g. PV area × battery capacity), returns the design minimising the configured objective (default LCOE) |
 
 ## Hub Module
 

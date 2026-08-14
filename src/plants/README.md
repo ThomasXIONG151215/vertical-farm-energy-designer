@@ -6,7 +6,7 @@ Plant biology models — transpiration (moisture source for the room ODE) and ca
 
 | File | Purpose |
 |------|---------|
-| `transpiration.py` | Transpiration model with 4 configurable methods: constant, VPD-driven, stomatal (Penman-Monteith), Van Henten |
+| `transpiration.py` | Transpiration model with 6 configurable methods: constant, daily, per_plant (direct-set); vpd, stomatal (Penman-Monteith style), van_henten (model-calculated) |
 | `van_henten.py` | Van Henten 2003 one-state carbon-balance growth model — dry weight driven by temperature, CO₂, and PAR |
 
 ## Dependencies

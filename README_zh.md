@@ -29,8 +29,8 @@
 | PFAL 负荷取决于气候、围护结构和光照计划 | 第一性原理 ODE 求解器 — 房间热湿平衡，无 EnergyPlus 依赖 |
 | 光伏输出随位置、倾角和天气变化 | 单二极管 PV 模型 + Open-Meteo 逐时天气数据 |
 | 电池容量是成本与自给率之间的权衡 | 对 (光伏面积 × 电池容量) 进行参数化扫描 → LCOE 最优设计 |
-| 电价结构影响经济性 | 分时电价模型（峰/平/谷定价） |
-| 植物蒸腾增加潜热负荷 | 4 种可配置蒸腾方法，从恒定到 Van Henten 生长模型 |
+| 电价结构影响经济性 | 分时电价模型（24 小时价格表 + 售电价格） |
+| 植物蒸腾增加潜热负荷 | 6 种可配置蒸腾方法 — 直接设定（constant / daily / per_plant）与模型计算（VPD / stomatal / Van Henten） |
 
 ## 快速开始
 
@@ -40,8 +40,8 @@
 git clone https://github.com/ThomasXIONG151215/vertical-farm-energy-designer.git
 cd vertical-farm-energy-designer
 pip install -e .
-# 或安装所有可选依赖：
-pip install -e ".[all]"
+# 或安装开发/测试依赖：
+pip install -e ".[dev]"
 ```
 
 ### 创建设计
@@ -50,23 +50,21 @@ pip install -e ".[all]"
 vfed design new my_farm --preset 609 --lat 30.9 --lon 121.5 --year 2023
 ```
 
-### 优化
-
-```bash
-vfed optimize my_farm.yaml --cache weather_cache --out results.csv
-```
-
 ### 评估配置
 
 ```bash
-vfed evaluate my_farm.yaml --pv-area 120 --battery 40
+vfed evaluate my_farm.yaml --cache weather_cache
 ```
 
-### 参数化扫描
+对单一配置运行建筑仿真，报告年负荷、生物量与能耗强度（kWh/kg）。若项目声明了 `pv` / `battery`，还会报告光伏发电量与电网购电/售电量。
+
+### 参数化扫描（光伏-电池容量优化）
 
 ```bash
-vfed sweep my_farm.yaml --out sweep_results.csv
+vfed sweep my_farm.yaml --cache weather_cache --out results.csv
 ```
+
+枚举 `space.parameter_ranges` 中声明的参数范围（如光伏面积 × 电池容量），返回使目标最小化的设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh`。没有单独的 `optimize` 命令；容量优化通过 `sweep` 完成。
 
 ## 架构
 
@@ -103,7 +101,7 @@ vertical-farm-energy-designer/
 │   ├── pvbes/              # 光伏（单二极管）、电池（Zhao 2024）、电网（分时）、能源系统
 │   ├── design/             # 项目配置（YAML）、引擎、预设、扫描
 │   ├── weather/            # Open-Meteo 接口、Erbs GHI 分解、POA、地理编码
-│   ├── plants/             # 蒸腾（4 种方法）、Van Henten 生长模型
+│   ├── plants/             # 蒸腾（6 种方法）、Van Henten 生长模型
 │   ├── agent/              # 评估器（保留 agent-cli 错误码契约）
 │   └── cli.py              # CLI 入口：vfed
 ├── research/               # 论文归档代码与数据（见下）
@@ -129,9 +127,10 @@ vertical-farm-energy-designer/
 |------|------|
 | `vfed design new <name>` | 从预设创建新的 YAML 项目文件 |
 | `vfed design presets` | 列出可用预设 |
-| `vfed optimize <project.yaml>` | 为项目优化光伏-电池系统 |
-| `vfed evaluate <project.yaml>` | 评估特定光伏-电池配置 |
-| `vfed sweep <project.yaml>` | 对光伏面积 × 电池容量进行参数化扫描 |
+| `vfed design cities` | 列出内置城市 |
+| `vfed design tariffs` | 列出内置电价 |
+| `vfed evaluate <project.yaml>` | 对单一配置运行建筑仿真 |
+| `vfed sweep <project.yaml>` | 对 `space.parameter_ranges`（如光伏面积 × 电池容量）进行参数化扫描 |
 
 ## 配置
 
@@ -139,13 +138,17 @@ vertical-farm-energy-designer/
 
 - **site** — 纬度、经度、年份、时区
 - **envelope** — 传热系数、面积、太阳吸收率、透湿率
-- **hvac** — 额定制冷量、COP、设定点
-- **dehumidifier** — 额定容量、相对湿度设定点、效率模型
+- **hvac** — 额定制冷量、COP 模式（carnot / constant / linear / table）、设定点
+- **deh** — 除湿机额定容量、相对湿度设定点、效率模型
 - **led** — PPFD、光效、光周期计划
-- **transpiration** — 方法（constant / VPD / Penman-Monteith / Van Henten）
+- **transpiration** — 方法（constant / daily / per_plant / vpd / stomatal / van_henten）
+- **growth** — Van Henten 生长模型参数
 - **pv** — 面板效率、NOCT、倾角、方位角
 - **battery** — 容量、C-rate、往返效率、SOC 限制
-- **tariff** — 峰/平/谷电价
+- **tariff** — 24 小时价格表（`hourly_prices`）+ 售电价格
+- **space** — 可选扫描参数范围与目标（`lcoe` / `kwh_per_kg_fresh` / `cost_per_kg_fresh`）
+- **opex / equipment_capital / envelope_capital / pump_capital** — 资本与运营成本输入
+- **currency / exchange_rate** — 成本报告的货币设置
 
 ## 贡献
 

@@ -9,16 +9,17 @@ Vertical Farm Energy Designer (VFED) is a parametric, config-driven design simul
 ```bash
 # Install
 pip install -e .
-pip install -e ".[all]"
+pip install -e ".[dev]"   # dev/test extras
 
 # Design
 vfed design new <name> --preset 609 --lat N --lon N --year YYYY
 vfed design presets
+vfed design cities
+vfed design tariffs
 
-# Optimise / Evaluate / Sweep
-vfed optimize <project.yaml> --cache weather_cache --out results.csv
-vfed evaluate <project.yaml> --pv-area N --battery M
-vfed sweep <project.yaml> --out sweep_results.csv
+# Evaluate / Sweep (there is no separate `optimize` command — PVBES sizing is done via sweep)
+vfed evaluate <project.yaml> --cache weather_cache
+vfed sweep <project.yaml> --cache weather_cache --out results.csv
 
 # Tests
 pytest
@@ -43,10 +44,9 @@ pytest --cov=src
 - **No EnergyPlus dependency** — pure Python ODE solver (`src/physics/ode.py`).
 - **Python >= 3.8** — core deps: `numpy`, `pandas`, `pyyaml`, `requests`.
 - **`src/design/engine.py` is the hub** — it imports from every other module. Changes to physics/devices/plants/weather may affect it.
-- **Strategy modes are exactly 4** — `default` / `conservative` / `progressive` / `aggressive`. No fifth.
+- **Strategy/scenario modes are NOT implemented** — the 4 strategy modes (`default` / `conservative` / `progressive` / `aggressive`) exist only as a *planned* feature documented in the `src/design/project.py` docstring. Do not add or reference a `strategy:` config field.
 - **HVAC COP mode is 4** — `carnot` (default: η_II × T_evap/(T_cond-T_evap)), `constant`, `linear`, `table`. Carnot depends on both indoor and outdoor temperature.
 - **Transpiration method is 6** — 3 model-calculated (`vpd`, `stomatal`, `van_henten`) + 3 direct-set (`constant`, `daily`, `per_plant`).
-- **Scenario/routine logic stays isolated** from energy-optimisation code and from the data layer.
 
 ## Boundaries
 

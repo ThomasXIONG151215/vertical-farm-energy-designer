@@ -56,7 +56,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer"
-Documentation = "https://opencrops.readthedocs.io"
+Documentation = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer"
 Repository = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer.git"
 Issues = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/issues"
 Discussions = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/discussions"
@@ -68,7 +68,6 @@ vfed = "src.cli:main"
 include = [
     "/src",
     "/tests",
-    "/docs",
     "/data",
 ]
 

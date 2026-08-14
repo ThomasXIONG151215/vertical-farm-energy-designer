@@ -13,5 +13,5 @@ Evaluation surface for the CLI — structured success/error-code payload preserv
 ```python
 from src.agent.evaluator import agent_evaluate
 
-result = agent_evaluate("my_farm.yaml", cache_dir="weather_cache", tlps_max=200)
+result = agent_evaluate("my_farm.yaml", cache_dir="weather_cache")
 ```

@@ -8,7 +8,7 @@ Integrated photovoltaic, battery energy storage, and grid tariff models for ener
 |------|---------|
 | `pv.py` | Single-diode PV model (SDM) at MPP with NOCT cell-temperature correction |
 | `battery.py` | Battery model — Zhao et al. 2024 parametric formulation, SOC tracking, C-rate limits |
-| `grid.py` | Time-of-use electricity tariff — peak/normal/valley pricing, annual cost & export credit |
+| `grid.py` | Time-of-use electricity tariff — 24-hour price schedule + export price, annual cost & export credit |
 | `energy_system.py` | Combined PV-Battery-Grid system — simulate performance, compute LCOE, TLPS, payback |
 
 ## Exports
