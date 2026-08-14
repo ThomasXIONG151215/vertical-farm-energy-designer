@@ -32,8 +32,8 @@
 
 - 调研完成度：100%（5 路并行调研 + 数值核算 + 最终报告已完结）
 - 负湿度根因：已确认（设备级无钳位 + ODE 只钳结果）
-- 修复状态：P0/P1 + A 级（A1/A2/A3）修复已全部完成并通过全量测试（169 passed，覆盖率 75%）
-- 待办：A 级改动 git commit（心理测量/植物/引擎/测试 5 文件单独提交）
+- 修复状态：P0/P1 + A 级（A1/A2/A3）+ B 级（B1/B2/B3）修复已全部完成并通过全量测试（172 passed，覆盖率 75%）
+- 待办：B 级改动 git commit（拟 "fix(humidity): B-level — sample-YAML k_vpd parity, auto-size transpiration delegation, stomatal LED-PAR response"；A 级已随 a72aa9f 提交，HEAD 当前 a72aa9f）
 
 ### 已完成任务（P0/P1 修复）
 
@@ -174,3 +174,40 @@
 ### Dashboard 状态补充
 - A1/A2/A3 修复：✅ 全部落盘，169 passed，覆盖率 75%
 - 待办：A 级 5 文件 git commit（工作区另有 vfed-web/cli/presets 等无关改动，需分开提交）
+
+---
+
+## 记录：B 级问题修复完成（2026-08-13）
+
+### 范围（用户确认：统一 k_vpd 到 2e-5）
+
+1. **B1 k_vpd 5 倍差** — 已完成
+   - 三个示例 YAML（test_project.yaml / example_lcoe_full.yaml / example_sweep.yaml）的 `transpiration.k_vpd` 从 0.0001（1e-4）改为 0.00002（2e-5），与代码默认对齐。
+   - 代码默认 2e-5 有文献依据（提交 1a985cb "lowered to 2e-5 per literature"）；1e-4 时蒸腾 ~389 L/day 偏高、默认 DEH 欠配。
+2. **B2 auto_size 选型方法错配** — 已完成
+   - `engine.py` `_build_devices` 中 TranspirationModel 构造提前到 auto_size 之前；
+   - auto_size 分支从"constant/daily/per_plant 分派 + else 用 k_vpd"重构为统一委托 `transp.step(T_sp, RH_sp, True, 3600.0, X_d=0.05)`（X_d=0.05 中期冠层干重，van_henten 用）；
+   - 选型与运行共用同一方法同一公式；顺带修正 constant 分支漏乘 stage_factor 的问题；compute_vpd 在 auto_size 不再使用（import 保留）。
+3. **B3 r_n_canopy 固定不随光强** — 已完成
+   - `transpiration.py` `step()` 签名加 `light_wm2: Optional[float] = None`；
+   - stomatal 分支 `R_n = light_wm2 if (light_wm2 is not None and light_wm2 > 0.0) else r_n_canopy*light_factor`；
+   - `engine.py` 主循环把 `light_wm2 = ppfd_target/par_factor`（实际 LED PAR，默认 87.5 W/m²）计算提前并在 transp.step 调用处传入。默认不传 light_wm2 → 行为不变（向后兼容）。
+
+### 测试（tests/test_03_numerical.py 追加 3 个）
+
+- `test_sample_yaml_k_vpd_matches_code_default`：3 个 YAML 的 k_vpd == 2e-5。
+- `test_auto_size_delegates_to_transpiration_model`：6 种蒸腾方法（vpd/stomatal/van_henten/constant/daily/per_plant+plant_count=100）auto_size=True 时 `_build_devices` 返回的 deh.P_ref > 0。
+- `test_stomatal_transpiration_follows_light`：light_wm2=87.5 时蒸腾 < legacy(r_n_canopy=250)；light_wm2=200 > 87.5；暗期传 light_wm2 仍为 0。
+
+### 验证
+
+- `tests/test_03_numerical.py`：**31 passed**（原 28 + B 级 3）。
+- 全量 pytest：**172 passed in ~62s**（原 169 + 3），覆盖率 75%，无回归。
+
+### Git
+
+- B 级改动**尚未提交**（本次同步后由主代理提交，commit message 拟 "fix(humidity): B-level — sample-YAML k_vpd parity, auto-size transpiration delegation, stomatal LED-PAR response"）。HEAD 当前 a72aa9f。
+
+### Dashboard 状态补充
+- B1/B2/B3 修复：✅ 全部落盘，172 passed（test_03 31 passed），覆盖率 75%
+- 待办：B 级改动 git commit（A 级已随 a72aa9f 提交）

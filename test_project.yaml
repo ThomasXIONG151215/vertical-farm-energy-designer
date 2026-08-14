@@ -83,7 +83,7 @@ led:
 transpiration:
   method: vpd
   E_max_kgs: 0.0001
-  k_vpd: 0.0001
+  k_vpd: 0.00002
   stage_factor: 1.0
   g_stomata: 0.001
 setpoints:

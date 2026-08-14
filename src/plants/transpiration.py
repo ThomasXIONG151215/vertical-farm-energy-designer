@@ -53,6 +53,7 @@ class TranspirationModel:
         is_light: bool,
         dt: float = 60.0,
         X_d: Optional[float] = None,   # kg/m²  (needed by "van_henten")
+        light_wm2: Optional[float] = None,  # PAR at canopy (W/m²), "stomatal"
     ) -> float:
         """Return transpiration rate E_trans (kg/s) for the whole canopy."""
         light_factor = 1.0 if is_light else 0.0
@@ -83,7 +84,10 @@ class TranspirationModel:
             r_s = 1.0 / max(1e-9, self.g_stomata)
             r_a = max(1.0, self.r_a)
             rho_cp = self.rho_cp()  # volumetric heat capacity, J/(m³·K) ≡ Pa/K
-            R_n = self.r_n_canopy * light_factor  # net canopy radiation (W/m²)
+            # Net canopy radiation follows the actual LED PAR when provided
+            # (B3 fix); r_n_canopy remains the fallback for direct model use.
+            R_n = (light_wm2 if (light_wm2 is not None and light_wm2 > 0.0)
+                   else self.r_n_canopy * light_factor)  # W/m²
             # Penman–Monteith: λE = (Δ·R_n + ρ·c_p·VPD/r_a) / (Δ + γ(1 + r_s/r_a))
             # Δ (kPa/K), γ (kPa/K) and VPD (kPa) must share ONE pressure unit.
             # With all three in kPa the ratio is invariant — the kPa and Pa

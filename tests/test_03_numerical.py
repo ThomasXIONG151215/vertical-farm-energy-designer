@@ -463,3 +463,64 @@ def test_engine_altitude_pressure_consistent():
     assert float(np.min(ts["RH_z"])) >= 0.0
     assert float(np.max(ts["RH_z"])) <= 100.0
     assert np.all(np.isfinite(ts["RH_z"]))
+
+
+# ---------------------------------------------------------------------------
+# 3.11  B-level fixes: sample-YAML k_vpd parity, auto-size delegation to the
+#       configured transpiration method, stomatal response to LED PAR
+# ---------------------------------------------------------------------------
+def test_sample_yaml_k_vpd_matches_code_default():
+    """B1 fix: example YAMLs must agree with the code default k_vpd=2e-5
+    (they previously used 1e-4 — a 5× discrepancy that under-sized the
+    default DEH against YAML-driven projects)."""
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    for fname in ("test_project.yaml", "example_lcoe_full.yaml",
+                  "example_sweep.yaml"):
+        with open(root / fname, encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh)
+        assert cfg["transpiration"]["k_vpd"] == pytest.approx(2.0e-5), fname
+
+
+def test_auto_size_delegates_to_transpiration_model():
+    """B2 fix: DEH auto-size must estimate the design moisture load with the
+    SAME configured transpiration method used at runtime.  stomatal and
+    van_henten previously fell back to the k_vpd shortcut, sizing the DEH
+    with the wrong method."""
+    from src.design.engine import _build_devices
+    from src.design.presets import preset_609
+
+    for method in ("vpd", "stomatal", "van_henten", "constant", "daily"):
+        p = preset_609()
+        p.transpiration.method = method
+        p.deh.auto_size = True
+        _, _, deh, _, _, _ = _build_devices(p)
+        assert deh.P_ref > 0.0, f"method={method}"
+
+    # per_plant needs a non-zero plant count for a positive design load.
+    p = preset_609()
+    p.transpiration.method = "per_plant"
+    p.transpiration.plant_count = 100
+    p.deh.auto_size = True
+    _, _, deh, _, _, _ = _build_devices(p)
+    assert deh.P_ref > 0.0
+
+
+def test_stomatal_transpiration_follows_light():
+    """B3 fix: stomatal transpiration must respond to the actual LED PAR
+    (light_wm2) instead of a fixed r_n_canopy; without light_wm2 the legacy
+    behaviour is preserved."""
+    from src.plants.transpiration import TranspirationModel
+
+    model = TranspirationModel(method="stomatal", area_m2=45.0)
+    T, RH = 25.0, 50.0
+
+    e_legacy = model.step(T, RH, True, 600.0)               # r_n_canopy=250
+    e_low = model.step(T, RH, True, 600.0, light_wm2=87.5)  # default PAR
+    e_high = model.step(T, RH, True, 600.0, light_wm2=200.0)
+
+    assert e_legacy > e_low              # 87.5 < 250 W/m² → less radiation
+    assert e_high > e_low                # stronger light → more transpiration
+    assert e_high < e_legacy
+    assert model.step(T, RH, False, 600.0, light_wm2=87.5) == 0.0

@@ -118,6 +118,20 @@ def _build_devices(p, P_atm: float = 101.325):
         tau_q=p.hvac.tau_q, tau_m=p.hvac.tau_m,
     )
 
+    transp = TranspirationModel(
+        method=p.transpiration.method, E_max_kgs=p.transpiration.E_max_kgs,
+        daily_water_L=p.transpiration.daily_water_L,
+        plant_count=p.transpiration.plant_count,
+        ml_per_plant_day=p.transpiration.ml_per_plant_day,
+        photoperiod_hours=p.led.photoperiod_hours,
+        k_vpd=p.transpiration.k_vpd,
+        k_van_henten=p.transpiration.k_van_henten,
+        stage_factor=p.transpiration.stage_factor,
+        g_stomata=p.transpiration.g_stomata,
+        r_a=p.transpiration.r_a,
+        r_n_canopy=p.transpiration.r_n_canopy,
+        area_m2=led.covered_area,
+    )
     P_ref = p.deh.P_ref_w
     if p.deh.M_deh_nom > 0:
         # New mode: nominal dehumidification (L/day) → reference power (W)
@@ -130,18 +144,12 @@ def _build_devices(p, P_atm: float = 101.325):
         RH_sp = p.setpoints.RH
         W_z = temp_rh_to_ah(T_sp, RH_sp)
         W_ext = temp_rh_to_ah(p.hvac.design_T_ext, 80.0)
-        VPD = compute_vpd(T_sp, RH_sp)
-        if p.transpiration.method == "constant":
-            m_transp = p.transpiration.E_max_kgs * led.covered_area
-        elif p.transpiration.method == "daily":
-            pph = max(p.led.photoperiod_hours, 0.1)
-            m_transp = p.transpiration.daily_water_L / (pph * 3600.0)
-        elif p.transpiration.method == "per_plant":
-            pph = max(p.led.photoperiod_hours, 0.1)
-            daily_L = p.transpiration.plant_count * p.transpiration.ml_per_plant_day / 1000.0
-            m_transp = daily_L / (pph * 3600.0)
-        else:
-            m_transp = p.transpiration.k_vpd * VPD * led.covered_area
+        # Design-point transpiration is delegated to the SAME configured
+        # TranspirationModel used at runtime (B2 fix): constant/daily/
+        # per_plant/vpd/stomatal/van_henten are all handled by step().
+        # step() is evaluated at light-on with the T_light/RH setpoints;
+        # X_d=0.05 is a mid-cycle canopy dry weight (kg/m²) for "van_henten".
+        m_transp = transp.step(T_sp, RH_sp, True, 3600.0, X_d=0.05)
         m_dot = p.envelope.ach * p.envelope.V_room * p.envelope.rho_air / 3600.0
         m_inf = m_dot * max(0.0, W_ext - W_z)
         m_perm = p.envelope.permeance * max(0.0, W_ext - W_z)
@@ -156,20 +164,6 @@ def _build_devices(p, P_atm: float = 101.325):
         min_off_s=p.deh.min_off_s, fan_power_w=p.deh.fan_power_w,
         smer=p.deh.smer,
         tau_q=p.deh.tau_q, tau_m=p.deh.tau_m,
-    )
-    transp = TranspirationModel(
-        method=p.transpiration.method, E_max_kgs=p.transpiration.E_max_kgs,
-        daily_water_L=p.transpiration.daily_water_L,
-        plant_count=p.transpiration.plant_count,
-        ml_per_plant_day=p.transpiration.ml_per_plant_day,
-        photoperiod_hours=p.led.photoperiod_hours,
-        k_vpd=p.transpiration.k_vpd,
-        k_van_henten=p.transpiration.k_van_henten,
-        stage_factor=p.transpiration.stage_factor,
-        g_stomata=p.transpiration.g_stomata,
-        r_a=p.transpiration.r_a,
-        r_n_canopy=p.transpiration.r_n_canopy,
-        area_m2=led.covered_area,
     )
     ode = RoomODESolver(C_z=p.envelope.C_z, V_room=p.envelope.V_room,
                         rho_air=p.envelope.rho_air, P_atm=P_atm)
@@ -310,10 +304,11 @@ class DesignEngine:
                                T_setpoint=T_sp,
                                T_heat_setpoint=p.setpoints.T_dark)
                 dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH)
-                E_trans = transp.step(T_z, RH_z, is_light_h, dt, X_d=X_d)
-                total_water_kg += E_trans * dt
                 light_wm2 = (p.led.ppfd_target / led.par_factor
                              if is_light_h else 0.0)
+                E_trans = transp.step(T_z, RH_z, is_light_h, dt, X_d=X_d,
+                                      light_wm2=light_wm2)
+                total_water_kg += E_trans * dt
                 _, X_d = grow.step(T_z, light_wm2, X_d, dt)
                 W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h], pressure_kpa=P_atm)
                 Q_wall = env.Q_wall(T_ext[h], T_z)
