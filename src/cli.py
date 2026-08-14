@@ -146,7 +146,7 @@ def _cmd_sweep(args):
     obj_labels = {
         "lcoe": "LCOE",
         "kwh_per_kg_fresh": "kWh/kg (fresh)",
-        "cost_per_kg_fresh": "$/kg (fresh)",
+        "cost_per_kg_fresh": "Cost/kg (fresh)",
     }
     obj_label = obj_labels.get(objective, objective)
     n_configs = len(results)
@@ -156,7 +156,7 @@ def _cmd_sweep(args):
     lcoe = best.get("lcoe", float("inf"))
     cpk = best.get("cost_per_kg_fresh", float("inf"))
     print(f"    LCOE                    = {lcoe:.4f} {currency}/kWh")
-    print(f"    $/kg (fresh)            = {cpk:.4f} {currency}/kg")
+    print(f"    Cost/kg (fresh)        = {cpk:.4f} {currency}/kg")
     print(f"    kWh/kg (fresh)          = {best.get('kwh_per_kg_fresh', 0):.1f}")
 
     # capital breakdown

@@ -280,7 +280,6 @@ def sweep_design(project: DesignProject,
     # ── setup ─────────────────────────────────────────────────────────────
     engine = DesignEngine(cache_dir=cache_dir)
     es = _build_energy_system(project) if pvb_names else None
-    maintenance_rate = es.maintenance if es else 0.01
 
     rows: List[dict] = []
     best: Optional[dict] = None
@@ -303,7 +302,11 @@ def sweep_design(project: DesignProject,
                     )
                     cap = _total_capital(p, A_pv, E_bat)
                     annual_cap = _annualized_capital(p, cap)
-                    annual_om = cap["total"] * maintenance_rate
+                    annual_water_m3 = float(sim.summary.get("annual_water_m3", 0.0))
+                    annual_om = (p.opex.maintenance_pct * cap["total"]
+                                 + p.opex.water_cost_per_m3 * annual_water_m3
+                                 + p.opex.labor_cost_per_year
+                                 + p.opex.misc_opex_per_year)
                     net_grid = m["annual_grid_cost"]
                     lcoe = _compute_lcoe(annual_cap, annual_om, net_grid, annual_load)
                     cost_kg = _compute_cost_per_kg_fresh(
@@ -341,7 +344,11 @@ def sweep_design(project: DesignProject,
         else:
             cap = _total_capital(p, 0, 0)
             annual_cap = _annualized_capital(p, cap)
-            annual_om = cap["total"] * maintenance_rate
+            annual_water_m3 = float(sim.summary.get("annual_water_m3", 0.0))
+            annual_om = (p.opex.maintenance_pct * cap["total"]
+                         + p.opex.water_cost_per_m3 * annual_water_m3
+                         + p.opex.labor_cost_per_year
+                         + p.opex.misc_opex_per_year)
             lcoe = _compute_lcoe(annual_cap, annual_om, 0.0, annual_load)
             cost_kg = _compute_cost_per_kg_fresh(
                 annual_cap, annual_om, 0.0, biomass_kg,

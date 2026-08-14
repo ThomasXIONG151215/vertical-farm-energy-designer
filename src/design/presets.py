@@ -19,7 +19,7 @@ def preset_609() -> DesignProject:
     """Fengxian lettuce PFAL reference (digital-twin calibrated parameters)."""
     return DesignProject(
         name="fengxian_lettuce_609",
-        site=SiteConfig(lat=30.9, lon=121.5, tz_hours=8.0, year=2023),
+        site=SiteConfig(lat=30.9, lon=121.5, tz_hours=8.0, city="Shanghai"),
         envelope=EnvelopeConfig(
             U_wall_A=125.3,
             A_window=0.0,

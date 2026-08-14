@@ -45,6 +45,8 @@ class SimulationResult:
     """
 
     project_name: str
+    currency: str = "USD"
+    exchange_rate: float = 1.0
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
     # ── summary KPIs ──────────────────────────────────────────────
@@ -110,6 +112,8 @@ class SimulationResult:
         raw = {
             "version": "1.0",
             "project_name": self.project_name,
+            "currency": self.currency,
+            "exchange_rate": self.exchange_rate,
             "timestamp": self.timestamp,
             "summary": _ensure_json_safe(self.summary),
             "climate": _ensure_json_safe(self.climate),
@@ -194,6 +198,8 @@ class SimulationResult:
         """Create from a dict produced by :meth:`to_dict`."""
         return cls(
             project_name=d.get("project_name", "unnamed"),
+            currency=d.get("currency", "USD"),
+            exchange_rate=d.get("exchange_rate", 1.0),
             timestamp=d.get("timestamp", ""),
             summary=d.get("summary", {}),
             climate=d.get("climate", {}),
@@ -208,7 +214,7 @@ class SimulationResult:
 # self-check (run: python -m src.design.result)
 # ---------------------------------------------------------------------------
 def _demo():
-    r = SimulationResult(project_name="test_demo")
+    r = SimulationResult(project_name="test_demo", currency="CNY", exchange_rate=7.2)
     r.summary = {"annual_energy_kwh": 1e5, "specific_cost": 2.4}
     r.climate = {"city": "Shanghai", "annual_avg_temp_c": 17.2}
     r.timeseries = {"T_z": [22.0, 22.1], "load_kw": [10.0, 10.5]}
@@ -224,6 +230,8 @@ def _demo():
     d = r.to_dict()
     r2 = SimulationResult.from_dict(d)
     assert r2.project_name == "test_demo"
+    assert r2.currency == "CNY"
+    assert r2.exchange_rate == 7.2
     assert r2.summary["annual_energy_kwh"] == 100000.0
     assert r2.climate["city"] == "Shanghai"
     assert r2.timeseries["T_z"] == [22.0, 22.1]
