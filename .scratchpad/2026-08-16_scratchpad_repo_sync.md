@@ -23,6 +23,7 @@
 | 3 | 执行调整（git mv 旧 scratchpad 至 .scratchpad/，删 .cursor） | done | 2 |
 | 4 | 提交 REVIEW.md + 相关 scratchpad 变更 | done | 3 |
 | 5 | push 到 origin/main 并验证同步 | done | 4 |
+| 6 | 审查并推送 REVIEW 修复提交（3 个，本地领先 origin/main） | in progress | 5 |
 
 并行组：`[3]` 单线执行；`3 → 4 → 5` 顺序。
 
@@ -38,11 +39,12 @@
 
 ### Git 状态
 
-- 提交：`c2909cc`（docs(meta): consolidate scratchpads under .scratchpad, add architecture review report）
-- 推送：`bb23745..c2909cc main -> main`，本地与 origin/main 一致，工作树干净
+- 已推送：`c2909cc`（consolidate scratchpads）+ `ca48275`（sync repo_sync status），`bb23745..ca48275`
+- 待推送（本任务）：`2166319`（fix(review) 主修复：潜热/太阳时/DEH 风机热/TLPS/LCOE/PV 铭牌，177 tests）→ `934f595`（docs: mark 6 fixes done）→ `8b0b48a`（fix(review) A/B/D/C 组：PV 系数、COP guards、DEH sizing、潜热 h_fg(T)、水平衡校准，**197 tests pass**）
+- REVIEW 6 项修复全部完成；code_review scratchpad 已同步 done（934f595），新增 `2026-08-16_scratchpad_review_round2.md`
 
 ## 5. Executor Feedback or Help Requests
 
 1. **mainrepo 含义待确认**：仓库无同名 remote/目录，推断为 origin/main（GitHub: ThomasXIONG151215/vertical-farm-energy-designer）。
 2. **待用户决策**：`.cursor/mems/` 13 个旧 scratchpad（已跟踪）——(A) `git mv` 迁移到 `.scratchpad/` 统一管理；(B) 保留 `.cursor/mems` 作为历史归档并在 AGENTS.md/.scratchpad 说明关系。推荐 A。
-3. **遗留状态**：REVIEW.md + code_review scratchpad 尚未提交，是否随本次同步一并提交待用户确认。
+3. **遗留状态**：REVIEW.md + code_review scratchpad 已提交（c2909cc）。REVIEW 6 项修复已完成并通过 pytest（197 passed），3 个修复 commit 待推送。
