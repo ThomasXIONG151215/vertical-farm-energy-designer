@@ -4,7 +4,8 @@ Integrated PV-Battery-Grid energy system.
 Combines the PV single-diode model, the battery dispatch model and the TOU
 tariff to evaluate a given (PV area, battery capacity) design against a building
 load profile. Produces the same metrics the reused ``EnergySystem`` delivers:
-LCOE, TLPS, capital cost, annual savings, payback period.
+TLPS, capital cost, annual savings, payback period. (LCOE is computed centrally
+in ``sweep._compute_lcoe`` with per-component CRF, not here.)
 """
 
 from dataclasses import dataclass, field
@@ -50,23 +51,14 @@ class EnergySystem:
             "grid_import": grid_import,
             "grid_export": grid_export,
             "load": load,
-            "power_deficit": np.maximum(0.0, load - pv_power),
+            # Loss-of-power (islanded view): load that cannot be met by PV +
+            # battery discharge together. Grid import is not subtracted — on a
+            # connected grid import is always available, so this quantity is the
+            # residual unmet load that would remain in an islanded scenario.
+            "power_deficit": np.maximum(0.0, load - pv_power - battery_discharge),
         }
 
     # ---- metrics --------------------------------------------------------
-    def calculate_lcoe(self, capital_cost, annual_om, annual_grid_cost,
-                        annual_energy) -> float:
-        i = self.interest_rate
-        N = max(self.lifetime, 1)
-        if abs(i) < 1e-12:
-            crf = 1.0 / N
-        else:
-            crf = i * (1 + i) ** N / ((1 + i) ** N - 1)
-        annualized = crf * capital_cost + annual_om + annual_grid_cost
-        if annual_energy <= 0:
-            return float("inf")
-        return annualized / annual_energy
-
     def calculate_metrics(self, x, weather: Dict[str, np.ndarray],
                           load: np.ndarray, dt: float = 1.0,
                           year: int = 0) -> Dict[str, float]:
@@ -90,12 +82,14 @@ class EnergySystem:
         payback = (capital_cost / annual_savings) if annual_savings > 0 else float("inf")
 
         annual_load = float(np.sum(load))
-        lcoe = self.calculate_lcoe(capital_cost, annual_om, net_grid_cost, annual_load)
+        # NOTE: LCOE is intentionally NOT computed here — it is computed
+        # centrally by ``sweep._compute_lcoe`` (per-component CRF depreciation
+        # years) so that the sweep and engine code paths share one definition.
+        # A single-lifetime CRF here would silently disagree with that.
 
         tlps = float(np.mean(perf["power_deficit"] > 0.0)) * 100.0
 
         return {
-            "lcoe": lcoe,
             "tlps": tlps,
             "capital_cost": capital_cost,
             "annual_om": annual_om,

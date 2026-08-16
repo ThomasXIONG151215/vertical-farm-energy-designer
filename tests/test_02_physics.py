@@ -163,3 +163,41 @@ class TestEngineOutputs:
         RH = ts["RH_z"].values
         assert RH.min() >= 0.0, f"RH negative: {RH.min()}"
         assert RH.max() <= 100.0, f"RH > 100: {RH.max()}"
+
+
+# ---------------------------------------------------------------------------
+# 2.5  Solar geometry — local solar time sign correctness
+# ---------------------------------------------------------------------------
+class TestSolarGeometry:
+    """Regression tests for weather_bridge._solar_geometry.
+
+    The local-solar-time offset is LST = clock + (std_meridian - lon)/15, with
+    std_meridian = 15 * tz_hours. A pre-fix sign error (lon/15 - tz_hours)
+    shifted solar noon by ~2.2 h for sites far from the standard meridian
+    (e.g. Urumqi, 87.6°E, which uses Beijing time / UTC+8).
+    """
+
+    def test_solar_noon_urumqi_far_west_of_std_meridian(self):
+        """Urumqi (43.8N, 87.6E, tz=8): solar noon ≈ CST 09:50 (not 14:10)."""
+        import pandas as pd
+        from src.weather.weather_bridge import _solar_geometry
+
+        dt = pd.date_range("2023-06-21", periods=24, freq="h")
+        zenith, _ = _solar_geometry(lat=43.8, lon=87.6, tz_hours=8.0, dt=dt)
+        noon_hour = float(dt.hour.values[np.argmin(zenith)])
+        # CST noon = 12 - (120 - 87.6)/15 = 9.84 h
+        assert abs(noon_hour - 9.84) < 1.0, \
+            f"Urumqi solar noon at {noon_hour:.2f} CST, expected ~09:50"
+        # Zenith at solar noon ≈ |lat - decl| = 43.8 - 23.45 = 20.35 deg
+        assert np.min(zenith) < 25.0, f"noon zenith too high: {np.min(zenith):.1f}"
+
+    def test_solar_noon_shanghai_near_std_meridian(self):
+        """Shanghai (31.2N, 121.5E, tz=8): solar noon ≈ CST 12:06."""
+        import pandas as pd
+        from src.weather.weather_bridge import _solar_geometry
+
+        dt = pd.date_range("2023-06-21", periods=24, freq="h")
+        zenith, _ = _solar_geometry(lat=31.2, lon=121.5, tz_hours=8.0, dt=dt)
+        noon_hour = float(dt.hour.values[np.argmin(zenith)])
+        assert abs(noon_hour - 12.1) < 0.5, \
+            f"Shanghai solar noon at {noon_hour:.2f} CST, expected ~12:06"

@@ -8,6 +8,10 @@ Architecture:
     P_comp   = P_ref * poly(T, W) * S_DH
     m_DH     = SMER * P_comp / 3.6e6         (moisture removal, kg/s)
     Q_DH     = P_comp + m_DH * h_fg          (condenser heat released to room, W)
+                                             + fan_power_w (fan motor + friction heat,
+                                             stays in room — airflow returns to the
+                                             same space, see ENERGY STAR / Quest /
+                                             Anden spec sheets)
 
 S_DH is the on/off modulation driven by a humidity setpoint (hysteresis).
 Moisture removal is governed solely by SMER (Specific Moisture Extraction Rate,
@@ -127,7 +131,9 @@ class DEHDevice:
             m_dh = self.smer * P_comp / 3.6e6
             Q_dh = P_comp + m_dh * self.h_fg
             P_elec = P_comp + self.fan_power_w
-            Q_target = Q_dh
+            # Fan motor + air friction heat is released into the room airflow
+            # (dehumidifier exhausts into the same space) → include in Q_target.
+            Q_target = Q_dh + self.fan_power_w
             M_target = m_dh
             eta = m_dh * self.h_fg / max(P_comp, 1e-6)  # latent COP for reporting
 

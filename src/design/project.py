@@ -223,8 +223,8 @@ class PVConfig:
     N_s: int = 156
     I_sc_stc: float = 13.98
     V_oc_stc: float = 57.34
-    I_mp_stc: float = 13.33
-    V_mp_stc: float = 46.0
+    I_mp_stc: float = 12.66
+    V_mp_stc: float = 45.85
     alpha_sc: float = 0.00045
     beta_voc: float = -0.25
     NOCT: float = 45.0

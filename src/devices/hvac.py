@@ -154,7 +154,12 @@ class HVACDevice:
             shr = self.shr.calc_shr_fallback(T_return=T_z, RH_return=RH_z,
                                               T_setpoint=T_setpoint)
             Q_lat = (1.0 - shr) * Q_total
-            Q_target = -(Q_total - self.comp.fan_power_w)
+            # Only the sensible portion cools the air in the T-equation.  The
+            # latent portion is removed as moisture (M_target -> W-equation),
+            # and its condensation heat is rejected at the outdoor condenser
+            # (T_cond = T_ext).  Counting Q_lat in Q_target as well would
+            # double-count the latent removal in the room enthalpy balance.
+            Q_target = -(shr * Q_total - self.comp.fan_power_w)
             M_target = Q_lat / self.h_fg
         elif on and mode == "heat":
             P_elec = self.P_rated_heat + self.comp.fan_power_w

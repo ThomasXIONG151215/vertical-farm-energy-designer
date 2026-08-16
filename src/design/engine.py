@@ -335,12 +335,15 @@ class DesignEngine:
                 M_hvac_nom = hv["M_hvac_kgs"]
                 M_deh_act, M_hvac_act, removal_scale = _limit_removal_by_inventory(
                     M_deh_nom, M_hvac_nom, W_z, air_mass, dt)
-                # Heat-balance correction: the capped moisture would have
-                # released L_v into the room via the DEH condenser (+), or been
-                # carried out of the room as latent heat by the HVAC (−).  Back
-                # both out proportionally to the capped removal.
-                q_removal_corr = (1.0 - removal_scale) * (
-                    M_hvac_nom - M_deh_nom) * L_v
+                # Heat-balance correction: dh["Q_DH_W"] carries the nominal
+                # M_deh_nom*L_v of condensation heat, but only M_deh_act was
+                # actually condensed.  Back out the phantom
+                # (1-scale)*M_deh_nom*L_v.  The HVAC latent load needs no
+                # correction here: hv["Q_HVAC_W"] holds only the sensible
+                # portion, and the latent portion leaves via M_hvac_act in the
+                # humidity equation (condensation heat rejected at the outdoor
+                # condenser).
+                q_removal_corr = -(1.0 - removal_scale) * M_deh_nom * L_v
                 Q_total = (hv["Q_HVAC_W"] + dh["Q_DH_W"] + Q_LED +
                            Q_wall + Q_solar + Q_inf - E_trans * L_v
                            + q_removal_corr)

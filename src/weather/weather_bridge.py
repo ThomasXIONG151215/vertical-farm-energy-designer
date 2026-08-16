@@ -63,8 +63,10 @@ def _solar_geometry(lat: float, lon: float, tz_hours: float,
     """Return solar zenith and azimuth (degrees) for each timestamp."""
     lat_r = np.deg2rad(lat)
     doy = dt.dayofyear.values
-    # Local solar time correction (simplified, no equation-of-time refinement).
-    lst = dt.hour.values + dt.minute.values / 60.0 + (lon / 15.0 - tz_hours)
+    # Local solar time = clock time + (standard meridian - local meridian)/15 h.
+    # Standard meridian = 15 * tz_hours, so offset = tz_hours - lon/15.
+    # (Simplified: no equation-of-time refinement.)
+    lst = dt.hour.values + dt.minute.values / 60.0 + (tz_hours - lon / 15.0)
     decl = np.deg2rad(23.45 * np.sin(np.deg2rad(360.0 * (284.0 + doy) / 365.0)))
     hour_angle = np.deg2rad(15.0 * (lst - 12.0))
     sin_alt = (np.sin(lat_r) * np.sin(decl) +

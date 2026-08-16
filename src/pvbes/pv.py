@@ -19,13 +19,17 @@ __all__ = ["PVSystem"]
 
 @dataclass
 class PVSystem:
-    eta_pv: float = 0.233          # module efficiency
+    # Informational only: module efficiency at STC (Jinko 78HL4-BDV ~0.23).
+    # MPP power is computed from I_mp x V_mp via the SDM below, so eta_pv does
+    # not enter the power calculation — kept as a config-contract field.
+    eta_pv: float = 0.233
     area_to_power: float = 4.3     # m^2 of module per kWp
     N_s: int = 156                 # cells in series
     I_sc_stc: float = 13.98        # A
     V_oc_stc: float = 57.34        # V
-    I_mp_stc: float = 13.33        # A
-    V_mp_stc: float = 46.0         # V (derived)
+    I_mp_stc: float = 12.66        # A  (JKM580N-78HL4-BDV nameplate)
+    V_mp_stc: float = 45.85        # V  (JKM580N-78HL4-BDV nameplate)
+                                   #    P_module_at_STC = 45.85*12.66 = 580.5 W
     alpha_sc: float = 0.00045      # /K  (relative, ~0.045 %/K for Jinko 78HL4-BDV)
     beta_voc: float = -0.25        # V/K
     NOCT: float = 45.0             # C
