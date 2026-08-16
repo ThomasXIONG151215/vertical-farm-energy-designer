@@ -21,8 +21,8 @@
 | 1 | 创建本任务 scratchpad（本文件） | done | — |
 | 2 | 确认 .scratchpad/.cursor 调整方案（迁移 vs 归档） | done | 用户确认（选迁移） |
 | 3 | 执行调整（git mv 旧 scratchpad 至 .scratchpad/，删 .cursor） | done | 2 |
-| 4 | 提交 REVIEW.md + 相关 scratchpad 变更 | in progress | 3 |
-| 5 | push 到 origin/main 并验证同步 | pending | 4 |
+| 4 | 提交 REVIEW.md + 相关 scratchpad 变更 | done | 3 |
+| 5 | push 到 origin/main 并验证同步 | done | 4 |
 
 并行组：`[3]` 单线执行；`3 → 4 → 5` 顺序。
 
@@ -34,7 +34,12 @@
 | 本 scratchpad 创建 | done |
 | 方案确认（迁移 vs 归档） | done（用户选迁移） |
 | 执行调整（13 个 git mv + 删除 .cursor） | done |
-| commit + push 同步 | in progress |
+| commit + push 同步 | done |
+
+### Git 状态
+
+- 提交：`c2909cc`（docs(meta): consolidate scratchpads under .scratchpad, add architecture review report）
+- 推送：`bb23745..c2909cc main -> main`，本地与 origin/main 一致，工作树干净
 
 ## 5. Executor Feedback or Help Requests
 
