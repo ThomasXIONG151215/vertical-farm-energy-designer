@@ -123,6 +123,67 @@ class TestFromDictErrors:
         # Carnot fields get defaults
         assert p.hvac.eta_II == pytest.approx(0.35)
 
+    # ── PV temperature-coefficient dimension guards ──────────────────
+
+    def test_pv_alpha_sc_100x_error_rejected(self):
+        """alpha_sc=0.045 (100x the physical 0.00045 /K) must fail at load."""
+        with pytest.raises(ValueError, match="pv.alpha_sc"):
+            DesignProject.from_dict({"pv": {"alpha_sc": 0.045}})
+
+    def test_pv_beta_voc_absolute_value_rejected(self):
+        """beta_voc=-0.25 is an absolute V/K value — the model expects a
+        RELATIVE /K coefficient (~-0.0025), so -0.25 must fail at load."""
+        with pytest.raises(ValueError, match="pv.beta_voc"):
+            DesignProject.from_dict({"pv": {"beta_voc": -0.25}})
+
+    def test_pv_valid_coefficients_pass(self):
+        """Datasheet-consistent relative coefficients load cleanly."""
+        p = DesignProject.from_dict(
+            {"pv": {"alpha_sc": 0.00045, "beta_voc": -0.0025}})
+        assert p.pv.alpha_sc == pytest.approx(0.00045)
+        assert p.pv.beta_voc == pytest.approx(-0.0025)
+
+    # ── HVAC COP / coil guards ───────────────────────────────────────
+
+    def test_hvac_negative_cop_value_rejected(self):
+        """A negative COP would flip the cooling cycle into a heater."""
+        with pytest.raises(ValueError, match="hvac.cop_value"):
+            DesignProject.from_dict({"hvac": {"cop_mode": "constant",
+                                              "cop_value": -3.0}})
+
+    def test_hvac_negative_cop_heat_rejected(self):
+        with pytest.raises(ValueError, match="hvac.cop_heat"):
+            DesignProject.from_dict({"hvac": {"cop_heat": -1.0}})
+
+    def test_hvac_negative_cop_table_rejected(self):
+        """Negative table entries propagate through the linear interpolation."""
+        with pytest.raises(ValueError, match="hvac.cop_table"):
+            DesignProject.from_dict(
+                {"hvac": {"cop_mode": "table",
+                          "cop_table": {10: 3.0, 30: -0.5}}})
+
+    def test_hvac_unknown_cop_mode_rejected(self):
+        """An unknown cop_mode silently fell back to `return self.value`."""
+        with pytest.raises(ValueError, match="hvac.cop_mode"):
+            DesignProject.from_dict({"hvac": {"cop_mode": "quantum"}})
+
+    def test_hvac_shr_bf_one_rejected(self):
+        """BF=1.0 divides by zero in the BF-ADP coil model (shr.py T_adp)."""
+        with pytest.raises(ValueError, match="hvac.shr_BF"):
+            DesignProject.from_dict({"hvac": {"shr_BF": 1.0}})
+
+    def test_hvac_negative_eta_II_rejected(self):
+        with pytest.raises(ValueError, match="hvac.eta_II"):
+            DesignProject.from_dict({"hvac": {"eta_II": -0.1}})
+
+    def test_hvac_valid_cop_guards_pass(self):
+        """Healthy COP configuration loads cleanly."""
+        p = DesignProject.from_dict(
+            {"hvac": {"cop_mode": "table", "cop_value": 4.0,
+                      "cop_table": {10: 3.0, 30: 2.0}, "shr_BF": 0.15}})
+        assert p.hvac.cop_mode == "table"
+        assert p.hvac.shr_BF == pytest.approx(0.15)
+
     # ── Transpiration config ────────────────────────────────────────
 
     def test_transpiration_daily_params_round_trip(self):

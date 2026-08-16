@@ -238,6 +238,10 @@ def test_engine_over_dehumidification_never_negative_rh():
     p.setpoints.RH = 40.0
     p.deh.P_ref_w = 3000.0
     p.hvac.P_rated_w = 3000.0
+    # This test exercises the humidity-clamp robustness mechanism, not the
+    # transpiration calibration.  Fix k_vpd at the pre-C-round value so the
+    # aggressive small-room scenario stays thermally convergent.
+    p.transpiration.k_vpd = 2.0e-5
 
     # Deterministic synthetic weather: hot & dry outdoor all year.
     idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
@@ -313,6 +317,10 @@ def test_engine_reports_actual_dehumidification():
     p.setpoints.RH = 40.0
     p.deh.P_ref_w = 3000.0
     p.hvac.P_rated_w = 3000.0
+    # Same fix as test_engine_over_dehumidification_never_negative_rh: this
+    # test validates the accounting mechanism under an aggressive small-room
+    # scenario; fix k_vpd at the pre-C-round value for thermal convergence.
+    p.transpiration.k_vpd = 2.0e-5
 
     idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
     weather = pd.DataFrame({
@@ -353,7 +361,7 @@ def test_stomatal_pm_unit_invariance():
     kPa, which would overstate the aerodynamic term by 1000×."""
     from src.plants.transpiration import TranspirationModel
     from src.physics.psychrometrics import (
-        saturation_vapor_pressure, compute_vpd)
+        latent_heat_vaporization, saturation_vapor_pressure, compute_vpd)
 
     T, RH = 25.0, 50.0
     model = TranspirationModel(method="stomatal", area_m2=45.0)
@@ -370,7 +378,8 @@ def test_stomatal_pm_unit_invariance():
 
     numerator = delta * R_n + rho_cp * max(0.0, vpd) / r_a
     denominator = delta + gamma * (1.0 + r_s / r_a)
-    E_hand = (numerator / denominator) / model.h_fg * model.area_m2
+    # MINOR-7 (D): E_rate uses temperature-correlated latent heat at T_z.
+    E_hand = (numerator / denominator) / (latent_heat_vaporization(T) * 1000.0) * model.area_m2
 
     assert E_model == pytest.approx(E_hand, rel=1e-9)
 
@@ -447,6 +456,8 @@ def test_engine_altitude_pressure_consistent():
     p = preset_609()
     p.envelope.V_room = 80.0
     p.envelope.C_z = 50000.0
+    # Same k_vpd isolation as the small-room RH robustness tests above.
+    p.transpiration.k_vpd = 2.0e-5
 
     idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
     weather = pd.DataFrame({
@@ -470,9 +481,9 @@ def test_engine_altitude_pressure_consistent():
 #       configured transpiration method, stomatal response to LED PAR
 # ---------------------------------------------------------------------------
 def test_sample_yaml_k_vpd_matches_code_default():
-    """B1 fix: example YAMLs must agree with the code default k_vpd=2e-5
-    (they previously used 1e-4 — a 5× discrepancy that under-sized the
-    default DEH against YAML-driven projects)."""
+    """B1+C fix: example YAMLs must agree with the code default k_vpd=5e-5
+    (B1 unified 1e-4 -> 2e-5 across YAML/code; the C round recalibrated
+    2e-5 -> 5e-5 for a healthier model water balance)."""
     import yaml
 
     root = Path(__file__).resolve().parents[1]
@@ -480,7 +491,29 @@ def test_sample_yaml_k_vpd_matches_code_default():
                   "example_sweep.yaml"):
         with open(root / fname, encoding="utf-8") as fh:
             cfg = yaml.safe_load(fh)
-        assert cfg["transpiration"]["k_vpd"] == pytest.approx(2.0e-5), fname
+        assert cfg["transpiration"]["k_vpd"] == pytest.approx(5.0e-5), fname
+
+
+def test_sample_yaml_pv_params_match_code_default():
+    """A-fix: example YAML PV params must agree with the code defaults.
+
+    alpha_sc was 0.045 (100x the physical 0.00045 /K), inflating annual PV
+    yield ~1.7x; beta_voc was an absolute -0.25 V/K while the model treats it
+    as a RELATIVE coefficient (/K, datasheet ~-0.0025). I_mp/V_mp were the
+    wrong nameplate values (harmless due to module-count normalisation, but a
+    config-hygiene hazard)."""
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    for fname in ("test_project.yaml", "example_lcoe_full.yaml",
+                  "example_sweep.yaml"):
+        with open(root / fname, encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh)
+        pv = cfg["pv"]
+        assert pv["alpha_sc"] == pytest.approx(0.00045), fname
+        assert pv["beta_voc"] == pytest.approx(-0.0025), fname
+        assert pv["I_mp_stc"] == pytest.approx(12.66), fname
+        assert pv["V_mp_stc"] == pytest.approx(45.85), fname
 
 
 def test_auto_size_delegates_to_transpiration_model():

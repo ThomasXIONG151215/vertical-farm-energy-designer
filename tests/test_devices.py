@@ -89,6 +89,35 @@ def test_table_cop_empty():
     assert cop(25.0) == pytest.approx(4.0)
 
 
+# ── COPModel: runtime floors (defense-in-depth vs negative config) ──
+
+def test_constant_cop_negative_floor():
+    """A negative constant COP (bad config/programmatic build) must be
+    floored at 0.5 so the cooling cycle never flips into a heater."""
+    cop = COPModel(mode="constant", value=-3.0)
+    assert cop(35.0) == pytest.approx(0.5)
+
+
+def test_table_cop_negative_floor():
+    """Negative table entries are floored at 0.5 (including interpolation)."""
+    cop = COPModel(mode="table", table={10.0: 3.0, 30.0: -1.0})
+    assert cop(10.0) == pytest.approx(3.0)   # positive entry untouched
+    assert cop(30.0) == pytest.approx(0.5)   # negative endpoint floored
+    assert cop(20.0) == pytest.approx(1.0)   # interp (3.0 → -1.0) = 1.0 (still positive)
+
+
+def test_unknown_mode_negative_floor():
+    """Unknown mode falls back to `value` — floored at 0.5."""
+    cop = COPModel(mode="quantum", value=-2.0)
+    assert cop(30.0) == pytest.approx(0.5)
+
+
+def test_unknown_mode_default_value():
+    """Unknown mode with a sane value still returns that value."""
+    cop = COPModel(mode="quantum", value=3.5)
+    assert cop(30.0) == pytest.approx(3.5)
+
+
 # ── size_hvac() ──────────────────────────────────────────────────────
 
 def test_size_hvac_positive():
@@ -143,6 +172,40 @@ def test_size_hvac_low_cop_increases_p_rated():
     p_high_cop = size_hvac(cop=4.0, **args)
     p_low_cop = size_hvac(cop=2.0, **args)
     assert p_low_cop > p_high_cop
+
+
+def test_size_hvac_deh_net_heat_increases_p_rated():
+    """DEH net sensible heat (P_comp+fan) at the design point must be
+    included in the HVAC design load — otherwise auto-sizing understates
+    the nameplate."""
+    args = dict(
+        U_wall_A=0.35, A_window=10.0, eta_solar=0.7,
+        ach=0.5, V_room=5000, rho_air=1.2, cp_air=1005,
+        led_heat_w=3000, equipment_power_w=2000,
+        cop=3.0, T_setpoint=24.0, T_design_ext=35.0, GHI_design=800.0,
+        safety_factor=1.2,
+    )
+    p_no_deh = size_hvac(**args)
+    p_with_deh = size_hvac(deh_net_heat_w=2270.0, **args)
+    assert p_with_deh > p_no_deh
+    # sensible ratio check: +2270 W sensible → +2270/shr_design/COP*SF electrical
+    assert p_with_deh - p_no_deh == pytest.approx(
+        2270.0 / 0.80 / 3.0 * 1.2, rel=1e-6)
+
+
+def test_size_hvac_cold_outdoor_with_deh_heat_still_zero():
+    """Even with DEH heat, no cooling needed when design is cold and there
+    are no internal loads — the net-load floor still applies."""
+    p = size_hvac(
+        U_wall_A=0.35, A_window=10.0, eta_solar=0.7,
+        ach=0.5, V_room=5000, rho_air=1.2, cp_air=1005,
+        led_heat_w=0, equipment_power_w=0,
+        cop=3.0, T_setpoint=24.0,
+        T_design_ext=10.0, GHI_design=0.0,
+        safety_factor=1.2,
+        deh_net_heat_w=2270.0,
+    )
+    assert p == 0.0
 
 
 # ── size_deh() ───────────────────────────────────────────────────────

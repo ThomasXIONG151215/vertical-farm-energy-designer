@@ -184,6 +184,13 @@ class VanHentenConfig:
     dry_matter_fraction: float = 0.05  # dry→fresh weight conversion (−)
     c_pl_d: float = 53.0               # light extinction per LAI (m²/kg)
     c_rad_phot: float = 1e-8           # radiation use efficiency (kg/J)
+    #   CALIBRATION BASIS (C-fix, 2026-08-16): this is the Van Henten 2003
+    #   tomato literature default, NOT recalibrated for 609 lettuce.  The
+    #   reference calibration band (reference/van-henten/PSO_Win.py) is
+    #   25-100 W/m² PAR (nominal 70); the engine feeds ppfd_target/par_factor
+    #   = 87.5 W/m² (LED PAR), which falls inside that band.  Model yields
+    #   ~109 kg fresh/m²/yr vs 30-60 for real PFAL lettuce (~2x high) — growth
+    #   is calibrated to the greenhouse reference, not to 609 field data.
     c_co2_1: float = 5.11e-6           # CO₂ assimilation coef (m/(s·°C²))
     c_co2_2: float = 2.3e-4            # CO₂ assimilation coef (m/(s·°C))
     c_co2_3: float = 6.29e-4           # CO₂ assimilation coef (m/s)
@@ -199,8 +206,10 @@ class TranspirationConfig:
     plant_count: int = 0         # number of plants, "per_plant" method
     ml_per_plant_day: float = 80.0  # mL water per plant per day, "per_plant" method
     photoperiod_hours: float = 16.0  # light hours per day
-    k_vpd: float = 2.0e-5        # VPD gain (kg/s per m² per kPa), vpd method
-    k_van_henten: float = 4.0e-4 # biomass-scaled gain (m²/(s·kPa)), van_henten method
+    k_vpd: float = 5.0e-5        # VPD gain (kg/s per m² per kPa), vpd method
+    #   Calibrated 2e-5 -> 5e-5 (C-fix, 2026-08-16): see TranspirationConfig
+    #   in src/plants/transpiration.py for the calibration rationale.
+    k_van_henten: float = 4.0e-4 # biomass-scaled gain (1/(s·kPa)), van_henten method
     stage_factor: float = 1.0
     g_stomata: float = 1.0e-3
     r_a: float = 50.0            # aerodynamic resistance (s/m) for "stomatal"
@@ -226,7 +235,7 @@ class PVConfig:
     I_mp_stc: float = 12.66
     V_mp_stc: float = 45.85
     alpha_sc: float = 0.00045
-    beta_voc: float = -0.25
+    beta_voc: float = -0.0025      # /K  (relative, ~-0.25 %/K) — NOT V/K
     NOCT: float = 45.0
     eta_inv: float = 0.97
     C_pv: float = 110.0
@@ -393,20 +402,62 @@ class DesignProject:
             raise ValueError(
                 f"setpoints.RH must be in [0,100] %, got {rh_sp}")
 
+        # ── PV temperature-coefficient dimension guards ──
+        # alpha_sc / beta_voc are RELATIVE coefficients (/K). A value of 0.045
+        # (previously shipped in the example YAMLs) is 100x the physical
+        # 0.00045 and inflates annual yield ~1.7x; an absolute -0.25 V/K is
+        # ~1.75x the datasheet-consistent relative value. Reject out-of-band
+        # values at load time (fail-fast).
+        pv_cfg = sub(PVConfig, d.get("pv", {}), has_nested_capital=True)
+        _pv_alpha = pv_cfg.get("alpha_sc")
+        if _pv_alpha is not None and not (0.0 < _pv_alpha < 0.01):
+            raise ValueError(
+                f"pv.alpha_sc must be in (0, 0.01) /K (relative), got {_pv_alpha}")
+        _pv_beta = pv_cfg.get("beta_voc")
+        if _pv_beta is not None and not (-0.1 < _pv_beta < 0.0):
+            raise ValueError(
+                f"pv.beta_voc must be in (-0.1, 0) /K (relative), got {_pv_beta}")
+
+        # ── HVAC COP / coil guards (fail-fast) ──
+        # A negative COP silently flips the cooling cycle into a heater+humidifier
+        # (Q_total<0 → Q_target>0, M_target<0); an unknown cop_mode falls through
+        # to `return self.value`; shr_BF=1.0 divides by zero in the BF-ADP coil
+        # model. Reject all of these at load time.
+        hvac_cfg = sub(HVACConfig, d.get("hvac", {}), has_nested_capital=True)
+        _require_nonnegative(
+            ["cop_value", "cop_heat", "eta_II", "delta_T_evap",
+             "delta_T_cond", "P_rated_w", "P_rated_heat_w",
+             "Q_cool_nom", "P_rated_max", "safety_factor"],
+            hvac_cfg, "hvac",
+        )
+        _cop_mode = hvac_cfg.get("cop_mode")
+        if _cop_mode is not None and _cop_mode not in (
+                "carnot", "constant", "linear", "table"):
+            raise ValueError(
+                f"hvac.cop_mode must be one of "
+                f"carnot|constant|linear|table, got {_cop_mode}")
+        _cop_table = hvac_cfg.get("cop_table") or {}
+        for _k, _v in _cop_table.items():
+            if _v < 0:
+                raise ValueError(
+                    f"hvac.cop_table[{_k}] must be >= 0, got {_v}")
+        _shr_bf = hvac_cfg.get("shr_BF")
+        if _shr_bf is not None and not (0.0 <= _shr_bf < 1.0):
+            raise ValueError(
+                f"hvac.shr_BF must be in [0, 1), got {_shr_bf}")
+
         return cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**sub(SiteConfig, d.get("site", {}))),
             envelope=EnvelopeConfig(**sub(EnvelopeConfig, d.get("envelope", {}))),
-            hvac=HVACConfig(**sub(HVACConfig, d.get("hvac", {}),
-                                 has_nested_capital=True)),
+            hvac=HVACConfig(**hvac_cfg),
             deh=DEHConfig(**deh_cfg),
             led=LEDConfig(**sub(LEDConfig, d.get("led", {}),
                                has_nested_capital=True)),
             transpiration=TranspirationConfig(**transp_cfg),
             setpoints=SetpointConfig(**sp_cfg),
             growth=VanHentenConfig(**sub(VanHentenConfig, d.get("growth", {}))),
-            pv=PVConfig(**sub(PVConfig, d.get("pv", {}),
-                              has_nested_capital=True)),
+            pv=PVConfig(**pv_cfg),
             battery=BatteryConfig(**sub(BatteryConfig, d.get("battery", {}),
                                         has_nested_capital=True)),
             tariff=_tariff(d.get("tariff", {})),

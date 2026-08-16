@@ -23,7 +23,11 @@ seedlings vs. mature canopy.
 from dataclasses import dataclass
 from typing import Optional
 
-from ..physics.psychrometrics import compute_vpd, saturation_vapor_pressure
+from ..physics.psychrometrics import (
+    compute_vpd,
+    latent_heat_vaporization,
+    saturation_vapor_pressure,
+)
 
 __all__ = ["TranspirationModel"]
 
@@ -36,7 +40,13 @@ class TranspirationModel:
     plant_count: int = 0        # number of plants, "per_plant" method
     ml_per_plant_day: float = 80.0  # mL water per plant per day, "per_plant" method
     photoperiod_hours: float = 16.0  # light hours per day
-    k_vpd: float = 2.0e-5       # VPD gain (kg/s per m² per kPa), vpd method
+    k_vpd: float = 5.0e-5       # VPD gain (kg/s per m² per kPa), vpd method
+    #   Calibrated 2e-5 -> 5e-5 (C-fix, 2026-08-16): 2e-5 was a DEH-sizing
+    #   compromise from the B1 round (match a 2233 W default DEH); it put the
+    #   model water balance at ~3.4 L/kg fresh (real PFAL lettuce ~20 L/kg).
+    #   1e-4 (full "real" value) is unstable — transpiration/RH/DEH-heat
+    #   feedback collapses harvest to 0.  5e-5 is the stable midpoint:
+    #   w/f ~5.8 L/kg (fixed DEH) / ~6.8 (auto_size), harvest unchanged.
     k_van_henten: float = 4.0e-4 # biomass-scaled gain (1/(s·kPa)), van_henten method
     stage_factor: float = 1.0   # growth-stage scale (0-1+)
     g_stomata: float = 1.0e-3   # stomatal conductance proxy (m/s) for "stomatal"
@@ -97,7 +107,9 @@ class TranspirationModel:
             numerator = delta * R_n + rho_cp * max(0.0, vpd) / r_a
             denominator = delta + gamma * (1.0 + r_s / r_a)
             lambda_E = numerator / denominator
-            E_rate = lambda_E / self.h_fg
+            # MINOR-7 (D): latent heat at leaf/room temperature T_z, sharing one
+            # L_v source with the engine's evaporative sink.
+            E_rate = lambda_E / (latent_heat_vaporization(T_z) * 1000.0)
             return E_rate * area * self.stage_factor
         return 0.0
 

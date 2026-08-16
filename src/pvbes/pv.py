@@ -31,7 +31,7 @@ class PVSystem:
     V_mp_stc: float = 45.85        # V  (JKM580N-78HL4-BDV nameplate)
                                    #    P_module_at_STC = 45.85*12.66 = 580.5 W
     alpha_sc: float = 0.00045      # /K  (relative, ~0.045 %/K for Jinko 78HL4-BDV)
-    beta_voc: float = -0.25        # V/K
+    beta_voc: float = -0.0025      # /K  (relative, ~-0.25 %/K for Jinko 78HL4-BDV)
     NOCT: float = 45.0             # C
     T_stc: float = 25.0            # C
     eta_inv: float = 0.97          # inverter efficiency
@@ -49,7 +49,10 @@ class PVSystem:
         G = np.asarray(G, dtype=float)
         T_cell = np.asarray(T_cell, dtype=float)
         I_ph = self.I_sc_stc * (1 + self.alpha_sc * (T_cell - self.T_stc)) * (G / 1000.0)
-        V_oc = self.V_oc_stc + self.beta_voc * (T_cell - self.T_stc)
+        # beta_voc is a RELATIVE coefficient (/K), consistent with alpha_sc and
+        # the module datasheet (~-0.250 %/K). Absolute form (V/K) would be
+        # ~1.75x too strong for a 57.34 V module and suppress hot-hour output.
+        V_oc = self.V_oc_stc * (1.0 + self.beta_voc * (T_cell - self.T_stc))
         I_mp = self.I_mp_stc * (1 + self.alpha_sc * (T_cell - self.T_stc)) * (G / 1000.0)
         I_mp = np.clip(I_mp, 0.0, None)
         k_v_stc = self.V_mp_stc / self.V_oc_stc

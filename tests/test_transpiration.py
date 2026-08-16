@@ -37,9 +37,11 @@ def test_vpd_zero_in_dark():
 
 
 def test_vpd_kilopascal():
-    """k_vpd default is 2e-5 as per literature."""
+    """k_vpd default is 5e-5 (calibrated up from 2e-5 in the C round —
+    the B1 value was a DEH-sizing compromise that left the model water
+    balance ~6x below real PFAL lettuce)."""
     model = TranspirationModel()
-    assert model.k_vpd == pytest.approx(2.0e-5)
+    assert model.k_vpd == pytest.approx(5.0e-5)
 
 
 # ── Constant method ──────────────────────────────────────────────────

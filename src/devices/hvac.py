@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-from ..physics.psychrometrics import temp_rh_to_ah
+from ..physics.psychrometrics import latent_heat_vaporization, temp_rh_to_ah
 from ..physics.shr import DynamicSHR
 from .compressor import CompressorState
 from .lag import FirstOrderLag
@@ -56,18 +56,20 @@ class COPModel:
         if self.mode == "table":
             edges = sorted(self.table.keys())
             if not edges:
-                return self.value
+                return max(0.5, self.value)
             if T_ext <= edges[0]:
-                return self.table[edges[0]]
+                return max(0.5, self.table[edges[0]])
             if T_ext >= edges[-1]:
-                return self.table[edges[-1]]
+                return max(0.5, self.table[edges[-1]])
             for i in range(len(edges) - 1):
                 lo, hi = edges[i], edges[i + 1]
                 if lo <= T_ext <= hi:
                     c0, c1 = self.table[lo], self.table[hi]
                     t = (T_ext - lo) / (hi - lo)
-                    return c0 + t * (c1 - c0)
-        return self.value
+                    return max(0.5, c0 + t * (c1 - c0))
+        # unknown mode / constant: floor the COP so a bad value can never flip
+        # the cooling cycle into a heater (see config-side guards in project.py)
+        return max(0.5, self.value)
 
 
 class HVACDevice:
@@ -91,7 +93,7 @@ class HVACDevice:
     ):
         self.P_rated = P_rated_w
         self.cop = cop or COPModel()
-        self.cop_heat = cop_heat
+        self.cop_heat = max(0.5, cop_heat)
         self.heat_mode = heat_mode
         self.P_rated_heat = P_rated_heat_w or P_rated_w
         self.h_fg = h_fg
@@ -160,7 +162,12 @@ class HVACDevice:
             # (T_cond = T_ext).  Counting Q_lat in Q_target as well would
             # double-count the latent removal in the room enthalpy balance.
             Q_target = -(shr * Q_total - self.comp.fan_power_w)
-            M_target = Q_lat / self.h_fg
+            # MINOR-7 (D): latent heat evaluated at the coil supply-air
+            # temperature (T_setpoint - t_coil_drop, same convention as the
+            # DynamicSHR fallback) so M_target shares one L_v source with the
+            # room enthalpy balance.
+            T_supply = T_setpoint - self.shr.t_coil_drop
+            M_target = Q_lat / (latent_heat_vaporization(T_supply) * 1000.0)
         elif on and mode == "heat":
             P_elec = self.P_rated_heat + self.comp.fan_power_w
             if self.heat_mode == "heat_pump":
@@ -198,6 +205,7 @@ def size_hvac(
     GHI_design: float = 800.0,
     shr_design: float = 0.80,
     safety_factor: float = 1.2,
+    deh_net_heat_w: float = 0.0,
 ) -> float:
     """Calculate required HVAC P_rated (W) from design cooling load.
 
@@ -210,19 +218,27 @@ def size_hvac(
     that total cooling capacity accounts for both sensible and latent heat
     removal.  In a plant factory with high transpiration SHR can be as low
     as 0.6–0.8; the default of 0.80 provides a reasonable safety margin.
+
+    ``deh_net_heat_w`` is the dehumidifier's net sensible heat rejection at
+    the design point (P_comp + fan only — NOT m_dh*h_fg, which cancels with
+    the latent cooling term E_trans*L_v already omitted from the balance).
+    The HVAC must reject this heat too, otherwise auto-sizing understates
+    the nameplate.
     """
     q_env = U_wall_A * (T_design_ext - T_setpoint)
     q_solar = eta_solar * A_window * GHI_design
     m_dot = ach * V_room * rho_air / 3600.0
     q_inf = m_dot * cp_air * (T_design_ext - T_setpoint)
-    q_sens_raw = q_env + q_solar + q_inf + led_heat_w + equipment_power_w
+    q_sens_raw = (q_env + q_solar + q_inf + led_heat_w
+                  + equipment_power_w + deh_net_heat_w)
     if q_sens_raw < 0:
         logging.warning(
             "Net sensible load is negative (%.1f W) — clamping to 0 for HVAC sizing. "
             "Check design conditions: T_ext=%.1f, T_setpoint=%.1f, "
-            "q_env=%.1f, q_solar=%.1f, q_inf=%.1f, led=%.1f, equip=%.1f",
+            "q_env=%.1f, q_solar=%.1f, q_inf=%.1f, led=%.1f, equip=%.1f, deh=%.1f",
             q_sens_raw, T_design_ext, T_setpoint,
             q_env, q_solar, q_inf, led_heat_w, equipment_power_w,
+            deh_net_heat_w,
         )
     q_sens = max(0.0, q_sens_raw)
     q_total = q_sens / max(shr_design, 0.1)

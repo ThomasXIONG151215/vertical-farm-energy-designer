@@ -22,7 +22,7 @@ retained only for backward compatibility.
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-from ..physics.psychrometrics import temp_rh_to_ah
+from ..physics.psychrometrics import latent_heat_vaporization, temp_rh_to_ah
 from .compressor import CompressorState
 from .lag import FirstOrderLag
 
@@ -126,16 +126,21 @@ class DEHDevice:
         if on:
             s_dh = 1.0
             P_comp = self._poly_power(T_z, W_z) * s_dh
-            # Latent COP from Specific Moisture Extraction Rate (kg/kWh):
+            # Specific Moisture Extraction Rate (kg/kWh):
             #   m_dh [kg/s] = SMER [kg/kWh] * P_comp [W] / 3.6e6 [J/kWh]
             m_dh = self.smer * P_comp / 3.6e6
-            Q_dh = P_comp + m_dh * self.h_fg
+            # MINOR-7 (D): latent heat evaluated at room temperature T_z so the
+            # condenser term exactly cancels the engine's evaporative sink
+            # (engine L_v = latent_heat_vaporization(T_z)*1000) — closure gap
+            # M_dh*(h_fg - L_v) is now zero instead of ~63 W at full load.
+            L_v = latent_heat_vaporization(T_z) * 1000.0
+            Q_dh = P_comp + m_dh * L_v
             P_elec = P_comp + self.fan_power_w
             # Fan motor + air friction heat is released into the room airflow
             # (dehumidifier exhausts into the same space) → include in Q_target.
             Q_target = Q_dh + self.fan_power_w
             M_target = m_dh
-            eta = m_dh * self.h_fg / max(P_comp, 1e-6)  # latent COP for reporting
+            eta = m_dh * L_v / max(P_comp, 1e-6)  # latent COP for reporting
 
         # Post-shutdown residual (lag_m/lag_q exponential decay) models coil
         # retained-condensate inertia, NOT electrical inertia: after the

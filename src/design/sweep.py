@@ -298,7 +298,11 @@ def sweep_design(project: DesignProject,
             for A_pv in pv_areas:
                 for E_bat in bats:
                     m = es.calculate_metrics(
-                        [A_pv, E_bat], sim["weather"], sim["load"]
+                        [A_pv, E_bat], sim["weather"], sim["load"],
+                        # Mid-life degradation year: LCOE uses CRF over the
+                        # lifetime, so pair it with the average (mid-life)
+                        # PV output rather than pristine first-year output.
+                        year=es.lifetime // 2,
                     )
                     cap = _total_capital(p, A_pv, E_bat)
                     annual_cap = _annualized_capital(p, cap)

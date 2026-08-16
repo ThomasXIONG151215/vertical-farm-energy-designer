@@ -82,6 +82,100 @@ def _build_devices(p, P_atm: float = 101.325):
                    table=p.hvac.cop_table)
     cop_design = cop(p.hvac.design_T_ext, p.setpoints.T_light)
 
+    # ── Transpiration model (needed by DEH auto-sizing) ──
+    transp = TranspirationModel(
+        method=p.transpiration.method, E_max_kgs=p.transpiration.E_max_kgs,
+        daily_water_L=p.transpiration.daily_water_L,
+        plant_count=p.transpiration.plant_count,
+        ml_per_plant_day=p.transpiration.ml_per_plant_day,
+        photoperiod_hours=p.led.photoperiod_hours,
+        k_vpd=p.transpiration.k_vpd,
+        k_van_henten=p.transpiration.k_van_henten,
+        stage_factor=p.transpiration.stage_factor,
+        g_stomata=p.transpiration.g_stomata,
+        r_a=p.transpiration.r_a,
+        r_n_canopy=p.transpiration.r_n_canopy,
+        area_m2=led.covered_area,
+    )
+
+    # ── DEH sizing FIRST: HVAC auto-size must include the DEH's net
+    # sensible heat rejection (P_comp + fan) in its design-point balance. ──
+    T_sp = p.setpoints.T_light
+    RH_sp = p.setpoints.RH
+    W_z = temp_rh_to_ah(T_sp, RH_sp)
+    P_ref = p.deh.P_ref_w
+    if p.deh.M_deh_nom > 0:
+        # New mode: nominal dehumidification (L/day) → reference power (W)
+        # P_ref = M_deh_nom × 41.67 / SMER
+        P_ref = p.deh.M_deh_nom * 41.6667 / max(p.deh.smer, 0.1)
+        if p.deh.P_rated_max > 0:
+            P_ref = min(P_ref, p.deh.P_rated_max * 1000.0)
+    elif p.deh.auto_size:
+        W_ext = temp_rh_to_ah(p.hvac.design_T_ext, 80.0)
+        # Design-point transpiration is delegated to the SAME configured
+        # TranspirationModel used at runtime (B2 fix): constant/daily/
+        # per_plant/vpd/stomatal/van_henten are all handled by step().
+        # step() is evaluated at light-on with the T_light/RH setpoints.
+        if p.transpiration.method == "van_henten":
+            # MAJOR-5 (C1): the legacy fixed X_d=0.05 "mid-cycle" point is
+            # actually reached on day 3-4 (seedling stage) while the canopy
+            # evolves to X_d≈0.46 at harvest — a ~9× DEH capacity gap at
+            # peak.  Replace it with a light-weight growth pre-run: evolve the
+            # Van Henten biomass over ONE crop cycle at the engine operating
+            # point (no capacity constraints, millisecond-scale) and use the
+            # cycle-mean light-period transpiration as the design load.
+            grow = VanHenten(
+                co2_ppm=p.setpoints.co2_ppm,
+                c_alpha_beta=p.growth.c_alpha_beta,
+                c_resp_d=p.growth.c_resp_d,
+                c_pl_d=p.growth.c_pl_d,
+                c_rad_phot=p.growth.c_rad_phot,
+                c_co2_1=p.growth.c_co2_1,
+                c_co2_2=p.growth.c_co2_2,
+                c_co2_3=p.growth.c_co2_3,
+                c_Gamma=p.growth.c_Gamma,
+            )
+            xd = p.growth.initial_dry_weight
+            light_wm2 = p.led.ppfd_target / led.par_factor
+            n_steps = max(144, int(round(p.setpoints.crop_cycle_days * 144.0)))
+            e_sum, n_light = 0.0, 0
+            for s in range(n_steps):
+                hour = (s * 600.0 / 3600.0) % 24.0
+                is_light_h = led.is_light(hour)
+                t_sim = (p.setpoints.T_light if is_light_h
+                         else p.setpoints.T_dark)
+                _, xd = grow.step(t_sim, light_wm2 if is_light_h else 0.0,
+                                  xd, 600.0)
+                if is_light_h:
+                    e_sum += transp.step(T_sp, RH_sp, True, 3600.0, X_d=xd)
+                    n_light += 1
+            m_transp = e_sum / max(1, n_light)
+        else:
+            m_transp = transp.step(T_sp, RH_sp, True, 3600.0, X_d=0.05)
+        m_dot = p.envelope.ach * p.envelope.V_room * p.envelope.rho_air / 3600.0
+        m_inf = m_dot * max(0.0, W_ext - W_z)
+        m_perm = p.envelope.permeance * max(0.0, W_ext - W_z)
+        moisture_load = max(0.0, m_transp + m_inf + m_perm)
+        P_ref = size_deh(moisture_load, p.deh.smer, p.deh.safety_factor)
+
+    deh = DEHDevice(
+        P_ref_w=P_ref, poly_e=tuple(p.deh.poly_e),
+        T_mean=p.deh.T_mean, T_std=p.deh.T_std, W_mean=p.deh.W_mean,
+        W_std=p.deh.W_std,
+        deadband_rh=p.deh.deadband_rh, min_on_s=p.deh.min_on_s,
+        min_off_s=p.deh.min_off_s, fan_power_w=p.deh.fan_power_w,
+        smer=p.deh.smer,
+        tau_q=p.deh.tau_q, tau_m=p.deh.tau_m,
+    )
+    # DEH net sensible heat rejection at the design point: P_comp + fan only.
+    # m_dh*h_fg must NOT be added here — it cancels with E_trans*L_v, which
+    # the HVAC balance deliberately omits (adding both double-counts).
+    deh_net_heat_w = deh._poly_power(T_sp, W_z) + p.deh.fan_power_w
+    # Write sizing back to config so CAPEX (sweep._total_capital reads the
+    # config's P_ref_w / P_rated_w) reflects the computed equipment.
+    if p.deh.M_deh_nom > 0 or p.deh.auto_size:
+        p.deh.P_ref_w = P_ref
+
     P_rated = p.hvac.P_rated_w
     P_rated_heat = p.hvac.P_rated_heat_w
     if p.hvac.Q_cool_nom > 0:
@@ -101,6 +195,7 @@ def _build_devices(p, P_atm: float = 101.325):
             T_design_ext=p.hvac.design_T_ext,
             shr_design=p.hvac.shr_design,
             safety_factor=p.hvac.safety_factor,
+            deh_net_heat_w=deh_net_heat_w,
         )
         if P_rated <= 0:
             logging.warning(
@@ -108,6 +203,9 @@ def _build_devices(p, P_atm: float = 101.325):
                 "clamped to 0. HVAC may be undersized.", P_rated,
             )
         P_rated_heat = P_rated
+    if p.hvac.Q_cool_nom > 0 or p.hvac.auto_size:
+        p.hvac.P_rated_w = P_rated
+        p.hvac.P_rated_heat_w = P_rated_heat
 
     hvac = HVACDevice(
         P_rated_w=P_rated, cop=cop, cop_heat=p.hvac.cop_heat,
@@ -119,53 +217,6 @@ def _build_devices(p, P_atm: float = 101.325):
         tau_q=p.hvac.tau_q, tau_m=p.hvac.tau_m,
     )
 
-    transp = TranspirationModel(
-        method=p.transpiration.method, E_max_kgs=p.transpiration.E_max_kgs,
-        daily_water_L=p.transpiration.daily_water_L,
-        plant_count=p.transpiration.plant_count,
-        ml_per_plant_day=p.transpiration.ml_per_plant_day,
-        photoperiod_hours=p.led.photoperiod_hours,
-        k_vpd=p.transpiration.k_vpd,
-        k_van_henten=p.transpiration.k_van_henten,
-        stage_factor=p.transpiration.stage_factor,
-        g_stomata=p.transpiration.g_stomata,
-        r_a=p.transpiration.r_a,
-        r_n_canopy=p.transpiration.r_n_canopy,
-        area_m2=led.covered_area,
-    )
-    P_ref = p.deh.P_ref_w
-    if p.deh.M_deh_nom > 0:
-        # New mode: nominal dehumidification (L/day) → reference power (W)
-        # P_ref = M_deh_nom × 41.67 / SMER
-        P_ref = p.deh.M_deh_nom * 41.6667 / max(p.deh.smer, 0.1)
-        if p.deh.P_rated_max > 0:
-            P_ref = min(P_ref, p.deh.P_rated_max * 1000.0)
-    elif p.deh.auto_size:
-        T_sp = p.setpoints.T_light
-        RH_sp = p.setpoints.RH
-        W_z = temp_rh_to_ah(T_sp, RH_sp)
-        W_ext = temp_rh_to_ah(p.hvac.design_T_ext, 80.0)
-        # Design-point transpiration is delegated to the SAME configured
-        # TranspirationModel used at runtime (B2 fix): constant/daily/
-        # per_plant/vpd/stomatal/van_henten are all handled by step().
-        # step() is evaluated at light-on with the T_light/RH setpoints;
-        # X_d=0.05 is a mid-cycle canopy dry weight (kg/m²) for "van_henten".
-        m_transp = transp.step(T_sp, RH_sp, True, 3600.0, X_d=0.05)
-        m_dot = p.envelope.ach * p.envelope.V_room * p.envelope.rho_air / 3600.0
-        m_inf = m_dot * max(0.0, W_ext - W_z)
-        m_perm = p.envelope.permeance * max(0.0, W_ext - W_z)
-        moisture_load = max(0.0, m_transp + m_inf + m_perm)
-        P_ref = size_deh(moisture_load, p.deh.smer, p.deh.safety_factor)
-
-    deh = DEHDevice(
-        P_ref_w=P_ref, poly_e=tuple(p.deh.poly_e),
-        T_mean=p.deh.T_mean, T_std=p.deh.T_std, W_mean=p.deh.W_mean,
-        W_std=p.deh.W_std,
-        deadband_rh=p.deh.deadband_rh, min_on_s=p.deh.min_on_s,
-        min_off_s=p.deh.min_off_s, fan_power_w=p.deh.fan_power_w,
-        smer=p.deh.smer,
-        tau_q=p.deh.tau_q, tau_m=p.deh.tau_m,
-    )
     ode = RoomODESolver(C_z=p.envelope.C_z, V_room=p.envelope.V_room,
                         rho_air=p.envelope.rho_air, P_atm=P_atm)
     return env, hvac, deh, led, transp, ode
@@ -589,7 +640,8 @@ class DesignEngine:
                     V_oc_stc=p.pv.V_oc_stc, I_mp_stc=p.pv.I_mp_stc,
                     V_mp_stc=p.pv.V_mp_stc, alpha_sc=p.pv.alpha_sc,
                     beta_voc=p.pv.beta_voc, NOCT=p.pv.NOCT,
-                    eta_inv=p.pv.eta_inv,
+                    eta_inv=p.pv.eta_inv, C_pv=p.pv.C_pv,
+                    degradation=p.pv.degradation,
                 )
                 bat_sys = BatterySystem(
                     c_energy=p.battery.c_energy, c_rate=p.battery.c_rate,
@@ -613,6 +665,9 @@ class DesignEngine:
                     [p.pv_area_m2, p.battery_kwh],
                     _raw["weather"],
                     _raw["load"],
+                    # Mid-life degradation year (see sweep.py: LCOE uses CRF
+                    # over the lifetime, paired with average PV output).
+                    year=es.lifetime // 2,
                 )
 
                 # ── Cost breakdown (full-system capital, aligned with sweep.py) ──

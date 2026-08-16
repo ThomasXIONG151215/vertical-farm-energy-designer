@@ -126,6 +126,63 @@ class TestEngineRegression:
         result = engine.run(p)
         assert result["annual_load_kwh"] > 0
 
+    def test_auto_size_writes_back_capacity(self, project_609):
+        """auto_size results must be written back to the config so CAPEX
+        (sweep._total_capital reads config P_rated_w / P_ref_w) reflects the
+        computed equipment instead of the stale defaults."""
+        from src.design.engine import DesignEngine
+
+        p = project_609
+        p.hvac.auto_size = True
+        p.hvac.P_rated_w = 3000.0   # stale default
+        p.deh.auto_size = True
+        p.deh.P_ref_w = 2233.0      # stale default
+        DesignEngine().run(p)
+        # HVAC design load now includes the DEH net sensible heat (P_comp+fan)
+        assert p.hvac.P_rated_w > 3000.0, \
+            f"HVAC auto-size did not write back: P_rated_w={p.hvac.P_rated_w:.1f}"
+        assert p.deh.P_ref_w != 2233.0, \
+            f"DEH auto-size did not write back: P_ref_w={p.deh.P_ref_w:.1f}"
+
+    def test_water_balance_closure(self, sim_609):
+        """Water balance must stay in a healthy envelope (C-fix, 2026-08-16).
+
+        k_vpd was calibrated 2e-5 -> 5e-5.  At the old value the model water
+        balance was ~3.4 L/kg fresh (real PFAL lettuce ~20 L/kg).  Raising it
+        to 1e-4 (the full 'real' value) collapses the model: transpiration ->
+        RH -> DEH-heat feedback drives harvest to 0.  This test pins the
+        healthy operating band so neither drift is silently reintroduced:
+          * water/weight ratio within [3, 12] L/kg fresh  (3.4@2e-5, 5.8@5e-5)
+          * harvest stays positive (no feedback collapse)
+          * water use is finite (no inf from a zero-harvest divide)
+        """
+        s = sim_609.summary
+        water_m3 = s["annual_water_m3"]
+        harvest_fw = s["annual_harvest_fw_kg"]
+        assert np.isfinite(water_m3), f"annual water non-finite: {water_m3}"
+        assert harvest_fw > 1000.0, \
+            f"harvest collapsed: {harvest_fw:.1f} kg fresh/yr"
+        wf = water_m3 * 1000.0 / harvest_fw
+        assert 3.0 <= wf <= 12.0, \
+            f"water/fresh = {wf:.2f} L/kg outside healthy band [3, 12]"
+
+    def test_growth_energy_use_efficiency_band(self, sim_609):
+        """RUE must stay in a physically plausible band (C-fix, 2026-08-16).
+
+        Model RUE (dry-mass gain per intercepted PAR energy) is ~2.9 g/MJ
+        from the Van Henten 2003 defaults — inside the C3-crop band 2.2-3.5
+        g/MJ.  This guards against future growth-model recalibration that
+        would break the energy basis declared in GrowthConfig.c_rad_phot.
+        """
+        s = sim_609.summary
+        harvest_dry = s["annual_harvest_kg"]           # kg dry / yr
+        # Intercepted PAR: 87.5 W/m² · 45 m² · 16 h/day = 63 kWh/day
+        # → ×365 = 22,995 kWh/yr = 22,995 × 3.6 = 82,782 MJ/yr.
+        par_energy_MJ = 22995.0 * 3.6
+        rue = harvest_dry * 1000.0 / par_energy_MJ     # g dry / MJ
+        assert 1.5 <= rue <= 4.0, \
+            f"RUE = {rue:.2f} g/MJ outside C3 band [1.5, 4]"
+
 
 class TestSweepRegression:
     def test_sweep_best_lcoe_finite(self, project_609):

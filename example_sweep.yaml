@@ -68,7 +68,7 @@ led:
 transpiration:
   method: vpd
   E_max_kgs: 0.0001
-  k_vpd: 0.00002
+  k_vpd: 0.00005
   stage_factor: 1.0
   g_stomata: 0.001
 setpoints:
@@ -83,10 +83,10 @@ pv:
   N_s: 156
   I_sc_stc: 13.98
   V_oc_stc: 57.34
-  I_mp_stc: 13.33
-  V_mp_stc: 46.0
-  alpha_sc: 0.045
-  beta_voc: -0.25
+  I_mp_stc: 12.66
+  V_mp_stc: 45.85
+  alpha_sc: 0.00045
+  beta_voc: -0.0025
   NOCT: 45.0
   eta_inv: 0.97
   C_pv: 110.0

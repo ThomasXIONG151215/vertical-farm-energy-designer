@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .psychrometrics import (
+    latent_heat_vaporization,
     saturation_humidity,
     temp_rh_to_ah,
     temp_rh_to_dewpoint,
@@ -29,7 +30,9 @@ class DynamicSHR:
 
     BF: float = 0.15          # Bypass factor (0.10-0.20 for a 4-row DX coil)
     cp_air: float = 1005.0    # J/(kg.K)
-    h_fg: float = 2.5e6       # J/kg latent heat (~22 C)
+    # h_fg kept as a deprecated override field; q_lat now uses the coil
+    # temperature-correlated latent heat (latent_heat_vaporization(T_adp)*1000).
+    h_fg: float = 2.5e6       # J/kg latent heat (legacy, ~22 C)
     # shr_min: real ACs rarely put more than ~55% of capacity into latent
     # removal (SHR floor ~0.45); a lower floor over-dehumidifies.
     shr_min: float = 0.45
@@ -57,7 +60,9 @@ class DynamicSHR:
         if dW <= 0.0:
             return 1.0
         q_sens = self.cp_air * (T_return - T_supply)
-        q_lat = self.h_fg * dW
+        # MINOR-7 (D): latent heat evaluated at the coil (T_adp) temperature so
+        # the SHR split shares one L_v source with the room enthalpy balance.
+        q_lat = latent_heat_vaporization(T_adp) * 1000.0 * dW
         if q_sens + q_lat <= 0.0:
             return self.shr_min
         shr = q_sens / (q_sens + q_lat)

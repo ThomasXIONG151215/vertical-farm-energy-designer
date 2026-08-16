@@ -33,6 +33,12 @@ class VanHenten:
         "c_resp_d": 2.65e-7,        # s⁻¹  dark respiration coefficient (25 °C)
         "c_pl_d": 53.0,             # m²/kg  light extinction per LAI
         "c_rad_phot": 1e-8,         # kg/J  radiation use efficiency (calibratable)
+        #   CALIBRATION BASIS (C-fix, 2026-08-16): Van Henten 2003 tomato
+        #   literature default, NOT recalibrated for 609 lettuce.  Reference
+        #   calibration band (reference/van-henten/PSO_Win.py) is 25-100 W/m²
+        #   PAR (nominal 70); engine feeds ~87.5 W/m² (PPFD/par_factor), which
+        #   falls inside the band.  Model yields ~109 kg fresh/m²/yr vs 30-60
+        #   for real PFAL lettuce (~2x high) — see GrowthConfig docstring.
         "c_co2_1": 5.11e-6,         # m/(s·°C²)
         "c_co2_2": 2.3e-4,          # m/(s·°C)
         "c_co2_3": 6.29e-4,         # m/s
