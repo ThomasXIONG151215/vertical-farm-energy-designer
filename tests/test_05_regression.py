@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+SRC = Path(__file__).resolve().parents[1] / "vfed"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -61,7 +61,7 @@ class TestEngineRegression:
 
     def test_carnot_cop_runs(self, project_609):
         """Carnot default COP mode produces valid annual load."""
-        from src.design.engine import DesignEngine
+        from vfed.design.engine import DesignEngine
 
         p = project_609
         p.hvac.cop_mode = "carnot"
@@ -72,7 +72,7 @@ class TestEngineRegression:
 
     def test_carnot_cop_seasonal_variation(self, project_609):
         """Carnot COP should vary seasonally — winter COP > summer COP."""
-        from src.design.engine import DesignEngine
+        from vfed.design.engine import DesignEngine
 
         p = project_609
         p.hvac.cop_mode = "carnot"
@@ -86,7 +86,7 @@ class TestEngineRegression:
 
     def test_auto_size_hvac_positive(self, project_609):
         """auto_size=True produces positive P_rated for Fengxian summer design."""
-        from src.design.engine import DesignEngine
+        from vfed.design.engine import DesignEngine
 
         p = project_609
         p.hvac.auto_size = True
@@ -96,7 +96,7 @@ class TestEngineRegression:
 
     def test_auto_size_deh_positive(self, project_609):
         """auto_size DEH produces positive power."""
-        from src.design.engine import DesignEngine
+        from vfed.design.engine import DesignEngine
 
         p = project_609
         p.deh.auto_size = True
@@ -104,12 +104,12 @@ class TestEngineRegression:
         result = engine.run(p)
         assert result["annual_load_kwh"] > 0
 
-    def test_vpd_transpiration_runs(self, project_609):
-        """VPD method with k_vpd=2e-5 produces valid results."""
-        from src.design.engine import DesignEngine
+    def test_van_henten_transpiration_runs(self, project_609):
+        """van_henten model-coupled method produces valid results."""
+        from vfed.design.engine import DesignEngine
 
         p = project_609
-        p.transpiration.method = "vpd"
+        p.transpiration.method = "van_henten"
         engine = DesignEngine()
         result = engine.run(p)
         assert result["annual_load_kwh"] > 0
@@ -117,7 +117,7 @@ class TestEngineRegression:
 
     def test_daily_transpiration_runs(self, project_609):
         """Daily direct-set method produces valid results."""
-        from src.design.engine import DesignEngine
+        from vfed.design.engine import DesignEngine
 
         p = project_609
         p.transpiration.method = "daily"
@@ -130,7 +130,7 @@ class TestEngineRegression:
         """auto_size results must be written back to the config so CAPEX
         (sweep._total_capital reads config P_rated_w / P_ref_w) reflects the
         computed equipment instead of the stale defaults."""
-        from src.design.engine import DesignEngine
+        from vfed.design.engine import DesignEngine
 
         p = project_609
         p.hvac.auto_size = True
@@ -145,14 +145,15 @@ class TestEngineRegression:
             f"DEH auto-size did not write back: P_ref_w={p.deh.P_ref_w:.1f}"
 
     def test_water_balance_closure(self, sim_609):
-        """Water balance must stay in a healthy envelope (C-fix, 2026-08-16).
+        """Water balance must stay in a healthy envelope (C-fix, 2026-08-16,
+        re-pinned after the 5-method consolidation to van_henten).
 
-        k_vpd was calibrated 2e-5 -> 5e-5.  At the old value the model water
-        balance was ~3.4 L/kg fresh (real PFAL lettuce ~20 L/kg).  Raising it
-        to 1e-4 (the full 'real' value) collapses the model: transpiration ->
-        RH -> DEH-heat feedback drives harvest to 0.  This test pins the
-        healthy operating band so neither drift is silently reintroduced:
-          * water/weight ratio within [3, 12] L/kg fresh  (3.4@2e-5, 5.8@5e-5)
+        The old vpd shortcut (k_vpd) was replaced by the model-coupled
+        van_henten method, which tracks biomass and yields a comparable
+        vapour flux at harvest.  Direct-set methods bypass the vapour-pressure
+        feedback entirely.  This test pins the healthy operating band so
+        neither drift is silently reintroduced:
+          * water/weight ratio within [3, 12] L/kg fresh
           * harvest stays positive (no feedback collapse)
           * water use is finite (no inf from a zero-harvest divide)
         """
@@ -187,7 +188,7 @@ class TestEngineRegression:
 class TestSweepRegression:
     def test_sweep_best_lcoe_finite(self, project_609):
         """Sweep with PV ranges should produce finite LCOE."""
-        from src.design.sweep import sweep_design
+        from vfed.design.sweep import sweep_design
 
         p = project_609
         p.space.objective = "lcoe"
@@ -203,7 +204,7 @@ class TestSweepRegression:
 
     def test_sweep_mixed_objectives(self, project_609):
         """Sweep with each supported objective should produce rows."""
-        from src.design.sweep import sweep_design
+        from vfed.design.sweep import sweep_design
 
         for obj in ("lcoe", "kwh_per_kg_fresh", "cost_per_kg_fresh"):
             p = project_609
@@ -219,7 +220,7 @@ class TestSweepRegression:
 
     def test_sweep_results_sort_correctly(self, project_609):
         """Results DataFrame should be sorted by the objective ascending."""
-        from src.design.sweep import sweep_design
+        from vfed.design.sweep import sweep_design
 
         p = project_609
         p.space.parameter_ranges = {

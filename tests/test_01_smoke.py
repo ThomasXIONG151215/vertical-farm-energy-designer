@@ -9,39 +9,39 @@ from pathlib import Path
 import pytest
 
 # Add src to path for direct imports in tests
-SRC = Path(__file__).resolve().parents[1] / "src"
+SRC = Path(__file__).resolve().parents[1] / "vfed"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from src.design.presets import preset_609
+from vfed.design.presets import preset_609
 
 
 # ---------------------------------------------------------------------------
 # 1.1  All modules import
 # ---------------------------------------------------------------------------
 MODULES = [
-    ("src.design.project", "DesignProject"),
-    ("src.design.engine", "DesignEngine"),
-    ("src.design.sweep", "sweep_design"),
-    ("src.design.presets", "preset_609"),
-    ("src.devices.hvac", "HVACDevice"),
-    ("src.devices.dehumidifier", "DEHDevice"),
-    ("src.devices.led", "LEDDevice"),
-        ("src.devices.compressor", "CompressorState"),
-        ("src.devices.lag", "FirstOrderLag"),
-        ("src.physics.psychrometrics", "saturation_vapor_pressure"),
-        ("src.physics.shr", "DynamicSHR"),
-        ("src.physics.envelope", "Envelope"),
-        ("src.physics.ode", "RoomODESolver"),
-        ("src.plants.van_henten", "VanHenten"),
-    ("src.plants.transpiration", "TranspirationModel"),
-    ("src.pvbes.pv", "PVSystem"),
-    ("src.pvbes.battery", "BatterySystem"),
-    ("src.pvbes.grid", "Tariff"),
-    ("src.pvbes.energy_system", "EnergySystem"),
-    ("src.agent.evaluator", "agent_evaluate"),
-    ("src.weather.weather_bridge", "fetch_weather"),
-    ("src.weather.geocode", "geocode_city"),
+    ("vfed.design.project", "DesignProject"),
+    ("vfed.design.engine", "DesignEngine"),
+    ("vfed.design.sweep", "sweep_design"),
+    ("vfed.design.presets", "preset_609"),
+    ("vfed.devices.hvac", "HVACDevice"),
+    ("vfed.devices.dehumidifier", "DEHDevice"),
+    ("vfed.devices.led", "LEDDevice"),
+        ("vfed.devices.compressor", "CompressorState"),
+        ("vfed.devices.lag", "FirstOrderLag"),
+        ("vfed.physics.psychrometrics", "saturation_vapor_pressure"),
+        ("vfed.physics.shr", "DynamicSHR"),
+        ("vfed.physics.envelope", "Envelope"),
+        ("vfed.physics.ode", "RoomODESolver"),
+        ("vfed.plants.van_henten", "VanHenten"),
+    ("vfed.plants.transpiration", "TranspirationModel"),
+    ("vfed.pvbes.pv", "PVSystem"),
+    ("vfed.pvbes.battery", "BatterySystem"),
+    ("vfed.pvbes.grid", "Tariff"),
+    ("vfed.pvbes.energy_system", "EnergySystem"),
+    ("vfed.agent.evaluator", "agent_evaluate"),
+    ("vfed.weather.weather_bridge", "fetch_weather"),
+    ("vfed.weather.geocode", "geocode_city"),
 ]
 
 
@@ -53,10 +53,10 @@ def test_import_module(mod, name):
 
 
 # ---------------------------------------------------------------------------
-# 1.2  Compile all src/
+# 1.2  Compile all vfed/
 # ---------------------------------------------------------------------------
 def test_compile_all():
-    """py_compile every .py under src/ — catches syntax errors."""
+    """py_compile every .py under vfed/ — catches syntax errors."""
     import py_compile
 
     root = SRC
@@ -74,7 +74,7 @@ def test_compile_all():
 # ---------------------------------------------------------------------------
 def test_sweep_single_point(project_609):
     """Empty parameter_ranges returns single-point result."""
-    from src.design.sweep import sweep_design
+    from vfed.design.sweep import sweep_design
 
     result = sweep_design(project_609)
     assert result["results"] is None
@@ -87,7 +87,7 @@ def test_sweep_single_point(project_609):
 # ---------------------------------------------------------------------------
 def test_sweep_with_ranges(project_609):
     """Two ppfd values times two pv areas = 4 configs."""
-    from src.design.sweep import sweep_design
+    from vfed.design.sweep import sweep_design
 
     p = project_609
     p.space.parameter_ranges = {

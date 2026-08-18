@@ -9,11 +9,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+SRC = Path(__file__).resolve().parents[1] / "vfed"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from src.design.sweep import _crf
+from vfed.design.sweep import _crf
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +60,8 @@ class TestKwhPerKg:
 
     def test_kwh_per_kg_ratio(self):
         """Dry / fresh should be roughly 20:1 (5% DM convention)."""
-        from src.design.engine import DesignEngine
-        from src.design.presets import preset_609
+        from vfed.design.engine import DesignEngine
+        from vfed.design.presets import preset_609
 
         p = preset_609()
         engine = DesignEngine()
@@ -75,12 +75,13 @@ class TestKwhPerKg:
 # 3.3  Transpiration — unknown method
 # ---------------------------------------------------------------------------
 def test_transpiration_unknown_method_returns_zero():
-    """Unknown transpiration method should silently return 0.0 (current behaviour)."""
-    from src.plants.transpiration import TranspirationModel
+    """Unknown transpiration method must fail fast with a ValueError that
+    lists the valid methods (legacy silent-zero behaviour removed)."""
+    from vfed.plants.transpiration import TranspirationModel
 
     tm = TranspirationModel(method="flute_serenade", area_m2=45.0)
-    result = tm.step(T_z=22.0, RH_z=65.0, is_light=True, dt=600.0)
-    assert result == 0.0
+    with pytest.raises(ValueError, match="van_henten"):
+        tm.step(T_z=22.0, RH_z=65.0, is_light=True, dt=600.0)
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +95,7 @@ class TestHumidityODEClamps:
     AIR_MASS = 200.0 * 1.2  # default V_room x rho_air = 240 kg
 
     def _solver(self, V_room=200.0, rho_air=1.2, P_atm=101.325):
-        from src.physics.ode import RoomODESolver
+        from vfed.physics.ode import RoomODESolver
         return RoomODESolver(C_z=1000.0, V_room=V_room, rho_air=rho_air, P_atm=P_atm)
 
     def test_floor_clamp_reports_clipped_water(self):
@@ -111,7 +112,7 @@ class TestHumidityODEClamps:
     def test_saturation_cap_reports_condensed_water(self):
         """W above W_sat(T) must be capped to W_sat AND report the condensed
         water instead of silently discarding it."""
-        from src.physics.psychrometrics import saturation_vapor_pressure
+        from vfed.physics.psychrometrics import saturation_vapor_pressure
 
         s = self._solver()
         W_sat = 0.622 * saturation_vapor_pressure(25.0) / (
@@ -160,7 +161,7 @@ class TestPsychrometricsGuards:
     def test_saturation_vapor_pressure_rejects_extreme_temps(self):
         """Magnus formula is only valid in a bounded temperature range;
         out-of-range inputs must raise instead of dividing by zero / overflowing."""
-        from src.physics.psychrometrics import saturation_vapor_pressure
+        from vfed.physics.psychrometrics import saturation_vapor_pressure
 
         with pytest.raises(ValueError):
             saturation_vapor_pressure(-300.0)   # would ZeroDivisionError at -237.3
@@ -170,7 +171,7 @@ class TestPsychrometricsGuards:
     def test_ah_to_temp_rh_rejects_negative_ah(self):
         """Negative absolute humidity must raise, not silently emit a fake
         positive RH (p_vapor changes sign when ah < -0.622)."""
-        from src.physics.psychrometrics import ah_to_temp_rh
+        from vfed.physics.psychrometrics import ah_to_temp_rh
 
         with pytest.raises(ValueError):
             ah_to_temp_rh(22.0, -0.001)
@@ -178,7 +179,7 @@ class TestPsychrometricsGuards:
     def test_temp_rh_to_ah_clamps_out_of_range_rh(self):
         """Negative RH input would previously yield negative AH; it is now
         clamped to [0, 100] (defensive: engine always passes in-range RH)."""
-        from src.physics.psychrometrics import temp_rh_to_ah
+        from vfed.physics.psychrometrics import temp_rh_to_ah
 
         assert temp_rh_to_ah(25.0, -10.0) == 0.0
         assert temp_rh_to_ah(25.0, 150.0) == pytest.approx(
@@ -192,26 +193,26 @@ class TestConfigValidation:
     def test_negative_stage_factor_rejected(self):
         """A negative stage_factor silently flips transpiration into a moisture
         sink; from_dict must reject it."""
-        from src.design.project import DesignProject
+        from vfed.design.project import DesignProject
 
         with pytest.raises(ValueError, match="transpiration.stage_factor"):
             DesignProject.from_dict({"transpiration": {"stage_factor": -1.0}})
 
     def test_negative_smer_rejected(self):
         """A negative SMER would make the dehumidifier 'inject' water."""
-        from src.design.project import DesignProject
+        from vfed.design.project import DesignProject
 
         with pytest.raises(ValueError, match="deh.smer"):
             DesignProject.from_dict({"deh": {"smer": -2.0}})
 
     def test_rh_out_of_range_rejected(self):
-        from src.design.project import DesignProject
+        from vfed.design.project import DesignProject
 
         with pytest.raises(ValueError, match="setpoints.RH"):
             DesignProject.from_dict({"setpoints": {"RH": 120.0}})
 
     def test_empty_dict_uses_sane_defaults(self):
-        from src.design.project import DesignProject
+        from vfed.design.project import DesignProject
 
         p = DesignProject.from_dict({})
         assert p.transpiration.stage_factor == 1.0
@@ -229,8 +230,8 @@ def test_engine_over_dehumidification_never_negative_rh():
     floor-clamp events in the summary instead of hiding them."""
     import pandas as pd
 
-    from src.design.engine import DesignEngine
-    from src.design.presets import preset_609
+    from vfed.design.engine import DesignEngine
+    from vfed.design.presets import preset_609
 
     p = preset_609()
     p.envelope.V_room = 80.0
@@ -239,9 +240,11 @@ def test_engine_over_dehumidification_never_negative_rh():
     p.deh.P_ref_w = 3000.0
     p.hvac.P_rated_w = 3000.0
     # This test exercises the humidity-clamp robustness mechanism, not the
-    # transpiration calibration.  Fix k_vpd at the pre-C-round value so the
-    # aggressive small-room scenario stays thermally convergent.
-    p.transpiration.k_vpd = 2.0e-5
+    # transpiration calibration.  Use a modest direct-set rate (~80 L/day,
+    # comparable to the pre-C-round k_vpd=2e-5 vapour flux) so the aggressive
+    # small-room scenario stays thermally convergent.
+    p.transpiration.method = "daily"
+    p.transpiration.daily_water_L = 80.0
 
     # Deterministic synthetic weather: hot & dry outdoor all year.
     idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
@@ -280,7 +283,7 @@ def test_engine_over_dehumidification_never_negative_rh():
 def test_limit_removal_by_inventory():
     """Nominal DEH/HVAC removal is capped to the room vapour inventory; the
     same scale factor applies to both devices so their ratio is preserved."""
-    from src.design.engine import _limit_removal_by_inventory
+    from vfed.design.engine import _limit_removal_by_inventory
 
     air_mass = 240.0  # V=200 × rho=1.2
 
@@ -308,8 +311,8 @@ def test_engine_reports_actual_dehumidification():
     moisture removal and a utilization ratio, with actual <= nominal always."""
     import pandas as pd
 
-    from src.design.engine import DesignEngine
-    from src.design.presets import preset_609
+    from vfed.design.engine import DesignEngine
+    from vfed.design.presets import preset_609
 
     p = preset_609()
     p.envelope.V_room = 80.0
@@ -319,8 +322,9 @@ def test_engine_reports_actual_dehumidification():
     p.hvac.P_rated_w = 3000.0
     # Same fix as test_engine_over_dehumidification_never_negative_rh: this
     # test validates the accounting mechanism under an aggressive small-room
-    # scenario; fix k_vpd at the pre-C-round value for thermal convergence.
-    p.transpiration.k_vpd = 2.0e-5
+    # scenario; use a modest direct-set rate for thermal convergence.
+    p.transpiration.method = "daily"
+    p.transpiration.daily_water_L = 80.0
 
     idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
     weather = pd.DataFrame({
@@ -351,55 +355,15 @@ def test_engine_reports_actual_dehumidification():
 
 
 # ---------------------------------------------------------------------------
-# 3.9  A-level fixes: Penman–Monteith units, Van Henten high-T singularity,
-#      psychrometrics station-pressure parameterisation
+# 3.9  A-level fixes: Van Henten high-T singularity, psychrometrics
+#      station-pressure parameterisation
 # ---------------------------------------------------------------------------
-def test_stomatal_pm_unit_invariance():
-    """Penman–Monteith is invariant to the *consistent* pressure unit: the
-    all-kPa (Δ, γ, VPD all in kPa) and all-Pa representations give identical
-    λE.  Guards against a future regression that mixes VPD(Pa) with Δ, γ in
-    kPa, which would overstate the aerodynamic term by 1000×."""
-    from src.plants.transpiration import TranspirationModel
-    from src.physics.psychrometrics import (
-        latent_heat_vaporization, saturation_vapor_pressure, compute_vpd)
-
-    T, RH = 25.0, 50.0
-    model = TranspirationModel(method="stomatal", area_m2=45.0)
-    E_model = model.step(T, RH, True, 600.0)          # all terms in kPa
-
-    e_sat = saturation_vapor_pressure(T)              # kPa
-    delta = 4098.0 * e_sat / (T + 237.3) ** 2         # kPa/K
-    gamma = 0.0655                                    # kPa/K
-    vpd = compute_vpd(T, RH)                          # kPa
-    r_a = max(1.0, model.r_a)
-    r_s = 1.0 / max(1e-9, model.g_stomata)
-    rho_cp = model.rho_cp()
-    R_n = model.r_n_canopy * 1.0                      # light on
-
-    numerator = delta * R_n + rho_cp * max(0.0, vpd) / r_a
-    denominator = delta + gamma * (1.0 + r_s / r_a)
-    # MINOR-7 (D): E_rate uses temperature-correlated latent heat at T_z.
-    E_hand = (numerator / denominator) / (latent_heat_vaporization(T) * 1000.0) * model.area_m2
-
-    assert E_model == pytest.approx(E_hand, rel=1e-9)
-
-    # All-Pa recomputation (every pressure term ×1000) → identical λE.
-    num_pa = (delta * 1000.0) * R_n + rho_cp * (vpd * 1000.0) / r_a
-    den_pa = (delta * 1000.0) + (gamma * 1000.0) * (1.0 + r_s / r_a)
-    assert (num_pa / den_pa) == pytest.approx(numerator / denominator, rel=1e-12)
-
-    # The *wrong* mixed-unit version (VPD in Pa only) must be clearly
-    # distinguishable from the correct result — the regression signature.
-    num_mixed = delta * R_n + rho_cp * (vpd * 1000.0) / r_a
-    assert abs(num_mixed / denominator - numerator / denominator) > 1.0
-
-
 def test_van_henten_high_temp_no_singularity():
     """Above ~42 °C the CO₂-response quadratic turns negative and the
     photosynthesis denominator crosses zero (~44.5 °C).  Net photosynthesis
     must stop cleanly (return 0) instead of flipping sign / blowing up and
     collapsing the biomass state."""
-    from src.plants.van_henten import VanHenten
+    from vfed.plants.van_henten import VanHenten
 
     grow = VanHenten(co2_ppm=800)
 
@@ -427,7 +391,7 @@ def test_van_henten_high_temp_no_singularity():
 def test_psychrometrics_pressure_parameterization():
     """temp_rh_to_ah / ah_to_temp_rh accept an explicit station pressure;
     lower pressure (higher altitude) raises AH for the same RH."""
-    from src.physics.psychrometrics import (
+    from vfed.physics.psychrometrics import (
         temp_rh_to_ah, ah_to_temp_rh, saturation_vapor_pressure)
 
     pv = saturation_vapor_pressure(25.0) * 0.5
@@ -450,14 +414,15 @@ def test_engine_altitude_pressure_consistent():
     AH↔RH with the actual P_atm everywhere and never emit negative RH."""
     import pandas as pd
 
-    from src.design.engine import DesignEngine
-    from src.design.presets import preset_609
+    from vfed.design.engine import DesignEngine
+    from vfed.design.presets import preset_609
 
     p = preset_609()
     p.envelope.V_room = 80.0
     p.envelope.C_z = 50000.0
-    # Same k_vpd isolation as the small-room RH robustness tests above.
-    p.transpiration.k_vpd = 2.0e-5
+    # Same transpiration isolation as the small-room RH robustness tests above.
+    p.transpiration.method = "daily"
+    p.transpiration.daily_water_L = 80.0
 
     idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
     weather = pd.DataFrame({
@@ -477,13 +442,13 @@ def test_engine_altitude_pressure_consistent():
 
 
 # ---------------------------------------------------------------------------
-# 3.11  B-level fixes: sample-YAML k_vpd parity, auto-size delegation to the
-#       configured transpiration method, stomatal response to LED PAR
+# 3.11  B-level fixes: sample-YAML transpiration parity, auto-size delegation
+#       to the configured transpiration method
 # ---------------------------------------------------------------------------
-def test_sample_yaml_k_vpd_matches_code_default():
-    """B1+C fix: example YAMLs must agree with the code default k_vpd=5e-5
-    (B1 unified 1e-4 -> 2e-5 across YAML/code; the C round recalibrated
-    2e-5 -> 5e-5 for a healthier model water balance)."""
+def test_sample_yaml_transpiration_matches_code_default():
+    """5-method consolidation: example YAMLs use the model-coupled default
+    method (van_henten) and carry no legacy direct-set fields (k_vpd,
+    E_max_kgs, g_stomata, r_a, r_n_canopy were removed)."""
     import yaml
 
     root = Path(__file__).resolve().parents[1]
@@ -491,7 +456,10 @@ def test_sample_yaml_k_vpd_matches_code_default():
                   "example_sweep.yaml"):
         with open(root / fname, encoding="utf-8") as fh:
             cfg = yaml.safe_load(fh)
-        assert cfg["transpiration"]["k_vpd"] == pytest.approx(5.0e-5), fname
+        t = cfg["transpiration"]
+        assert t["method"] == "van_henten", fname
+        for legacy in ("k_vpd", "E_max_kgs", "g_stomata", "r_a", "r_n_canopy"):
+            assert legacy not in t, f"{fname}: legacy field {legacy}"
 
 
 def test_sample_yaml_pv_params_match_code_default():
@@ -517,43 +485,26 @@ def test_sample_yaml_pv_params_match_code_default():
 
 
 def test_auto_size_delegates_to_transpiration_model():
-    """B2 fix: DEH auto-size must estimate the design moisture load with the
-    SAME configured transpiration method used at runtime.  stomatal and
-    van_henten previously fell back to the k_vpd shortcut, sizing the DEH
-    with the wrong method."""
-    from src.design.engine import _build_devices
-    from src.design.presets import preset_609
+    """B2 fix (continued): DEH auto-size must estimate the design moisture
+    load with the SAME configured transpiration method used at runtime.
+    Every method now sizes through its own design_rate_kgs() peak-stage
+    rate (van_henten via the growth pre-run); no k_vpd shortcut remains."""
+    from vfed.design.engine import _build_devices
+    from vfed.design.presets import preset_609
 
-    for method in ("vpd", "stomatal", "van_henten", "constant", "daily"):
+    for method in ("van_henten", "daily", "daily_per_period"):
         p = preset_609()
         p.transpiration.method = method
         p.deh.auto_size = True
         _, _, deh, _, _, _ = _build_devices(p)
         assert deh.P_ref > 0.0, f"method={method}"
 
-    # per_plant needs a non-zero plant count for a positive design load.
-    p = preset_609()
-    p.transpiration.method = "per_plant"
-    p.transpiration.plant_count = 100
-    p.deh.auto_size = True
-    _, _, deh, _, _, _ = _build_devices(p)
-    assert deh.P_ref > 0.0
+    # per-plant family needs a non-zero plant count for a positive design load.
+    for method in ("per_plant", "per_plant_per_period"):
+        p = preset_609()
+        p.transpiration.method = method
+        p.transpiration.plant_count = 100
+        p.deh.auto_size = True
+        _, _, deh, _, _, _ = _build_devices(p)
+        assert deh.P_ref > 0.0, f"method={method}"
 
-
-def test_stomatal_transpiration_follows_light():
-    """B3 fix: stomatal transpiration must respond to the actual LED PAR
-    (light_wm2) instead of a fixed r_n_canopy; without light_wm2 the legacy
-    behaviour is preserved."""
-    from src.plants.transpiration import TranspirationModel
-
-    model = TranspirationModel(method="stomatal", area_m2=45.0)
-    T, RH = 25.0, 50.0
-
-    e_legacy = model.step(T, RH, True, 600.0)               # r_n_canopy=250
-    e_low = model.step(T, RH, True, 600.0, light_wm2=87.5)  # default PAR
-    e_high = model.step(T, RH, True, 600.0, light_wm2=200.0)
-
-    assert e_legacy > e_low              # 87.5 < 250 W/m² → less radiation
-    assert e_high > e_low                # stronger light → more transpiration
-    assert e_high < e_legacy
-    assert model.step(T, RH, False, 600.0, light_wm2=87.5) == 0.0

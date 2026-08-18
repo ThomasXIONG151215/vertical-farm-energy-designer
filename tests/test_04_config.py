@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+SRC = Path(__file__).resolve().parents[1] / "vfed"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from src.design.project import DesignProject
+from vfed.design.project import DesignProject
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ class TestFromDictErrors:
 
     def test_unknown_capital_key_raises(self):
         """A typo inside a nested 'capital' block should raise."""
-        with pytest.raises(ValueError, match="Unrecognised keys in 'capital'"):
+        with pytest.raises(ValueError, match="Unrecognised keys in 'led.capital'"):
             DesignProject.from_dict({
                 "led": {
                     "ppfd_target": 400,
@@ -55,7 +55,7 @@ class TestFromDictErrors:
 
     def test_round_trip_preserves_values(self):
         """to_dict -> from_dict must be lossless."""
-        from src.design.presets import preset_609
+        from vfed.design.presets import preset_609
 
         p1 = preset_609()
         p2 = DesignProject.from_dict(p1.to_dict())
@@ -191,13 +191,11 @@ class TestFromDictErrors:
             "transpiration": {
                 "method": "daily",
                 "daily_water_L": 60.0,
-                "photoperiod_hours": 14.0,
             }
         }
         p = DesignProject.from_dict(d)
         assert p.transpiration.method == "daily"
         assert p.transpiration.daily_water_L == pytest.approx(60.0)
-        assert p.transpiration.photoperiod_hours == pytest.approx(14.0)
 
     def test_transpiration_per_plant_params_round_trip(self):
         d = {
@@ -212,11 +210,52 @@ class TestFromDictErrors:
         assert p.transpiration.plant_count == 1000
         assert p.transpiration.ml_per_plant_day == pytest.approx(50.0)
 
-    def test_transpiration_unknown_method_accepted(self):
-        """Unknown method string is accepted at config level (engine handles it)."""
+    def test_transpiration_unknown_method_rejected(self):
+        """Unknown method string must fail fast at config level (P5-5)."""
         d = {"transpiration": {"method": "some_unknown"}}
-        p = DesignProject.from_dict(d)
-        assert p.transpiration.method == "some_unknown"
+        with pytest.raises(ValueError, match="transpiration.method"):
+            DesignProject.from_dict(d)
+
+
+# ---------------------------------------------------------------------------
+# 4.1b  S8 fail-fast numeric / timestep guards (P8-5 / P8-12)
+# ---------------------------------------------------------------------------
+class TestFromDictGuards:
+    def test_timestep_700_rejected_at_load(self):
+        """Non-divisor of 3600 must be rejected at load time (P8-12)."""
+        with pytest.raises(ValueError, match="timestep_s"):
+            DesignProject.from_dict({"space": {"timestep_s": 700.0}})
+
+    def test_timestep_zero_rejected(self):
+        with pytest.raises(ValueError, match="timestep_s"):
+            DesignProject.from_dict({"space": {"timestep_s": 0.0}})
+
+    def test_timestep_600_ok(self):
+        p = DesignProject.from_dict({"space": {"timestep_s": 600.0}})
+        assert p.space.timestep_s == 600.0
+
+    def test_ppfd_target_string_rejected(self):
+        with pytest.raises(ValueError, match="ppfd_target"):
+            DesignProject.from_dict({"led": {"ppfd_target": "six"}})
+
+    def test_parameter_ranges_string_triple_rejected(self):
+        with pytest.raises(ValueError, match="parameter_ranges"):
+            DesignProject.from_dict(
+                {"space": {"parameter_ranges": {"ppfd_target": ["a", "b", "c"]}}})
+
+    def test_site_lat_string_rejected(self):
+        with pytest.raises(ValueError, match="site.lat"):
+            DesignProject.from_dict({"site": {"lat": "31.0"}})
+
+    def test_setpoints_T_light_string_rejected(self):
+        with pytest.raises(ValueError, match="setpoints.T_light"):
+            DesignProject.from_dict({"setpoints": {"T_light": "22"}})
+
+    def test_tariff_hourly_price_string_rejected(self):
+        hp = [0.1] * 24
+        hp[23] = "six"
+        with pytest.raises(ValueError, match="hourly_prices"):
+            DesignProject.from_dict({"tariff": {"hourly_prices": hp}})
 
 
 # ---------------------------------------------------------------------------
@@ -225,28 +264,28 @@ class TestFromDictErrors:
 class TestParameterRanges:
     def test_unknown_parameter_raises(self):
         """Sweeping a non-existent parameter should raise."""
-        from src.design.sweep import _validate_ranges
+        from vfed.design.sweep import _validate_ranges
 
         with pytest.raises(ValueError, match="Unknown parameter"):
             _validate_ranges({"super_duper_ppfd": [100, 300, 50]})
 
     def test_out_of_bounds_raises(self):
         """A range exceeding HARD_LIMITS should raise."""
-        from src.design.sweep import _validate_ranges
+        from vfed.design.sweep import _validate_ranges
 
         with pytest.raises(ValueError, match="exceeds hard limits"):
             _validate_ranges({"ppfd_target": [0, 600, 50]})
 
     def test_inverted_range_raises(self):
         """min > max should raise."""
-        from src.design.sweep import _validate_ranges
+        from vfed.design.sweep import _validate_ranges
 
         with pytest.raises(ValueError, match="Invalid range"):
             _validate_ranges({"ppfd_target": [400, 200, 50]})
 
     def test_valid_range_passes(self):
         """Valid range should not raise."""
-        from src.design.sweep import _validate_ranges
+        from vfed.design.sweep import _validate_ranges
 
         # Should not raise
         _validate_ranges({"ppfd_target": [200, 400, 50]})
@@ -257,9 +296,14 @@ class TestParameterRanges:
 # ---------------------------------------------------------------------------
 def test_unknown_objective_raises(project_609):
     """Sweeping with invalid objective should raise."""
-    from src.design.sweep import sweep_design
+    import copy
 
-    p = project_609
+    from vfed.design.sweep import sweep_design
+
+    # Work on a copy: ``project_609`` is session-scoped and other tests
+    # (test_06 edge cases) depend on the pristine 609 state.  Mutating it
+    # in place leaked objective="maximize_happiness" into later sweeps.
+    p = copy.deepcopy(project_609)
     p.space.parameter_ranges = {"ppfd_target": [400, 500, 100]}
     p.space.objective = "maximize_happiness"
     with pytest.raises(ValueError, match="Unknown objective"):

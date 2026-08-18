@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+SRC = Path(__file__).resolve().parents[1] / "vfed"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
@@ -20,7 +20,7 @@ if str(SRC) not in sys.path:
 class TestVanHenten:
     def test_X_d_increases_over_day(self):
         """Canopy dry mass should increase over a typical light period."""
-        from src.plants.van_henten import VanHenten
+        from vfed.plants.van_henten import VanHenten
 
         vh = VanHenten(co2_ppm=800)
         dt = 600.0         # 10-min steps
@@ -37,7 +37,7 @@ class TestVanHenten:
 
     def test_dark_period_no_growth_or_decay(self):
         """In dark (PAR=0) growth rate should be near-zero."""
-        from src.plants.van_henten import VanHenten
+        from vfed.plants.van_henten import VanHenten
 
         vh = VanHenten(co2_ppm=800)
         X_d = 0.01
@@ -51,7 +51,7 @@ class TestVanHenten:
 
     def test_demo_runs(self):
         """Van Henten _demo() should run without error."""
-        from src.plants.van_henten import _demo
+        from vfed.plants.van_henten import _demo
 
         # should not raise
         _demo()
@@ -63,7 +63,7 @@ class TestVanHenten:
 class TestPsychrometrics:
     def test_saturation_pressure_increases_with_temp(self):
         """p_sat(T) must be monotonically increasing with temperature."""
-        from src.physics.psychrometrics import saturation_vapor_pressure
+        from vfed.physics.psychrometrics import saturation_vapor_pressure
 
         p1 = saturation_vapor_pressure(10.0)
         p2 = saturation_vapor_pressure(20.0)
@@ -73,7 +73,7 @@ class TestPsychrometrics:
 
     def test_humidity_ratio_bounds(self):
         """AH at phi=0 should be 0 and >0 at phi>0."""
-        from src.physics.psychrometrics import temp_rh_to_ah
+        from vfed.physics.psychrometrics import temp_rh_to_ah
 
         W_dry = temp_rh_to_ah(25.0, 0.0)
         W_wet = temp_rh_to_ah(25.0, 80.0)
@@ -82,7 +82,7 @@ class TestPsychrometrics:
 
     def test_dewpoint(self):
         """T_dp at phi=100% equals dry-bulb."""
-        from src.physics.psychrometrics import temp_rh_to_dewpoint
+        from vfed.physics.psychrometrics import temp_rh_to_dewpoint
 
         T = 20.0
         T_dp = temp_rh_to_dewpoint(T, 100.0)
@@ -95,7 +95,7 @@ class TestPsychrometrics:
 class TestSHR:
     def test_shr_default(self):
         """DynamicSHR instantiation and default attributes."""
-        from src.physics.shr import DynamicSHR
+        from vfed.physics.shr import DynamicSHR
 
         shr = DynamicSHR()
         # SHR bounds should be within [0, 1]
@@ -105,7 +105,7 @@ class TestSHR:
 
     def test_shr_calculation(self):
         """calc_shr with reasonable values returns plausible SHR."""
-        from src.physics.shr import DynamicSHR
+        from vfed.physics.shr import DynamicSHR
 
         shr = DynamicSHR(BF=0.15)
         # Return air 24 C, 50% RH; supply air 12 C (typical DX coil)
@@ -114,7 +114,7 @@ class TestSHR:
 
     def test_shr_fallback_uses_instance_t_coil_drop(self):
         """calc_shr_fallback reads t_coil_drop from the instance by default."""
-        from src.physics.shr import DynamicSHR
+        from vfed.physics.shr import DynamicSHR
 
         shr = DynamicSHR(t_coil_drop=9.0)
         assert shr.t_coil_drop == 9.0
@@ -180,7 +180,7 @@ class TestSolarGeometry:
     def test_solar_noon_urumqi_far_west_of_std_meridian(self):
         """Urumqi (43.8N, 87.6E, tz=8): solar noon ≈ CST 09:50 (not 14:10)."""
         import pandas as pd
-        from src.weather.weather_bridge import _solar_geometry
+        from vfed.weather.weather_bridge import _solar_geometry
 
         dt = pd.date_range("2023-06-21", periods=24, freq="h")
         zenith, _ = _solar_geometry(lat=43.8, lon=87.6, tz_hours=8.0, dt=dt)
@@ -194,7 +194,7 @@ class TestSolarGeometry:
     def test_solar_noon_shanghai_near_std_meridian(self):
         """Shanghai (31.2N, 121.5E, tz=8): solar noon ≈ CST 12:06."""
         import pandas as pd
-        from src.weather.weather_bridge import _solar_geometry
+        from vfed.weather.weather_bridge import _solar_geometry
 
         dt = pd.date_range("2023-06-21", periods=24, freq="h")
         zenith, _ = _solar_geometry(lat=31.2, lon=121.5, tz_hours=8.0, dt=dt)

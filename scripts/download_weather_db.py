@@ -14,13 +14,13 @@ import sys
 import time
 from pathlib import Path
 
-# Append project root to sys.path so we can import src.*
+# Append project root to sys.path so we can import vfed.*
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import requests
 import pandas as pd
 
-from src.weather.city_db import AVAILABLE_CITIES, _COORDS
+from vfed.weather.city_db import AVAILABLE_CITIES, _COORDS
 
 OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
 YEAR = 2025

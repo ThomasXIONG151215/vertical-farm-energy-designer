@@ -23,35 +23,35 @@ vfed sweep <project.yaml> --cache weather_cache --out results.csv
 
 # Tests
 pytest
-pytest --cov=src
+pytest --cov=vfed
 ```
 
 ## Architecture (flat map)
 
 | Directory | Purpose | Key file |
 |-----------|---------|----------|
-| `src/physics/` | Psychrometrics, envelope, ODE solver, SHR | `engine.py` consumes all |
-| `src/devices/` | HVAC (Carnot COP default), dehumidifier (auto-size), LED, compressor, lag | Built by `engine.py` |
-| `src/pvbes/` | PV, battery, grid, energy system | Consumed by `sweep.py` |
-| `src/design/` | Project config, engine, presets, sweep | `engine.py` is the hub |
-| `src/weather/` | Open-Meteo fetch, geocoding | `engine.py` calls `fetch_weather` |
-| `src/plants/` | Transpiration (6 methods: vpd/stomatal/van_henten/constant/daily/per_plant), Van Henten growth | `engine.py` steps each hour |
-| `src/agent/` | Evaluator (agent-cli contract) | Entry point for CLI |
+| `vfed/physics/` | Psychrometrics, envelope, ODE solver, SHR | `engine.py` consumes all |
+| `vfed/devices/` | HVAC (Carnot COP default), dehumidifier (auto-size), LED, compressor, lag | Built by `engine.py` |
+| `vfed/pvbes/` | PV, battery, grid, energy system | Consumed by `sweep.py` |
+| `vfed/design/` | Project config, engine, presets, sweep | `engine.py` is the hub |
+| `vfed/weather/` | Open-Meteo fetch, geocoding | `engine.py` calls `fetch_weather` |
+| `vfed/plants/` | Transpiration (5 methods: van_henten model-coupled; daily/per_plant/daily_per_period/per_plant_per_period direct-set), Van Henten growth | `engine.py` steps each hour |
+| `vfed/agent/` | Evaluator (agent-cli contract) | Entry point for CLI |
 
 ## Constraints
 
-- **All parameters live in YAML** — `src/design/project.py` is the config contract. New fields must be added there and in `presets.py`.
-- **No EnergyPlus dependency** — pure Python ODE solver (`src/physics/ode.py`).
+- **All parameters live in YAML** — `vfed/design/project.py` is the config contract. New fields must be added there and in `presets.py`.
+- **No EnergyPlus dependency** — pure Python ODE solver (`vfed/physics/ode.py`).
 - **Python >= 3.8** — core deps: `numpy`, `pandas`, `pyyaml`, `requests`.
-- **`src/design/engine.py` is the hub** — it imports from every other module. Changes to physics/devices/plants/weather may affect it.
-- **Strategy/scenario modes are NOT implemented** — the 4 strategy modes (`default` / `conservative` / `progressive` / `aggressive`) exist only as a *planned* feature documented in the `src/design/project.py` docstring. Do not add or reference a `strategy:` config field.
+- **`vfed/design/engine.py` is the hub** — it imports from every other module. Changes to physics/devices/plants/weather may affect it.
+- **Strategy/scenario modes are NOT implemented** — the 4 strategy modes (`default` / `conservative` / `progressive` / `aggressive`) exist only as a *planned* feature documented in the `vfed/design/project.py` docstring. Do not add or reference a `strategy:` config field.
 - **HVAC COP mode is 4** — `carnot` (default: η_II × T_evap/(T_cond-T_evap)), `constant`, `linear`, `table`. Carnot depends on both indoor and outdoor temperature.
-- **Transpiration method is 6** — 3 model-calculated (`vpd`, `stomatal`, `van_henten`) + 3 direct-set (`constant`, `daily`, `per_plant`).
+- **Transpiration method is 5** — 1 model-coupled (`van_henten`) + 4 direct-set (`daily`, `per_plant`, `daily_per_period`, `per_plant_per_period`).
 
 ## Boundaries
 
 ### Always do
-- Update `src/design/project.py` when adding/rename a config field
+- Update `vfed/design/project.py` when adding/rename a config field
 - Run `pytest` before committing
 - Use `DesignProject` dataclasses for config (not raw dicts)
 
@@ -63,13 +63,13 @@ pytest --cov=src
 ### Never do
 - Commit `.env` or API keys
 - Hardcode weather data — always use `fetch_weather` or cache
-- Import from `research/` into `src/` — research is archived, src is the active codebase
+- Import from `research/` into `vfed/` — research is archived, vfed is the active codebase
 - Modify `research/` code — it is preserved for reproducibility only
 
 ## File Conventions
 
-- Config dataclasses: `src/design/project.py`
-- Presets: `src/design/presets.py`
-- CLI entry: `src/cli.py`
+- Config dataclasses: `vfed/design/project.py`
+- Presets: `vfed/design/presets.py`
+- CLI entry: `vfed/cli.py`
 - Tests: `tests/`
 - Cached weather: `weather_cache/` (git-ignored, regeneratable)

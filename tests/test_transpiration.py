@@ -1,62 +1,21 @@
 """
-Unit tests for transpiration model — all 6 methods, edge cases, and
+Unit tests for transpiration model — all 5 methods, edge cases, and
 consistency between equivalent configurations.
 """
 
 import pytest
-from src.plants.transpiration import TranspirationModel
+from vfed.plants.transpiration import TranspirationModel
 
 
 # ── Helper ───────────────────────────────────────────────────────────
 
-def _light(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0):
+def _light(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0, **kw):
     """Simulate one step with standard lettuce conditions."""
-    return TranspirationModel().step(T_z, RH_z, is_light, dt)
+    return TranspirationModel(**kw).step(T_z, RH_z, is_light, dt, cycle_day=5.0)
 
 
-def _dark(T_z=22.0, RH_z=65.0, dt=60.0):
-    return TranspirationModel().step(T_z, RH_z, False, dt)
-
-
-# ── VPD method ───────────────────────────────────────────────────────
-
-def test_vpd_positive():
-    """VPD method returns positive transpiration under light."""
-    model = TranspirationModel(method="vpd", k_vpd=2e-5, area_m2=45.0)
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
-    # VPD at 22°C/65% ≈ 0.925 kPa
-    # E ≈ 2e-5 * 0.925 * 45 ≈ 8.3e-4 kg/s
-    assert rate > 0
-    assert rate < 0.01  # sanity: < 10 g/s
-
-
-def test_vpd_zero_in_dark():
-    model = TranspirationModel(method="vpd")
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0)
-    assert rate == 0.0
-
-
-def test_vpd_kilopascal():
-    """k_vpd default is 5e-5 (calibrated up from 2e-5 in the C round —
-    the B1 value was a DEH-sizing compromise that left the model water
-    balance ~6x below real PFAL lettuce)."""
-    model = TranspirationModel()
-    assert model.k_vpd == pytest.approx(5.0e-5)
-
-
-# ── Constant method ──────────────────────────────────────────────────
-
-def test_constant_positive():
-    model = TranspirationModel(method="constant", E_max_kgs=1e-4, area_m2=45.0)
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
-    # 1e-4 kg/s/m² × 45 m² = 4.5e-3 kg/s
-    assert rate == pytest.approx(4.5e-3)
-
-
-def test_constant_zero_in_dark():
-    model = TranspirationModel(method="constant", E_max_kgs=1e-4)
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0)
-    assert rate == 0.0
+def _dark(T_z=22.0, RH_z=65.0, dt=60.0, **kw):
+    return TranspirationModel(**kw).step(T_z, RH_z, False, dt, cycle_day=5.0)
 
 
 # ── Daily method ─────────────────────────────────────────────────────
@@ -100,11 +59,12 @@ def test_per_plant_total_correct():
 
 
 def test_per_plant_zero_count():
-    """0 plants → 0 transpiration."""
+    """0 plants → fail-fast ValueError (P3-5): a silent zero would collapse
+    room humidity and leave the DEH never running."""
     model = TranspirationModel(method="per_plant", plant_count=0,
                                ml_per_plant_day=80.0)
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
-    assert rate == 0.0
+    with pytest.raises(ValueError, match="plant_count"):
+        model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
 
 
 def test_per_plant_zero_in_dark():
@@ -129,59 +89,164 @@ def test_daily_per_plant_equivalent():
 # ── Van Henten method ────────────────────────────────────────────────
 
 def test_van_henten_positive():
-    model = TranspirationModel(method="van_henten", k_vpd=2e-5, area_m2=45.0)
+    model = TranspirationModel(method="van_henten", k_van_henten=1e-4, area_m2=45.0)
     rate = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0, X_d=0.05)
     assert rate > 0
 
 
 def test_van_henten_zero_in_dark():
-    model = TranspirationModel(method="van_henten", k_vpd=2e-5)
+    model = TranspirationModel(method="van_henten", k_van_henten=1e-4)
     rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, X_d=0.05)
     assert rate == 0.0
 
 
 def test_van_henten_biomass_coupling():
     """More biomass → more transpiration."""
-    model = TranspirationModel(method="van_henten", k_vpd=2e-5, area_m2=45.0)
+    model = TranspirationModel(method="van_henten", k_van_henten=1e-4, area_m2=45.0)
     rate_small = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0, X_d=0.01)
     rate_large = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0, X_d=0.05)
     assert rate_large > rate_small
 
 
-# ── Stomatal method ──────────────────────────────────────────────────
+# ── daily_per_period method ──────────────────────────────────────────
 
-def test_stomatal_positive():
-    model = TranspirationModel(method="stomatal", area_m2=45.0,
-                               E_max_kgs=1e-4, g_stomata=1e-3)
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
-    assert rate > 0
-
-
-def test_stomatal_zero_in_dark():
-    """Stomatal: transpiration zero in dark (radiative term = 0)."""
-    model = TranspirationModel(method="stomatal", E_max_kgs=1e-4)
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0)
-    # Radiative term is E_max * area * light_factor = 0, but
-    # vpd_term / aerodyn is nonzero. Check: g_stomata still open?
-    # PM still produces E ≈ vpd*g*ρ*cp*stage_factor which is small
-    # but not zero. Actually, the PM has aero term independent of light.
-    # So stomatal DOES NOT go to zero in dark — this is expected behavior.
-    assert rate >= 0.0
+def test_daily_per_period_stage_selection():
+    """period_days=[10,10,10], daily_water_L_period=[30,45,60] →
+    day 5 → 30 L/day, day 15 → 45 L/day, day 25 → 60 L/day."""
+    model = TranspirationModel(method="daily_per_period", photoperiod_hours=16.0,
+                               period_days=[10.0, 10.0, 10.0],
+                               daily_water_L_period=[30.0, 45.0, 60.0])
+    r5 = model.step(22.0, 65.0, True, 60.0, cycle_day=5.0)
+    r15 = model.step(22.0, 65.0, True, 60.0, cycle_day=15.0)
+    r25 = model.step(22.0, 65.0, True, 60.0, cycle_day=25.0)
+    assert r5 == pytest.approx(30.0 / (16.0 * 3600.0), rel=1e-4)
+    assert r15 == pytest.approx(45.0 / (16.0 * 3600.0), rel=1e-4)
+    assert r25 == pytest.approx(60.0 / (16.0 * 3600.0), rel=1e-4)
 
 
-# ── Unknown method ───────────────────────────────────────────────────
+def test_daily_per_period_stage_boundaries():
+    """Left-closed right-open: day<10 → stage0, 10≤day<20 → stage1, ≥20 → stage2.
+    cycle_day beyond sum(period_days) clamps to the last stage."""
+    model = TranspirationModel(method="daily_per_period", photoperiod_hours=16.0,
+                               period_days=[10.0, 10.0, 10.0],
+                               daily_water_L_period=[30.0, 45.0, 60.0])
+    r0 = model.step(22.0, 65.0, True, 60.0, cycle_day=0.0)
+    r10 = model.step(22.0, 65.0, True, 60.0, cycle_day=10.0)
+    r20 = model.step(22.0, 65.0, True, 60.0, cycle_day=20.0)
+    r35 = model.step(22.0, 65.0, True, 60.0, cycle_day=35.0)
+    assert r0 == pytest.approx(30.0 / (16.0 * 3600.0), rel=1e-4)
+    assert r10 == pytest.approx(45.0 / (16.0 * 3600.0), rel=1e-4)
+    assert r20 == pytest.approx(60.0 / (16.0 * 3600.0), rel=1e-4)
+    assert r35 == pytest.approx(60.0 / (16.0 * 3600.0), rel=1e-4)
 
-def test_unknown_method_returns_zero():
-    model = TranspirationModel(method="nonexistent")
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
+
+def test_daily_per_period_zero_in_dark():
+    model = TranspirationModel(method="daily_per_period", daily_water_L_period=[30.0, 45.0, 60.0])
+    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, cycle_day=5.0)
     assert rate == 0.0
 
 
-# ── Light factor: all direct-set methods zero in dark ────────────────
+def test_period_method_requires_cycle_day():
+    """Period methods must receive cycle_day — a missing clock would silently
+    mis-select stages. Fail fast instead."""
+    model = TranspirationModel(method="daily_per_period")
+    with pytest.raises(ValueError, match="cycle_day"):
+        model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
 
-@pytest.mark.parametrize("method", ["constant", "daily", "per_plant", "vpd", "van_henten"])
+
+# ── per_plant_per_period method ──────────────────────────────────────
+
+def test_per_plant_per_period_stage_selection():
+    """1000 plants × ml_per_plant_day_period=[10,30,50] mL → 10/30/50 L/day."""
+    model = TranspirationModel(method="per_plant_per_period", plant_count=1000,
+                               photoperiod_hours=16.0,
+                               period_days=[10.0, 10.0, 10.0],
+                               ml_per_plant_day_period=[10.0, 30.0, 50.0])
+    r5 = model.step(22.0, 65.0, True, 60.0, cycle_day=5.0)
+    r15 = model.step(22.0, 65.0, True, 60.0, cycle_day=15.0)
+    r25 = model.step(22.0, 65.0, True, 60.0, cycle_day=25.0)
+    assert r5 == pytest.approx(10.0 / (16.0 * 3600.0), rel=1e-4)
+    assert r15 == pytest.approx(30.0 / (16.0 * 3600.0), rel=1e-4)
+    assert r25 == pytest.approx(50.0 / (16.0 * 3600.0), rel=1e-4)
+
+
+def test_per_plant_per_period_zero_count():
+    model = TranspirationModel(method="per_plant_per_period", plant_count=0,
+                               ml_per_plant_day_period=[10.0, 30.0, 50.0])
+    with pytest.raises(ValueError, match="plant_count"):
+        model.step(22.0, 65.0, True, 60.0, cycle_day=5.0)
+
+
+def test_per_plant_per_period_zero_in_dark():
+    model = TranspirationModel(method="per_plant_per_period", plant_count=100,
+                               ml_per_plant_day_period=[10.0, 30.0, 50.0])
+    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, cycle_day=5.0)
+    assert rate == 0.0
+
+
+# ── design_rate_kgs (DEH sizing) ─────────────────────────────────────
+
+def test_design_rate_peak_stage():
+    """Sizing rate = peak stage instantaneous rate (P3-4 peak logic)."""
+    m = TranspirationModel(method="daily", daily_water_L=40.0, photoperiod_hours=16.0)
+    assert m.design_rate_kgs() == pytest.approx(40.0 / (16.0 * 3600.0))
+
+    m = TranspirationModel(method="per_plant", plant_count=1000,
+                           ml_per_plant_day=80.0, photoperiod_hours=16.0)
+    assert m.design_rate_kgs() == pytest.approx(80.0 / (16.0 * 3600.0))
+
+    m = TranspirationModel(method="daily_per_period", photoperiod_hours=16.0,
+                           daily_water_L_period=[30.0, 45.0, 60.0])
+    assert m.design_rate_kgs() == pytest.approx(60.0 / (16.0 * 3600.0))
+
+    m = TranspirationModel(method="per_plant_per_period", plant_count=1000,
+                           photoperiod_hours=16.0,
+                           ml_per_plant_day_period=[10.0, 30.0, 50.0])
+    assert m.design_rate_kgs() == pytest.approx(50.0 / (16.0 * 3600.0))
+
+
+def test_design_rate_stage_factor_multiplies():
+    m = TranspirationModel(method="daily", daily_water_L=40.0,
+                           photoperiod_hours=16.0, stage_factor=1.2)
+    assert m.design_rate_kgs() == pytest.approx(1.2 * 40.0 / (16.0 * 3600.0))
+
+
+def test_design_rate_van_henten_guarded():
+    """van_henten sizing goes through the engine growth pre-run, not here."""
+    m = TranspirationModel(method="van_henten")
+    with pytest.raises(ValueError):
+        m.design_rate_kgs()
+
+
+# ── Legacy / unknown methods ─────────────────────────────────────────
+
+@pytest.mark.parametrize("legacy,hint", [
+    ("vpd", "van_henten"),
+    ("stomatal", "van_henten"),
+    ("constant", "daily"),
+])
+def test_legacy_method_fails_fast_with_hint(legacy, hint):
+    """Removed methods raise ValueError with a migration hint."""
+    model = TranspirationModel(method=legacy)
+    with pytest.raises(ValueError, match=hint):
+        model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
+
+
+def test_unknown_method_fails_fast():
+    """Unknown method raises ValueError (legacy silent-zero removed)."""
+    model = TranspirationModel(method="nonexistent")
+    with pytest.raises(ValueError, match="method"):
+        model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
+
+
+# ── Light factor: all methods zero in dark ───────────────────────────
+
+@pytest.mark.parametrize("method", ["van_henten", "daily", "per_plant",
+                                    "daily_per_period", "per_plant_per_period"])
 def test_method_zero_in_dark(method):
-    """Model-calculated and direct-set methods all return 0 in dark."""
-    model = TranspirationModel(method=method)
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0)
+    """Model-coupled and direct-set methods all return 0 in dark."""
+    model = TranspirationModel(method=method, plant_count=100,
+                               daily_water_L_period=[30.0, 45.0, 60.0],
+                               ml_per_plant_day_period=[10.0, 30.0, 50.0])
+    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, cycle_day=5.0)
     assert rate == 0.0

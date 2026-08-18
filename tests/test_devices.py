@@ -3,7 +3,7 @@ Unit tests for HVAC (COPModel, size_hvac) and DEH (size_deh) device models.
 """
 
 import pytest
-from src.devices.hvac import COPModel, size_hvac
+from vfed.devices.hvac import COPModel, size_hvac
 
 
 # ── COPModel: Carnot mode ────────────────────────────────────────────
@@ -210,7 +210,7 @@ def test_size_hvac_cold_outdoor_with_deh_heat_still_zero():
 
 # ── size_deh() ───────────────────────────────────────────────────────
 
-from src.devices.dehumidifier import size_deh
+from vfed.devices.dehumidifier import size_deh
 
 
 def test_size_deh_positive():

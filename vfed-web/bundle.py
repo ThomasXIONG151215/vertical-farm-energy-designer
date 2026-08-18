@@ -7,7 +7,7 @@ into worker.js as VFS_SOURCE object.  Run from vfed-web/ directory.
 import os
 import json
 
-VFED_SRC = os.path.join(os.path.dirname(__file__), '..', 'src')
+VFED_SRC = os.path.join(os.path.dirname(__file__), '..', 'vfed')
 ROOT = os.path.join(os.path.dirname(__file__), '..')
 
 

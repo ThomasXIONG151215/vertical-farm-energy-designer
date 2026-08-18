@@ -75,9 +75,9 @@ print("yaml location:", yaml.__file__)
                 await pyodide.runPythonAsync(`
 import sys
 sys.path.insert(0, '/')
-from src.design.sweep import sweep_design
-from src.design.project import DesignProject
-from src.design.engine import DesignEngine
+from vfed.design.sweep import sweep_design
+from vfed.design.project import DesignProject
+from vfed.design.engine import DesignEngine
                 `);
                 console.log('Pre-imports verified');
 
@@ -180,8 +180,8 @@ except ImportError:
 import sys, os
 sys.path.insert(0, '/')
 import json, yaml
-from src.design.project import DesignProject
-from src.design.sweep import sweep_design
+from vfed.design.project import DesignProject
+from vfed.design.sweep import sweep_design
 
 with open('/tmp/project.yaml', 'r') as f:
     project = DesignProject.from_dict(yaml.safe_load(f))
@@ -214,7 +214,7 @@ async function listPresets() {
         const output = pyodide.runPython(`
 import json
 try:
-    from src.design.presets import PRESETS
+    from vfed.design.presets import PRESETS
     presets_list = [{'id': k, 'label': v.get('label', k)} for k, v in PRESETS.items()]
 except (ImportError, AttributeError):
     presets_list = []
@@ -251,8 +251,8 @@ except ImportError:
 import sys, json
 sys.path.insert(0, '/')
 import yaml
-from src.design.project import DesignProject
-from src.design.engine import DesignEngine
+from vfed.design.project import DesignProject
+from vfed.design.engine import DesignEngine
 
 with open('/tmp/project.yaml', 'r') as f:
     project = DesignProject.from_dict(yaml.safe_load(f))

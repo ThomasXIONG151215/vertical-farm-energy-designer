@@ -8,10 +8,10 @@ Shared pytest fixtures (session-scoped for performance).
 
 import pytest
 
-from src.design.project import DesignProject
-from src.design.presets import preset_609
-from src.design.engine import DesignEngine
-from src.weather.weather_bridge import fetch_weather
+from vfed.design.project import DesignProject
+from vfed.design.presets import preset_609
+from vfed.design.engine import DesignEngine
+from vfed.weather.weather_bridge import fetch_weather
 
 
 @pytest.fixture(scope="session")

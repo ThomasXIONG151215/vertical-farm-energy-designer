@@ -62,24 +62,24 @@ Issues = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/iss
 Discussions = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designer/discussions"
 
 [project.scripts]
-vfed = "src.cli:main"
+vfed = "vfed.cli:main"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/src",
+    "/vfed",
     "/tests",
     "/data",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["vfed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=src --cov-report=term-missing"
+addopts = "-v --cov=vfed --cov-report=term-missing"
 markers = [
     "slow: slow tests (weather API calls, full sweeps)",
 ]
@@ -110,7 +110,7 @@ ignore_missing_imports = true
 exclude = ["tests/", "docs/"]
 
 [tool.coverage.run]
-source = ["src"]
+source = ["vfed"]
 omit = ["tests/*", "docs/*"]
 
 [tool.coverage.report]

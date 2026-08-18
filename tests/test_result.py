@@ -5,7 +5,7 @@ import tempfile
 
 import numpy as np
 
-from src.design.result import SimulationResult, _ensure_json_safe
+from vfed.design.result import SimulationResult, _ensure_json_safe
 
 
 def make_sample_result():

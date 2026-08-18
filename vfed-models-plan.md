@@ -19,7 +19,7 @@
 | 压缩机 | 滞回死区状态机, 最短启停保护 | `devices/compressor.py` |
 | 一阶滞后 | 非对称上升/下降时间常数 | `devices/lag.py` |
 | 植物生长 | Van Henten 2003 单状态碳平衡模型, CO₂-温度-光联动 | `plants/van_henten.py` |
-| 蒸腾 | 6种模式: 3模型推算(vpd/stomatal/van_henten) + 3直接设定(constant/daily/per_plant) | `plants/transpiration.py` |
+| 蒸腾 | 5种模式: 1模型耦合(van_henten) + 4直接设定(daily/per_plant/daily_per_period/per_plant_per_period) | `plants/transpiration.py` |
 | PV | 单二极管MPP, NOCT电池温度, POA辐照, 逆变器效率 | `pvbes/pv.py` |
 | 电池 | C-rate调度, SOC追踪, 充放电效率, 循环计数 | `pvbes/battery.py` |
 | 电网 | 24h逐时电价表, 上网电价, 区域电价DB (10地区) | `pvbes/grid.py`, `pvbes/tariff_db.py` |

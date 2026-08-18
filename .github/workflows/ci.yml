@@ -44,8 +44,8 @@ jobs:
       - name: Check code format
         run: |
           pip install black flake8
-          black --check src/ || true
-          flake8 src/ --max-line-length=120 --ignore=E501,W503 || true
+          black --check vfed/ || true
+          flake8 vfed/ --max-line-length=120 --ignore=E501,W503 || true
 
   lint:
     name: Lint
@@ -63,7 +63,7 @@ jobs:
         run: pip install black flake8
 
       - name: Run black
-        run: black --check src/
+        run: black --check vfed/
 
       - name: Run flake8
-        run: flake8 src/ --max-line-length=120 --ignore=E501,W503
+        run: flake8 vfed/ --max-line-length=120 --ignore=E501,W503

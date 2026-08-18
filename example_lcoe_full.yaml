@@ -1,4 +1,7 @@
+# 奉贤 609 生菜植物工厂 — LCOE 完整示例（含 PV-电池-电网 + 全资本成本）
+# 顶层 pv_area_m2/battery_kwh 为固定装机；space.parameter_ranges 供 vfed sweep 扫描
 name: fengxian_lettuce_609
+# 站点与气象（Open-Meteo 按 lat/lon/year 拉取，可缓存）
 site:
   lat: 30.9
   lon: 121.5
@@ -6,6 +9,7 @@ site:
   tilt: 20.0
   azimuth: 180.0
   year: 2023
+# 建筑围护结构（第一性原理 ODE 热工模型）
 envelope:
   U_wall_A: 125.3
   A_window: 0.0
@@ -15,7 +19,8 @@ envelope:
   V_room: 200.0
   rho_air: 1.2
   cp_air: 1005.0
-  C_z: 499597.0
+  C_z: 200000.0
+# 空调系统（cop_mode: constant 恒 COP；可选 carnot/constant/linear/table）
 hvac:
   P_rated_w: 3000.0
   cop_value: 4.0
@@ -37,6 +42,7 @@ hvac:
     cost: 0.0
     rate_per_watt: 1.5
     depreciation_years: 15
+# 除湿机（P_ref_w 额定功率；poly_e 为功率多项式系数）
 deh:
   P_ref_w: 2233.0
   poly_e:
@@ -50,10 +56,6 @@ deh:
   T_std: 5.0
   W_mean: 0.012
   W_std: 0.003
-  eta_ref: 0.11
-  eta_max: 0.15
-  ah_min: 0.0054
-  ah_ref: 0.0099
   smer: 2.0
   deadband_rh: 3.0
   min_on_s: 180.0
@@ -66,12 +68,13 @@ deh:
     cost: 1500
     rate_per_watt: 1.0
     depreciation_years: 10
+# LED 照明（auto_deduce=true 时按 ppfd_target×covered_area/efficacy 重算功率）
 led:
-  power_w: 1300.0
+  power_w: 1300.0  # 名义功率：被 auto_deduce 覆盖，实际重算为 400×45/2.5≈7200W；设 auto_deduce=false 才生效
   light_start_hour: 6
   photoperiod_hours: 16
   heat_fraction: 1.0
-  auto_deduce: true
+  auto_deduce: true  # true → power_w 忽略，功率=ppfd_target×covered_area/efficacy=7200W
   efficacy: 2.5
   ppfd_target: 400.0
   covered_area: 45.0
@@ -80,18 +83,18 @@ led:
     cost: 0.0
     rate_per_watt: 2.0
     depreciation_years: 8
+# 蒸腾模型（method: van_henten 生长耦合；也可用 daily / per_plant / daily_per_period / per_plant_per_period）
 transpiration:
-  method: vpd
-  E_max_kgs: 0.0001
-  k_vpd: 0.00005
+  method: van_henten
   stage_factor: 1.0
-  g_stomata: 0.001
+# 温湿度/CO2 设定点（光期/暗期分设温度）
 setpoints:
   T_light: 22.0
   T_dark: 18.0
   RH: 65.0
   co2_ppm: 800.0
   crop_cycle_days: 30.0
+# 光伏组件参数（STC 铭牌；alpha_sc/beta_voc 为相对温漂系数 /K）
 pv:
   eta_pv: 0.233
   area_to_power: 4.3
@@ -111,6 +114,7 @@ pv:
     cost: 0.0
     rate_per_watt: 3.5
     depreciation_years: 25
+# 电池系统（c_energy 单位成本 元/kWh；cycle_life 全循环寿命）
 battery:
   c_energy: 220.0
   c_rate: 1.0
@@ -119,12 +123,15 @@ battery:
   soc_min: 0.1
   soc_max: 0.9
   cycle_life: 4000
-  maintenance: 0.01
   capital:
     mode: per_watt
     cost: 0.0
     rate_per_watt: 500
     depreciation_years: 10
+# 固定装机规模：`vfed evaluate` 按此运行 PV-电池-电网系统（0 则跳过）
+pv_area_m2: 80.0
+battery_kwh: 50.0
+# 分时电价（hourly_prices 24 个值，下标=小时 0-23；export_price 为上网电价）
 tariff:
   hourly_prices:
   - 0.3
@@ -152,7 +159,9 @@ tariff:
   - 0.3
   - 0.3
   export_price: 0.05
+# 设计空间：objective=lcoe 目标；parameter_ranges 供 vfed sweep 枚举
 space:
+  # [min, max, step]；未列出的参数取固定值（key 名见 vfed/design/sweep.py 注册表）
   parameter_ranges:
     ppfd_target:
     - 200
@@ -166,13 +175,14 @@ space:
     - 0
     - 200
     - 50
+    # 电池容量（kWh）— sweep 扫描参数（与顶层 battery_kwh 联动）
     battery:
     - 0
     - 40
     - 20
   timestep_s: 600.0
   objective: lcoe
-equipment_power_w: 0.0
+equipment_power_w: 0.0  # 其他设备恒定基础电耗（W）
 equipment_capital:
   mode: direct
   cost: 2000
@@ -183,6 +193,6 @@ envelope_capital:
   cost: 3000
   rate_per_watt: 1.0
   depreciation_years: 20
-interest_rate: 0.06
-currency: RMB
-exchange_rate: 7.2
+interest_rate: 0.06  # 年折现率（用于资本回收因子 CRF）
+currency: RMB  # 计价货币
+exchange_rate: 7.2  # 兑 USD 汇率（RMB 按 7.2）
