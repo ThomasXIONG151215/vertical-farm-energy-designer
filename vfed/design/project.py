@@ -92,7 +92,11 @@ class EnvelopeConfig:
     U_wall_A: float = 50.0       # W/K envelope conductance
     A_window: float = 0.0        # m^2 glazing
     eta_solar: float = 0.15      # solar heat gain coeff
-    ach: float = 0.5             # air changes / hour (infiltration)
+    ach: float = 0.1             # air changes / hour (infiltration)
+    #   Sealed plant factories (positive-pressure, airtight) exchange
+    #   N≈0.01-0.02 h⁻¹ (Kozai 2013; WUR WPR-1315); 0.1 is a conservative
+    #   leakage upper bound.  The old 0.5 (commercial-building infiltration
+    #   level, ASHRAE) was 25-50x too high and dried out the room in winter.
     permeance: float = 0.0       # kg/(s per kg/kg) envelope vapour permeance
     V_room: float = 200.0        # m^3
     rho_air: float = 1.2         # kg/m^3
@@ -130,6 +134,11 @@ class HVACConfig:
     shr_rh_guard: float = 55.0     # % RH; below this the AC stops latent removal (P4-1a)
     rh_guard_band: float = 3.0     # % RH blend width for the humidity guard
     coil_condense_max_gps: float = 0.0  # explicit coil condensate cap (g/s); 0 → auto ~5e-4·P_rated_w (P4-1b)
+    comp_mod_band_c: float = 2.0  # VFD proportional band (°C): m=demand/band, m=1 at ±band
+    speed_curve: str = "default"  # compressor part-load curve: default | flat
+    #   VFD part-load: COP rises as speed falls (50%→1.33x, 30%→1.54x);
+    #   coefficients from Effsys2/KTH Madani + Szreder&Miara 2020 + Fahlén 2012.
+    #   "flat" = Maxa i-290 conservative (COP≈const).
     eta_II: float = 0.35
     delta_T_evap: float = 8.0
     delta_T_cond: float = 15.0
@@ -153,7 +162,11 @@ class DEHConfig:
     W_mean: float = 0.012       # kg/kg mean humidity ratio (W normalisation)
     W_std: float = 0.003        # kg/kg std dev
     smer: float = 2.0
-    deadband_rh: float = 3.0
+    deadband_rh: float = 2.0     # % RH hysteresis stop point (was 3.0; narrowed to avoid the pband×deadband idle band)
+    comp_mod_band_rh: float = 4.0  # VFD proportional band (% RH): m=(RH_z−sp)/band
+    #   VFD dehumidifier: SMER FALLS as speed falls (DOE 87 FR 35286 — opposite
+    #   of AC; dew-point approach gets worse at low speed).  SMER(m) curve in
+    #   dehumidifier.py; constant-SMER assumption valid only for m≥0.75.
     min_on_s: float = 180.0
     min_off_s: float = 180.0
     fan_power_w: float = 40.0
@@ -233,6 +246,10 @@ class TranspirationConfig:
     #   mL water per plant per day per stage, "per_plant_per_period".
     k_van_henten: float = 1.0e-4 # biomass-scaled gain (1/(s·kPa)), van_henten method
     stage_factor: float = 1.0
+    dark_transpiration_frac: float = 0.15  # night rate / light rate, all methods
+    #   Stomata stay partly open at night (Caird et al. 2007: E_night/E_day
+    #   5-15%, up to 30%; Kim et al. 2004: lettuce g_night/g_day 11-39%); PFAL
+    #   night VPD ≈ day VPD → take 0.10-0.15.  0.0 = zero in the dark (legacy).
 
 
 @dataclass
@@ -471,11 +488,11 @@ class DesignProject:
             sp_cfg, "setpoints")
         _require_nonnegative(
             ["daily_water_L", "plant_count", "ml_per_plant_day",
-             "k_van_henten", "stage_factor"],
+             "k_van_henten", "stage_factor", "dark_transpiration_frac"],
             transp_cfg, "transpiration",
         )
         _require_nonnegative(
-            ["smer", "M_deh_nom", "P_ref_w", "P_rated_max"],
+            ["smer", "M_deh_nom", "P_ref_w", "P_rated_max", "comp_mod_band_rh"],
             deh_cfg, "deh",
         )
         rh_sp = sp_cfg.get("RH")
@@ -510,9 +527,14 @@ class DesignProject:
         _require_nonnegative(
             ["cop_value", "cop_heat", "eta_II", "delta_T_evap",
              "delta_T_cond", "P_rated_w", "P_rated_heat_w",
-             "Q_cool_nom", "P_rated_max", "safety_factor"],
+             "Q_cool_nom", "P_rated_max", "safety_factor", "comp_mod_band_c"],
             hvac_cfg, "hvac",
         )
+        _speed_curve = hvac_cfg.get("speed_curve")
+        if _speed_curve is not None and _speed_curve not in ("default", "flat"):
+            raise ValueError(
+                f"hvac.speed_curve must be one of "
+                f"default|flat, got {_speed_curve}")
         _cop_mode = hvac_cfg.get("cop_mode")
         if _cop_mode is not None and _cop_mode not in (
                 "carnot", "constant", "linear", "table"):

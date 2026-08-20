@@ -14,7 +14,7 @@ envelope:
   U_wall_A: 125.3
   A_window: 0.0
   eta_solar: 0.15
-  ach: 0.5
+  ach: 0.1   # 密闭植物工厂气密换气率（Kozai 2013: 0.01-0.02；0.1 为保守泄漏上限）
   permeance: 0.0
   V_room: 200.0
   rho_air: 1.2

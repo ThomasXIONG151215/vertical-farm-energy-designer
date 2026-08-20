@@ -31,10 +31,13 @@ def test_daily_total_correct():
     assert rate == pytest.approx(expected, rel=0.01)
 
 
-def test_daily_zero_in_dark():
-    model = TranspirationModel(method="daily", daily_water_L=40.0)
+def test_daily_dark_transpiration_fraction():
+    """暗期透蒸 = 光期 × dark_transpiration_frac(0.15)（Caird 2007 夜间气孔不完全关闭）。"""
+    model = TranspirationModel(method="daily", daily_water_L=40.0,
+                               photoperiod_hours=16.0)
     rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0)
-    assert rate == 0.0
+    expected = 0.15 * 40.0 / (16.0 * 3600.0)
+    assert rate == pytest.approx(expected, rel=0.01)
 
 
 def test_daily_stage_factor():
@@ -67,10 +70,12 @@ def test_per_plant_zero_count():
         model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
 
 
-def test_per_plant_zero_in_dark():
-    model = TranspirationModel(method="per_plant", plant_count=100)
+def test_per_plant_dark_transpiration_fraction():
+    model = TranspirationModel(method="per_plant", plant_count=100,
+                               ml_per_plant_day=80.0, photoperiod_hours=16.0)
     rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0)
-    assert rate == 0.0
+    day_rate = 100.0 * 80.0 / 1000.0 / (16.0 * 3600.0)
+    assert rate == pytest.approx(0.15 * day_rate, rel=0.01)
 
 
 # ── Equivalence: daily vs per_plant ──────────────────────────────────
@@ -94,10 +99,12 @@ def test_van_henten_positive():
     assert rate > 0
 
 
-def test_van_henten_zero_in_dark():
+def test_van_henten_dark_transpiration_fraction():
+    """暗期透蒸 = 0.15 × 光期（气孔夜间不完全关闭，VPD 驱动仍有效）。"""
     model = TranspirationModel(method="van_henten", k_van_henten=1e-4)
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, X_d=0.05)
-    assert rate == 0.0
+    day = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0, X_d=0.05)
+    night = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, X_d=0.05)
+    assert night == pytest.approx(0.15 * day, rel=0.01)
 
 
 def test_van_henten_biomass_coupling():
@@ -140,10 +147,12 @@ def test_daily_per_period_stage_boundaries():
     assert r35 == pytest.approx(60.0 / (16.0 * 3600.0), rel=1e-4)
 
 
-def test_daily_per_period_zero_in_dark():
-    model = TranspirationModel(method="daily_per_period", daily_water_L_period=[30.0, 45.0, 60.0])
+def test_daily_per_period_dark_transpiration_fraction():
+    model = TranspirationModel(method="daily_per_period", photoperiod_hours=16.0,
+                               daily_water_L_period=[30.0, 45.0, 60.0])
     rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, cycle_day=5.0)
-    assert rate == 0.0
+    day_rate = 30.0 / (16.0 * 3600.0)  # stage 0
+    assert rate == pytest.approx(0.15 * day_rate, rel=0.01)
 
 
 def test_period_method_requires_cycle_day():
@@ -177,11 +186,13 @@ def test_per_plant_per_period_zero_count():
         model.step(22.0, 65.0, True, 60.0, cycle_day=5.0)
 
 
-def test_per_plant_per_period_zero_in_dark():
+def test_per_plant_per_period_dark_transpiration_fraction():
     model = TranspirationModel(method="per_plant_per_period", plant_count=100,
+                               photoperiod_hours=16.0,
                                ml_per_plant_day_period=[10.0, 30.0, 50.0])
     rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, cycle_day=5.0)
-    assert rate == 0.0
+    day_rate = 100.0 * 10.0 / 1000.0 / (16.0 * 3600.0)  # stage 0
+    assert rate == pytest.approx(0.15 * day_rate, rel=0.01)
 
 
 # ── design_rate_kgs (DEH sizing) ─────────────────────────────────────
@@ -239,14 +250,16 @@ def test_unknown_method_fails_fast():
         model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0)
 
 
-# ── Light factor: all methods zero in dark ───────────────────────────
+# ── Light factor: all methods 0.15× in dark ─────────────────────────
 
 @pytest.mark.parametrize("method", ["van_henten", "daily", "per_plant",
                                     "daily_per_period", "per_plant_per_period"])
-def test_method_zero_in_dark(method):
-    """Model-coupled and direct-set methods all return 0 in dark."""
+def test_method_dark_transpiration_fraction(method):
+    """所有方法暗期透蒸 = 光期 × dark_transpiration_frac(0.15)
+    （Caird et al. 2007：E_night/E_day 5-15%，PFAL 夜间 VPD 不降取上限）。"""
     model = TranspirationModel(method=method, plant_count=100,
                                daily_water_L_period=[30.0, 45.0, 60.0],
                                ml_per_plant_day_period=[10.0, 30.0, 50.0])
-    rate = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, cycle_day=5.0)
-    assert rate == 0.0
+    day = model.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0, cycle_day=5.0)
+    night = model.step(T_z=22.0, RH_z=65.0, is_light=False, dt=60.0, cycle_day=5.0)
+    assert night == pytest.approx(0.15 * day, rel=0.01)

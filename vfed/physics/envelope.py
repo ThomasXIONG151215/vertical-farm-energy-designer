@@ -44,7 +44,7 @@ class Envelope:
         U_wall_A: float = 50.0,
         A_window: float = 0.0,
         eta_solar: float = 0.15,
-        ach: float = 0.5,
+        ach: float = 0.1,
         permeance: float = 0.0,
         rho_air: float = 1.2,
         cp_air: float = 1005.0,

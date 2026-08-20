@@ -22,9 +22,14 @@ Five methods in two families:
     method = "per_plant_per_period"  — as "per_plant" but mL/plant/day is
                                        staged over period_days.
 
-Light modulates stomatal aperture (transpiration ≈ 0 in the dark for all
-methods).  The growth-stage scale factor ``stage_factor`` is a common
-multiplier applied to every method.
+Light modulates stomatal aperture: the dark-period transpiration stays at
+``dark_transpiration_frac`` (default 0.15) of the light-period rate — stomata
+do not close fully at night (Caird et al. 2007, Plant Physiol. 143:4-10:
+E_night/E_day ≈ 5-15 %, up to 30 %; Kim et al. 2004, Ann. Botany 94:691-697:
+lettuce g_night/g_day ≈ 11-39 %).  In a plant factory the night VPD is not
+suppressed as it is in the field, so the upper end of the range applies
+(E_night/E_day ≈ 0.10-0.15).  The growth-stage scale factor ``stage_factor``
+is a common multiplier applied to every method.
 
 Direct-set methods do NOT depend on T/RH — the user states the water need
 directly.  Period-staged methods additionally need ``cycle_day`` (days since
@@ -84,6 +89,10 @@ class TranspirationModel:
     #   Cycle-mean light-period λE≈50 W/m² is what the DEH auto-size consumes.
     stage_factor: float = 1.0        # growth-stage scale (0-1+), all methods
     area_m2: float = 45.0            # canopy area (rates are per m²)
+    dark_transpiration_frac: float = 0.15  # night rate as a fraction of the
+    #   light-period rate (all methods).  Physical basis: Caird et al. 2007
+    #   (E_night/E_day 5-15%, up to 30%) × plant-factory night VPD ≈ day VPD
+    #   → take 0.10-0.15.  0.0 restores the old "zero in the dark" behaviour.
 
     def step(
         self,
@@ -103,7 +112,7 @@ class TranspirationModel:
         not multiply it by dt again when accumulating water — that would
         double-count the time integration.
         """
-        light_factor = 1.0 if is_light else 0.0
+        light_factor = 1.0 if is_light else self.dark_transpiration_frac
         area = self.area_m2
         if self.method == "van_henten":
             # Fallback only on direct TranspirationModel use — the engine
@@ -118,7 +127,8 @@ class TranspirationModel:
             return (self.daily_water_L * self.stage_factor
                     / (pph * 3600.0) * light_factor)
         if self.method == "per_plant":
-            # Dark period: no transpiration, no config check needed (P3-5).
+            # Dark period: no transpiration only when dark_transpiration_frac
+            # is explicitly 0; then no config check is needed (P3-5).
             if light_factor <= 0.0:
                 return 0.0
             self._require_plant_count()
@@ -127,7 +137,9 @@ class TranspirationModel:
             return (daily_L * self.stage_factor
                     / (pph * 3600.0) * light_factor)
         if self.method in ("daily_per_period", "per_plant_per_period"):
-            # Dark period: no transpiration, no stage/config checks needed.
+            # Dark period: same early-return as per_plant when the dark
+            # fraction is explicitly 0; stage/cycle-day checks only when the
+            # night transpiration is active.
             if light_factor <= 0.0:
                 return 0.0
             if cycle_day is None:

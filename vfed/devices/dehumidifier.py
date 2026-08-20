@@ -34,6 +34,16 @@ from .lag import FirstOrderLag
 
 __all__ = ["DEHDevice", "EnthalpyEfficiency", "size_deh"]
 
+# DOE 87 FR 35286 (2022), measured variable-speed dehumidifier: SMER DROPS at
+# part load — opposite to inverter A/C.  As speed falls the evaporator
+# temperature approaches the inlet dew point, so condensate per unit of
+# cooling falls.  Curve fitted to (m, SMER/SMER_rated) = (0.25, 0.54),
+# (0.75, 0.89), (1.0, 1.0); "SMER constant" holds only for m >= 0.75.
+# Normalised to 1.0 at m = 1.0.  DOE even concludes inverter drives are not
+# a viable efficiency path for dehumidifiers.
+_SMER_SPEED_B0, _SMER_SPEED_B1, _SMER_SPEED_B2 = 0.30, 1.0467, -0.3467
+_DEH_SPEED_M_MIN = 0.2    # compressor turndown (lowest continuous speed)
+
 
 class EnthalpyEfficiency:
     """DEPRECATED: ASHRAE saturation DEH efficiency model (no longer used by DEHDevice).
@@ -72,7 +82,7 @@ class DEHDevice:
         T_std: float = 5.0,
         W_mean: float = 0.012,
         W_std: float = 0.003,
-        deadband_rh: float = 3.0,
+        deadband_rh: float = 2.0,
         min_on_s: float = 180.0,
         min_off_s: float = 180.0,
         fan_power_w: float = 40.0,
@@ -80,6 +90,7 @@ class DEHDevice:
                                     # realistic 1.5-3.0, fan excluded from SMER
         tau_q: float = 90.0,
         tau_m: float = 120.0,
+        mod_band_rh: float = 4.0,   # VFD proportional band (% RH)
     ):
         self.P_ref = P_ref_w
         self.poly_e = poly_e
@@ -90,9 +101,11 @@ class DEHDevice:
         # power; fan_power_w is metered separately in P_elec / Q_DH.
         self.smer = smer
         self.fan_power_w = fan_power_w
+        self.mod_band_rh = mod_band_rh
         self.comp = CompressorState(
             deadband=deadband_rh, min_on_s=min_on_s, min_off_s=min_off_s,
             fan_power_w=fan_power_w,
+            proportional_band=mod_band_rh, m_min=_DEH_SPEED_M_MIN,
         )
         self.lag_q = FirstOrderLag(tau_rise=tau_q, tau_fall=tau_q)
         self.lag_m = FirstOrderLag(tau_rise=tau_m, tau_fall=tau_m)
@@ -109,6 +122,13 @@ class DEHDevice:
         poly = e0 + e1 * tn + e2 * tn * tn + e3 * wn + e4 * wn * wn + e5 * tn * wn
         return max(0.0, self.P_ref * poly)
 
+    def _smer_speed_mod(self, m: float) -> float:
+        """SMER modifier vs speed ratio (DOE measured variable-speed curve):
+        part-load SMER falls as the evaporator approaches the dew point."""
+        m = min(max(m, _DEH_SPEED_M_MIN), 1.0)
+        return max(_SMER_SPEED_B0 + _SMER_SPEED_B1 * m + _SMER_SPEED_B2 * m * m,
+                   0.05)
+
     def step(
         self,
         T_z: float,
@@ -121,10 +141,16 @@ class DEHDevice:
 
         Returns dict with Q_DH_W, M_deh_kgs, P_elec_W, is_on, S_DH,
         latent_cop (with legacy ``eta`` alias).
+
+        Variable-speed modulation (second-round research, DOE 87 FR 35286):
+        capacity scales linearly with m (``m_dh = m * M_full``) while SMER
+        FALLS at part load (``smer_eff = smer * smer_speed_mod(m)``), so the
+        compressor power ``P_comp = P_full * m / smer_mod`` rises faster than
+        linearly — running a dehumidifier at low speed wastes efficiency.
         """
-        on = self.comp.update(RH_z - deh_setpoint, dt,
-                              on_threshold=0.0,
-                              off_threshold=-self.comp.deadband)
+        mod = self.comp.update(RH_z - deh_setpoint, dt,
+                               on_threshold=0.0,
+                               off_threshold=-self.comp.deadband)
 
         Q_sens_target, M_target, P_elec = 0.0, 0.0, 0.0
         s_dh = 0.0
@@ -132,14 +158,18 @@ class DEHDevice:
         # L_v(T_z) evaluated every step so the post-shutdown condensate drip
         # (M_act > 0) releases latent heat at the current room temperature.
         L_v = latent_heat_vaporization(T_z) * 1000.0
-        if on:
-            s_dh = 1.0
-            P_comp = self._poly_power(T_z, W_z) * s_dh
+        if mod > 0.0:
+            s_dh = mod
+            P_full = self._poly_power(T_z, W_z)
+            smer_mod = self._smer_speed_mod(s_dh)
+            # VFD compressor power: P/P_rated = m / smer_mod (DOE curve:
+            # capacity linear, SMER falling, so power super-linear).
+            P_comp = P_full * s_dh / max(smer_mod, 1e-6)
             # Specific Moisture Extraction Rate (kg water / kWh COMPRESSOR
             # input, P2-5): m_dh [kg/s] = SMER * P_comp [W] / 3.6e6 [J/kWh].
             # The fan is intentionally excluded from the SMER denominator and
             # counted exactly once in P_elec below — no double-count.
-            m_dh = self.smer * P_comp / 3.6e6
+            m_dh = self.smer * smer_mod * P_comp / 3.6e6
             # MINOR-7 (D): latent heat evaluated at room temperature T_z so the
             # condenser term exactly cancels the engine's evaporative sink
             # (engine L_v = latent_heat_vaporization(T_z)*1000) — the closure
@@ -152,6 +182,7 @@ class DEHDevice:
             # Latent COP for reporting (P2-10): condensation power per unit of
             # compressor input (fan excluded) — renamed from the misleading
             # "eta"; the module's deprecated EnthalpyEfficiency is unrelated.
+            # No longer constant: SMER falls with m, so latent_cop falls too.
             latent_cop = m_dh * L_v / max(P_comp, 1e-6)
 
         # Energy-self-consistent transient (P2-6): Q_act is DERIVED from M_act,
@@ -171,8 +202,9 @@ class DEHDevice:
         return {
             "Q_DH_W": Q_act,
             "M_deh_kgs": M_act,
-            "P_elec_W": P_elec if on else 0.0,
-            "is_on": bool(on),
+            "P_elec_W": P_elec if mod > 0.0 else 0.0,
+            "is_on": bool(mod > 0.0),
+            "mod": mod,
             "S_DH": s_dh,
             "latent_cop": latent_cop,
             "eta": latent_cop,  # DEPRECATED alias (P2-10) — use "latent_cop"

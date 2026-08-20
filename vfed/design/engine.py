@@ -104,6 +104,7 @@ def _build_devices(p, P_atm: float = 101.325):
         photoperiod_hours=p.led.photoperiod_hours,
         k_van_henten=p.transpiration.k_van_henten,
         stage_factor=p.transpiration.stage_factor,
+        dark_transpiration_frac=p.transpiration.dark_transpiration_frac,
         area_m2=led.covered_area,
     )
 
@@ -200,6 +201,7 @@ def _build_devices(p, P_atm: float = 101.325):
         min_off_s=p.deh.min_off_s, fan_power_w=p.deh.fan_power_w,
         smer=p.deh.smer,
         tau_q=p.deh.tau_q, tau_m=p.deh.tau_m,
+        mod_band_rh=p.deh.comp_mod_band_rh,
     )
     # DEH net sensible heat rejection at the design point: P_comp + fan only.
     # m_dh*L_v must NOT be added here — the transpiration portion cancels
@@ -266,6 +268,8 @@ def _build_devices(p, P_atm: float = 101.325):
         shr_rh_guard=p.hvac.shr_rh_guard,
         rh_guard_band=p.hvac.rh_guard_band,
         coil_condense_max_kgs=p.hvac.coil_condense_max_gps * 1e-3,
+        mod_band_c=p.hvac.comp_mod_band_c,
+        speed_curve=p.hvac.speed_curve,
     )
 
     ode = RoomODESolver(C_z=p.envelope.C_z, V_room=p.envelope.V_room,

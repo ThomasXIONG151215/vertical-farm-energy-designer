@@ -53,6 +53,20 @@ _HEAT_REF_INDOOR_C = 20.0
 _HEAT_COP_MIN = 1.5
 _HEAT_COP_MAX = 5.0
 
+# Variable-speed (inverter) compressor part-load curves (second-round
+# research; see scratchpad section 2.7).  COP RISES as speed drops (50% load
+# -> ~1.33x, 30% -> ~1.54x) because the reduced refrigerant lift dominates
+# over drive losses down to ~20% speed.  Sources: Effsys2/KTH Madani,
+# Szreder & Miara 2020 (Sustainability 12:10521), Fahlen 2012 (REHVA J.).
+# m = modulation coefficient (speed ratio) in [0.2, 1]; both curves are
+# normalised to 1.0 at m = 1.0.
+_CAP_SPEED_A, _CAP_SPEED_B, _CAP_SPEED_C = 0.167, 0.991, -0.158
+_EIR_SPEED_A, _EIR_SPEED_B, _EIR_SPEED_C = 0.488, 0.553, -0.041
+# Conservative flat alternative (Maxa i-290 air-to-water same-T measurements):
+# part-load efficiency ~flat, slight dip at deep part load.
+_EIR_FLAT_A, _EIR_FLAT_B, _EIR_FLAT_C = 1.1332, -0.410, 0.280
+_SPEED_M_MIN = 0.2    # lowest continuous speed (turndown, oil-return bound)
+
 
 @dataclass
 class COPModel:
@@ -129,6 +143,8 @@ class HVACDevice:
         shr_rh_guard: float = _SHR_RH_GUARD,
         rh_guard_band: float = _SHR_RH_GUARD_BAND,
         coil_condense_max_kgs: float = 0.0,   # 0 -> auto from P_rated (P4-1b)
+        mod_band_c: float = 2.0,              # VFD proportional band (degC)
+        speed_curve: str = "default",         # "default" | "flat" (conservative)
     ):
         self.P_rated = P_rated_w
         self.cop = cop or COPModel()
@@ -140,13 +156,29 @@ class HVACDevice:
         self.rh_guard_band = max(rh_guard_band, 1e-6)
         self.m_coil_max_kgs = (coil_condense_max_kgs if coil_condense_max_kgs > 0.0
                                else _COIL_CONDENSE_K * self.P_rated)
+        self.mod_band_c = mod_band_c
+        self.speed_curve = speed_curve
         self.comp = CompressorState(
             deadband=deadband_c, min_on_s=min_on_s, min_off_s=min_off_s,
             fan_power_w=fan_power_w,
+            proportional_band=mod_band_c, m_min=_SPEED_M_MIN,
         )
         self.lag_q = FirstOrderLag(tau_rise=tau_q, tau_fall=tau_q)
         self.lag_m = FirstOrderLag(tau_rise=tau_m, tau_fall=tau_m)
         self._last_mode: str = "idle"
+
+    def _cap_speed_mod(self, m: float) -> float:
+        """Capacity modifier vs speed ratio (variable-speed compressor)."""
+        m = min(max(m, _SPEED_M_MIN), 1.0)
+        return (_CAP_SPEED_A + _CAP_SPEED_B * m + _CAP_SPEED_C * m * m)
+
+    def _eir_speed_mod(self, m: float) -> float:
+        """EIR modifier vs speed ratio.  EIR = 1/COP, so a value < 1 means
+        part-load COP is BETTER than full-load (inverter units)."""
+        m = min(max(m, _SPEED_M_MIN), 1.0)
+        if self.speed_curve == "flat":
+            return (_EIR_FLAT_A + _EIR_FLAT_B * m + _EIR_FLAT_C * m * m)
+        return (_EIR_SPEED_A + _EIR_SPEED_B * m + _EIR_SPEED_C * m * m)
 
     def reset(self) -> None:
         self.comp.reset(False)
@@ -211,40 +243,43 @@ class HVACDevice:
 
         Returns dict with Q_HVAC_W, M_hvac_kgs, P_elec_W, mode, is_on, SHR, COP.
         """
-        # Decide mode via two hysteresis bands.
+        # Decide mode via two hysteresis bands.  The compressor returns a
+        # modulation coefficient m in [0,1] (VFD): 0 = OFF, m_min..1 = speed
+        # ratio.  m=1 only when the deviation reaches the proportional band.
         if T_z > T_setpoint:
             # Cooling demand: too warm -> demand positive.
-            on = self.comp.update(T_z - T_setpoint, dt,
-                                  on_threshold=0.0,
-                                  off_threshold=-self.comp.deadband)
+            mod = self.comp.update(T_z - T_setpoint, dt,
+                                   on_threshold=0.0,
+                                   off_threshold=-self.comp.deadband)
             mode = "cool"
             self._last_mode = "cool"
         elif is_heating_needed and T_z < T_heat_setpoint:
-            on = self.comp.update(T_heat_setpoint - T_z, dt,
-                                  on_threshold=0.0,
-                                  off_threshold=-self.comp.deadband)
+            mod = self.comp.update(T_heat_setpoint - T_z, dt,
+                                   on_threshold=0.0,
+                                   off_threshold=-self.comp.deadband)
             mode = "heat"
             self._last_mode = "heat"
         else:
             # Within deadband: force compressor off (respects min_on).
-            self.comp.update(-1e6, dt)
-            on = self.comp.is_on
+            mod = self.comp.update(-1e6, dt)
             mode = "idle"
-            if on and self._last_mode != "idle":
+            if self.comp.is_on and self._last_mode != "idle":
                 mode = self._last_mode
 
         Q_target, M_target, P_elec = 0.0, 0.0, 0.0
         cop = self.cop(T_ext, T_z)
         shr = 1.0
-        if on and mode == "cool":
+        if mod > 0.0 and mode == "cool":
             # P2-7 (MINOR, documented simplification): the indoor fan is tied
             # to the compressor — fan power and fan heat are counted only
             # while the compressor runs.  Real units often keep the fan on
             # briefly after compressor stop (~70 W, <1% of rated draw); the
             # simplification is retained for low cost and minimal energy
             # impact.
-            P_elec = self.P_rated + self.comp.fan_power_w
-            Q_total = self.P_rated * cop
+            cap = self._cap_speed_mod(mod)
+            eir = self._eir_speed_mod(mod)
+            Q_total = self.P_rated * cop * cap
+            P_elec = self.P_rated * cap * eir + self.comp.fan_power_w
             shr = self.shr.calc_shr_fallback(T_return=T_z, RH_return=RH_z,
                                               T_setpoint=T_setpoint)
             # P4-1 (BLOCKING): humidity-protection guard (below the guard RH
@@ -253,7 +288,10 @@ class HVACDevice:
             # the coil's airflow-limited capacity, ~1.5 g/s per 3 kW rated,
             # independent of the COP-scaled Q_total).  Together these stop the
             # single-step vapour-inventory drain that collapsed winter/night
-            # RH to ~2% (see P4-1 in scratchpad).
+            # RH to ~2% (see P4-1 in scratchpad).  Q_total already scales
+            # with the VFD modulation m, so the coil condensate rate scales
+            # down automatically at part load — the night-time switch-off
+            # overshoot (m~0.5 -> half condensate) is resolved by modulation.
             shr = self._apply_rh_guard(shr, RH_z)
             Q_lat = (1.0 - shr) * Q_total
             # Only the sensible portion cools the air in the T-equation.  The
@@ -269,14 +307,19 @@ class HVACDevice:
             T_supply = T_setpoint - self.shr.t_coil_drop
             M_target = min(Q_lat / (latent_heat_vaporization(T_supply) * 1000.0),
                            self.m_coil_max_kgs)
-        elif on and mode == "heat":
-            P_elec = self.P_rated_heat + self.comp.fan_power_w
+        elif mod > 0.0 and mode == "heat":
             if self.heat_mode == "heat_pump":
+                cap = self._cap_speed_mod(mod)
+                eir = self._eir_speed_mod(mod)
+                P_elec = self.P_rated_heat * cap * eir + self.comp.fan_power_w
                 # P2-3: heating COP degrades with outdoor temperature instead
                 # of the old flat cop_heat (see _cop_heat_at).
                 Q_target = (self.P_rated_heat * self._cop_heat_at(T_ext, T_z)
-                            + self.comp.fan_power_w)
+                            * cap + self.comp.fan_power_w)
             else:
+                # Resistive: no compressor COP curve — power follows the VFD
+                # modulation m linearly, COP = 1.
+                P_elec = self.P_rated_heat * mod + self.comp.fan_power_w
                 Q_target = P_elec
             M_target = 0.0
 
@@ -285,9 +328,10 @@ class HVACDevice:
         return {
             "Q_HVAC_W": Q_act,
             "M_hvac_kgs": M_act,
-            "P_elec_W": P_elec if on else 0.0,
+            "P_elec_W": P_elec if mod > 0.0 else 0.0,
             "mode": mode,
-            "is_on": bool(on),
+            "is_on": bool(mod > 0.0),
+            "mod": mod,
             "SHR": shr,
             "COP": cop,
         }
