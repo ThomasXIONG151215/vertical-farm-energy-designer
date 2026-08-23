@@ -32,7 +32,8 @@ __all__ = ["DesignEngine", "run_project"]
 
 
 def _limit_removal_by_inventory(M_deh_kgs, M_hvac_kgs, W_z, air_mass, dt,
-                                E_trans_kgs=0.0, M_inf_kgs=0.0, M_perm_kgs=0.0):
+                                E_trans_kgs=0.0, M_inf_kgs=0.0, M_perm_kgs=0.0,
+                                W_setpoint_kgs=None):
     """Cap nominal dehumidifier/HVAC moisture removal (kg/s) to what the room
     air can actually yield in this sub-step.
 
@@ -51,6 +52,17 @@ def _limit_removal_by_inventory(M_deh_kgs, M_hvac_kgs, W_z, air_mass, dt,
     binds, W_z_new lands exactly at 0).  Defaults keep the legacy 5-arg call
     bitwise identical.
 
+    ``W_setpoint_kgs`` (optional): humidity-set-point clamp against
+    overshoot.  A real VFD machine modulates down as RH approaches the set
+    point, so over one 10-min control step the *average* output never draws
+    the air below the set point.  The per-step model would otherwise hold the
+    step-start modulation fixed for the whole 600 s and over-shoot (dark
+    transition: E_trans collapses but DEH+coil run flat, RH 69 -> 23 % in one
+    sub-step).  When set, only the moisture above the set point is available
+    to the devices in this step (plus the net source); below the set point
+    the room may only be dried passively by the net source, mirroring the
+    devices having already turned off.
+
     Returns (M_deh_actual, M_hvac_actual, scale) where scale = actual/nominal
     (1.0 when unconstrained).  Both devices are scaled by the same factor so
     the ratio between them is preserved.
@@ -58,8 +70,15 @@ def _limit_removal_by_inventory(M_deh_kgs, M_hvac_kgs, W_z, air_mass, dt,
     removal_nom = M_deh_kgs + M_hvac_kgs
     if removal_nom <= 0.0 or dt <= 0.0:
         return M_deh_kgs, M_hvac_kgs, 1.0
-    available = (max(0.0, W_z * air_mass) / dt
-                 + max(0.0, E_trans_kgs + M_inf_kgs + M_perm_kgs))  # kg/s
+    source = max(0.0, E_trans_kgs + M_inf_kgs + M_perm_kgs)  # kg/s
+    if W_setpoint_kgs is not None and W_z <= W_setpoint_kgs:
+        inventory = 0.0  # at/below set point: devices must not actively dry
+    else:
+        inventory = max(0.0, W_z * air_mass) / dt
+        if W_setpoint_kgs is not None:
+            # only the vapour above the set point may be drawn this step
+            inventory = max(0.0, (W_z - W_setpoint_kgs) * air_mass) / dt
+    available = inventory + source  # kg/s
     if removal_nom <= available:
         return M_deh_kgs, M_hvac_kgs, 1.0
     scale = available / removal_nom
@@ -477,7 +496,9 @@ class DesignEngine:
                 M_hvac_nom = hv["M_hvac_kgs"]
                 M_deh_act, M_hvac_act, removal_scale = _limit_removal_by_inventory(
                     M_deh_nom, M_hvac_nom, W_z, air_mass, dt,
-                    E_trans_kgs=E_trans, M_inf_kgs=M_inf, M_perm_kgs=M_perm)
+                    E_trans_kgs=E_trans, M_inf_kgs=M_inf, M_perm_kgs=M_perm,
+                    W_setpoint_kgs=temp_rh_to_ah(
+                        T_z, p.setpoints.RH, pressure_kpa=P_atm))
                 # Heat-balance correction: dh["Q_DH_W"] carries the nominal
                 # M_deh_nom*L_v of condensation heat, but only M_deh_act was
                 # actually condensed.  Back out the phantom

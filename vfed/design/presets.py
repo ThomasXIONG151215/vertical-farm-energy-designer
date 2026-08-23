@@ -35,7 +35,7 @@ def preset_609() -> DesignProject:
             U_wall_A=125.3,
             A_window=0.0,
             eta_solar=0.15,
-            ach=0.1,
+            ach=0.001,
             permeance=0.0,
             V_room=200.0,
             C_z=200000.0,  # Wh/K (200 kWh/K) — see P4-5: ~3x room-air capacity

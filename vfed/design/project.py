@@ -92,7 +92,7 @@ class EnvelopeConfig:
     U_wall_A: float = 50.0       # W/K envelope conductance
     A_window: float = 0.0        # m^2 glazing
     eta_solar: float = 0.15      # solar heat gain coeff
-    ach: float = 0.1             # air changes / hour (infiltration)
+    ach: float = 0.001             # air changes / hour (infiltration)
     #   Sealed plant factories (positive-pressure, airtight) exchange
     #   N≈0.01-0.02 h⁻¹ (Kozai 2013; WUR WPR-1315); 0.1 is a conservative
     #   leakage upper bound.  The old 0.5 (commercial-building infiltration
@@ -131,7 +131,7 @@ class HVACConfig:
     t_coil_drop: float = 9.0   # supply-air temperature depression T_supply = T_setpoint - t_coil_drop (real ACs ~8-12°C)
     tau_q: float = 90.0
     tau_m: float = 60.0
-    shr_rh_guard: float = 55.0     # % RH; below this the AC stops latent removal (P4-1a)
+    shr_rh_guard: float = 65.0     # % RH; below this the AC stops latent removal (P4-1a)
     rh_guard_band: float = 3.0     # % RH blend width for the humidity guard
     coil_condense_max_gps: float = 0.0  # explicit coil condensate cap (g/s); 0 → auto ~5e-4·P_rated_w (P4-1b)
     comp_mod_band_c: float = 2.0  # VFD proportional band (°C): m=demand/band, m=1 at ±band
@@ -163,7 +163,7 @@ class DEHConfig:
     W_std: float = 0.003        # kg/kg std dev
     smer: float = 2.0
     deadband_rh: float = 2.0     # % RH hysteresis stop point (was 3.0; narrowed to avoid the pband×deadband idle band)
-    comp_mod_band_rh: float = 4.0  # VFD proportional band (% RH): m=(RH_z−sp)/band
+    comp_mod_band_rh: float = 6.0  # VFD proportional band (% RH): m=(RH_z−sp)/band
     #   VFD dehumidifier: SMER FALLS as speed falls (DOE 87 FR 35286 — opposite
     #   of AC; dew-point approach gets worse at low speed).  SMER(m) curve in
     #   dehumidifier.py; constant-SMER assumption valid only for m≥0.75.
