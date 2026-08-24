@@ -83,10 +83,11 @@ Smoke-test evidence (temp dir, offline env):
 | F5 CLI humidity/moisture output | completed | cli.py _cmd_evaluate now prints Annual water (m3/yr), RH clamp events (sat/floor + water kg), DEH utilization % (removal-limited events + water kg), Dehumidified kg (DEH + HVAC coil). Verified in smoke test. |
 | S2 web crop label text fix | completed | vfed-web/index.html lines 814 and 2353 changed "609 — Fengxian Strawberry PFAL"/"奉贤草莓植物工厂" → "609 — Fengxian Lettuce PFAL"/"奉贤生菜植物工厂". Engine YAML untouched (R3 still deferred). |
 | Verify Phase 1: pytest + offline smoke test | completed | pytest 226 passed / 1 failed (test_weather_no_cache = pre-existing ConnectionRefusedError, requires Open-Meteo network, offline env, unrelated). tests/test_07_cli.py: 18 passed. Offline smoke test confirmed F1/F5/F2 behavior. |
-| F7 sweep pv_area_m2/battery_kwh aliases | pending | Medium; validation + docs |
-| F6 `vfed evaluate --export` (CSV save) | pending | Medium; uses existing result.save_* |
-| F3 commented unit-annotated YAML emit | pending | Medium; comments only, schema identical |
-| F4 preset_default small-scale + auto_size=True | pending | Medium; needs test updates, 609 unaffected |
+| F7 sweep pv_area_m2/battery_kwh aliases | completed | sweep.py now has `_RANGE_ALIASES = {pv_area_m2: pv_area, battery_kwh: battery}`; sweep_design normalizes alias keys before validation, raises ValueError if both spellings present for the same param; DesignSpace docstring in project.py updated. Verified: offline sweep with pv_area_m2/battery_kwh aliases enumerated 18 configs. |
+| F6 `vfed evaluate --export` (CSV save) | completed | cli.py evaluate now has --export DIR flag writing summary.csv / timeseries.csv / monthly.csv (via existing result.save_*). Verified: 8760-row timeseries exported. |
+| F3 commented unit-annotated YAML emit | completed | cli.py added _commented_project_yaml() + _YAML_HEADER + _YAML_SECTION_COMMENTS; _cmd_design_new now writes commented YAML (data still canonical to_dict()). Fixed a %% artifact in interest_rate comment. Verified: design new output 327 lines with section comments, validates OK. |
+| F4 preset_default small-scale + auto_size=True | completed | presets.py preset_default now returns small-scale DIY base: site city=Shanghai (2025 locked), envelope V_room=40 m3, U_wall_A=20 W/K, C_z=40000 Wh/K, led covered_area=10 m2 (auto power ~1600W), hvac.auto_size=True, deh.auto_size=True. preset_609 untouched. Verified: evaluate offline → Annual load 17,586 kWh/yr (was 66,324), DEH utilization 61% (sized to load). |
+| Phase 2 verify (F7/F6/F3/F4) | completed | pytest 226 passed / 1 failed (test_weather_no_cache = pre-existing offline ConnectionRefusedError, unrelated). |
 | S1 hardware naming map / aliases | pending | Style; careful with strict validation |
 | S3 README DIY onboarding (10 m² tutorial) | pending | Docs |
 | R1 LED auto_deduce surprise | recorded — deferred | Do not implement now |
@@ -99,3 +100,4 @@ Smoke-test evidence (temp dir, offline env):
 - Smoke-test scratch dir: `C:\Users\ADMINI~1\AppData\Local\Temp\opencode` (diy_test.yaml, diy609.yaml already generated).
 - Reference materials: full review report is in the session context (10 Always Flag findings with file:line evidence); REVIEW.md update was NOT confirmed by user and is parked.
 - Phase 1 (F1/F2/F5/S2) done and verified. test_weather_no_cache fails only due to offline env (network required).
+- Phase 2 (F7/F6/F3/F4) done and verified. Only test_weather_no_cache fails (offline env, network required).
