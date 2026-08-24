@@ -157,7 +157,7 @@ _YAML_SECTION_COMMENTS = {
         "#   water_cost_per_m3 (currency/m3), maintenance_pct (fraction of capital)\n"
         "# ------------------------------------------------------------------\n"),
     "interest_rate": (
-        "# interest_rate: discount rate (fraction, e.g. 0.06 = 6%%)\n"),
+        "# interest_rate: discount rate (fraction, e.g. 0.06 = 6%)\n"),
     "currency": (
         "# currency / exchange_rate: monetary units (exchange_rate = currency per USD)\n"),
     "exchange_rate": None,
@@ -236,7 +236,8 @@ def _cmd_design_new(args):
     out = Path(args.out) if args.out else Path(args.name + ".yaml")
     if out.exists():
         print(f"  (overwriting existing file: {out})", file=sys.stderr)
-    preset.save(out)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(_commented_project_yaml(preset))
     print(f"Created project '{preset.name}' -> {out}")
     return 0
 
