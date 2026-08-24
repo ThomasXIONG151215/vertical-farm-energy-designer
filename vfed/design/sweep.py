@@ -57,6 +57,14 @@ _PARAM_PATH_MAP: Dict[str, tuple] = {
 # params handled by EnergySystem (not project overrides)
 _PVBES_PARAMS = {"pv_area", "battery"}
 
+# F7: accept the top-level config field names (pv_area_m2 / battery_kwh) as
+# aliases for the sweep parameter names (pv_area / battery), so users can use
+# one consistent vocabulary in space.parameter_ranges.
+_RANGE_ALIASES = {
+    "pv_area_m2": "pv_area",
+    "battery_kwh": "battery",
+}
+
 # valid values for DesignSpace.objective
 _VALID_OBJECTIVES = {"lcoe", "kwh_per_kg_fresh", "cost_per_kg_fresh"}
 
@@ -284,7 +292,17 @@ def sweep_design(project: DesignProject,
     (dict or sim result for single-point).  Objective is taken from
     ``project.space.objective`` (default ``"lcoe"``).
     """
-    ranges = project.space.parameter_ranges
+    ranges = dict(project.space.parameter_ranges)
+    # F7: normalize top-level config name aliases (pv_area_m2 / battery_kwh)
+    # to the sweep parameter names (pv_area / battery) before validation.
+    for alias, canonical in _RANGE_ALIASES.items():
+        if alias in ranges:
+            if canonical in ranges:
+                raise ValueError(
+                    f"parameter_ranges contains both '{alias}' and "
+                    f"'{canonical}' — specify only one."
+                )
+            ranges[canonical] = ranges.pop(alias)
     objective = getattr(project.space, "objective", "lcoe")
     if objective not in _VALID_OBJECTIVES:
         raise ValueError(

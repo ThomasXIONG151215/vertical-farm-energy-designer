@@ -313,6 +313,8 @@ class DesignSpace:
     # 建筑参数 (ppfd_target/efficacy/photoperiod_hours/T_light/T_dark/RH/co2_ppm/
     # crop_cycle_days) + PVBES 键 'pv_area' (m²) / 'battery' (kWh) —— 注意顶层
     # 固定装机字段是 pv_area_m2/battery_kwh, 两者是独立概念 (P8-6)。
+    # 自 F7 起, PVBES 键也接受顶层字段名别名: 'pv_area_m2' ≡ 'pv_area',
+    # 'battery_kwh' ≡ 'battery' (同一物理参数不可同时写两种拼写)。
     parameter_ranges: dict = field(default_factory=dict)
     timestep_s: float = 600.0
     objective: str = "lcoe"   # optimization target: "lcoe" | "kwh_per_kg_fresh" | "cost_per_kg_fresh"

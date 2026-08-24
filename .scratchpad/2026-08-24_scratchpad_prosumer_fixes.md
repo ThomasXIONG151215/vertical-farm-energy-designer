@@ -78,10 +78,11 @@ Smoke-test evidence (temp dir, offline env):
 
 | Task | Status | Notes |
 |---|---|---|
-| F1 preset_default city="Shanghai" (offline E003) | pending | Easy; must verify first-run evaluate works offline |
-| F2 capital-zero LCOE warning | pending | Easy; print warning + capital_total |
-| F5 CLI humidity/moisture output | pending | Easy; data already in summary |
-| S2 web crop label text fix | pending | Easy; source text only, no rebundle |
+| F1 preset_default city="Shanghai" (offline E003) | completed | presets.py preset_default() now returns DesignProject(name="default", site=SiteConfig(lat=31.2, lon=121.5, tz_hours=8.0, city="Shanghai")). Verified: `vfed design new diy_default` + `vfed evaluate` succeeds offline using bundled Shanghai_2025.csv, no more E003. |
+| F2 capital-zero LCOE warning | completed | cli.py _cmd_evaluate now prints "Capital total" and a [WARNING] when capital_total <= 0, printed to stdout inline after LCOE line. |
+| F5 CLI humidity/moisture output | completed | cli.py _cmd_evaluate now prints Annual water (m3/yr), RH clamp events (sat/floor + water kg), DEH utilization % (removal-limited events + water kg), Dehumidified kg (DEH + HVAC coil). Verified in smoke test. |
+| S2 web crop label text fix | completed | vfed-web/index.html lines 814 and 2353 changed "609 — Fengxian Strawberry PFAL"/"奉贤草莓植物工厂" → "609 — Fengxian Lettuce PFAL"/"奉贤生菜植物工厂". Engine YAML untouched (R3 still deferred). |
+| Verify Phase 1: pytest + offline smoke test | completed | pytest 226 passed / 1 failed (test_weather_no_cache = pre-existing ConnectionRefusedError, requires Open-Meteo network, offline env, unrelated). tests/test_07_cli.py: 18 passed. Offline smoke test confirmed F1/F5/F2 behavior. |
 | F7 sweep pv_area_m2/battery_kwh aliases | pending | Medium; validation + docs |
 | F6 `vfed evaluate --export` (CSV save) | pending | Medium; uses existing result.save_* |
 | F3 commented unit-annotated YAML emit | pending | Medium; comments only, schema identical |
@@ -97,3 +98,4 @@ Smoke-test evidence (temp dir, offline env):
 - Environment is **offline** (Open-Meteo unreachable, proxy error). All offline verification must use bundled `data/weather/*_2025.csv` via `--city Shanghai` (or F1 fix) + `--cache weather_cache`.
 - Smoke-test scratch dir: `C:\Users\ADMINI~1\AppData\Local\Temp\opencode` (diy_test.yaml, diy609.yaml already generated).
 - Reference materials: full review report is in the session context (10 Always Flag findings with file:line evidence); REVIEW.md update was NOT confirmed by user and is parked.
+- Phase 1 (F1/F2/F5/S2) done and verified. test_weather_no_cache fails only due to offline env (network required).
