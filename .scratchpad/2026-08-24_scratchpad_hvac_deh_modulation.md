@@ -113,15 +113,15 @@ pband 可配置（0=退回纯开关）。m∈[0,1] 无硬下限（用户拍板�
 
 ## 3. High-level Task Breakdown
 
-- [ ] T1: `vfed/devices/compressor.py` — `CompressorState.update()` 返回 float m（band>0 时比例调制，band=0 保持 0.0/1.0）；新增 `proportional_band` 构造参数；保留 is_on/min_on/min_off/deadband；m∈[0.2,1] 截断说明
-- [ ] T2: `vfed/devices/hvac.py` — `__init__` 加 `mod_band_c=2.0` + 速度曲线系数（CapSpeedModFac=0.167+0.991m−0.158m²、EIRSpeedModFac=0.488+0.553m−0.041m²，m 截断 0.2）；cool/heat 分支 `Q_total=P_rated×cop×CapSpeedModFac×m`、`EIR_eff=EIR×EIRSpeedModFac`（COP 随 m 升）；P_elec=Q_total×EIR_eff+fan；返回 dict 加 `"mod"` 键
-- [ ] T3: `vfed/devices/dehumidifier.py` — `__init__` 加 `mod_band_rh=4.0` + `smer_mod_fac(m)=0.30+1.0467m−0.3467m²`（DOE 实测）；`s_dh=mod` 全链缩放；`SMER_eff=SMER×smer_mod_fac(m)`（随 m 降）→ latent_cop 随 m 变（非常数）；deadband_rh 3→2；m 截断 0.2
-- [ ] T4: `vfed/plants/transpiration.py` — 暗期透蒸 `dark_transpiration_frac=0.15`（light_factor 暗期分支 0→0.15）
-- [ ] T5: `vfed/physics/envelope.py` + 参数 — **ACH 0.5→0.1**（presets.py 609 + 3 示例 YAML + test_project.yaml）
-- [ ] T6: `vfed/design/project.py` — HVACConfig.comp_mod_band_c=2.0、DEHConfig.comp_mod_band_rh=4.0、TranspirationConfig.dark_transpiration_frac=0.15 + 校验 + engine `_build_devices` 传参
-- [ ] T7: 测试更新 — test_devices（hvac/deh 数值断言按 m 重算）、test_transpiration（暗期 0.15× 替代归零）、test_03/05（609 数值/RH 断言、ach）
-- [ ] T8: 609 上海 2023 复测 — 前后对比表回填实测值
-- [ ] T9: scratchpad 更新 + git 提交
+- [x] T1: `vfed/devices/compressor.py` — `CompressorState.update()` 返回 float m（band>0 时比例调制，band=0 保持 0.0/1.0）；新增 `proportional_band` 构造参数；保留 is_on/min_on/min_off/deadband；m∈[0.2,1] 截断说明
+- [x] T2: `vfed/devices/hvac.py` — `__init__` 加 `mod_band_c=2.0` + 速度曲线系数（CapSpeedModFac=0.167+0.991m−0.158m²、EIRSpeedModFac=0.488+0.553m−0.041m²，m 截断 0.2）；cool/heat 分支 `Q_total=P_rated×cop×CapSpeedModFac×m`、`EIR_eff=EIR×EIRSpeedModFac`（COP 随 m 升）；P_elec=Q_total×EIR_eff+fan；返回 dict 加 `"mod"` 键
+- [x] T3: `vfed/devices/dehumidifier.py` — `__init__` 加 `mod_band_rh=4.0` + `smer_mod_fac(m)=0.30+1.0467m−0.3467m²`（DOE 实测）；`s_dh=mod` 全链缩放；`SMER_eff=SMER×smer_mod_fac(m)`（随 m 降）→ latent_cop 随 m 变（非常数）；deadband_rh 3→2；m 截断 0.2
+- [x] T4: `vfed/plants/transpiration.py` — 暗期透蒸 `dark_transpiration_frac=0.15`（light_factor 暗期分支 0→0.15）
+- [x] T5: `vfed/physics/envelope.py` + 参数 — **ACH 0.5→0.1**（presets.py 609 + 3 示例 YAML + test_project.yaml）
+- [x] T6: `vfed/design/project.py` — HVACConfig.comp_mod_band_c=2.0、DEHConfig.comp_mod_band_rh=4.0、TranspirationConfig.dark_transpiration_frac=0.15 + 校验 + engine `_build_devices` 传参
+- [x] T7: 测试更新 — test_devices（hvac/deh 数值断言按 m 重算）、test_transpiration（暗期 0.15× 替代归零）、test_03/05（609 数值/RH 断言、ach）
+- [x] T8: 609 上海 2023 复测 — 前后对比表回填实测值
+- [x] T9: scratchpad 更新 + git 提交
 
 ## 4. Project Status Dashboard
 
