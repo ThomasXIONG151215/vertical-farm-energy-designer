@@ -6,22 +6,39 @@ so the new simulator can be validated against the archived digital twin. Other
 presets provide convenient starting points.
 """
 
-from .project import DesignProject, EnvelopeConfig, LEDConfig, SiteConfig
+from .project import (DEHConfig, DesignProject, EnvelopeConfig, HVACConfig,
+                      LEDConfig, SiteConfig)
 
 __all__ = ["preset_default", "preset_609", "PRESETS"]
 
 
 def preset_default() -> DesignProject:
-    """Generic starting point (Shanghai, 200 m³ room, 45 m² canopy).
+    """Small-scale DIY starting point (~10 m² canopy).
 
-    ``site.city="Shanghai"`` is set deliberately so the bundled offline weather
-    file ``data/weather/Shanghai_2025.csv`` is used on first run — otherwise a
-    bare ``vfed evaluate`` would try a network fetch and fail offline (E003).
-    Weather year is locked to 2025 for offline reference data.
+    Deliberately prosumer-friendly (F4):
+    - ``site.city="Shanghai"`` so the bundled offline weather file
+      ``data/weather/Shanghai_2025.csv`` is used on first run (no E003 offline).
+      Weather year is locked to 2025 for offline reference data.
+    - small envelope (40 m³ room / 10 m² canopy) so the derived LED power and
+      energy figures are home-scale, not 609-farm-scale.
+    - ``hvac.auto_size`` / ``deh.auto_size`` = True so capacities are sized
+      from the design load instead of inheriting 609-custom fixed powers.
     """
     return DesignProject(
         name="default",
         site=SiteConfig(lat=31.2, lon=121.5, tz_hours=8.0, city="Shanghai"),
+        envelope=EnvelopeConfig(
+            U_wall_A=20.0,        # W/K — insulated small room (~10 m² footprint)
+            A_window=0.0,
+            eta_solar=0.15,
+            ach=0.001,
+            permeance=0.0,
+            V_room=40.0,          # m³
+            C_z=40000.0,          # Wh/K
+        ),
+        led=LEDConfig(covered_area=10.0),   # 10 m² canopy → auto power ~1600 W
+        hvac=HVACConfig(auto_size=True),
+        deh=DEHConfig(auto_size=True),
     )
 
 
