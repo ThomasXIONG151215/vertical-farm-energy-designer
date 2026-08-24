@@ -811,7 +811,7 @@ const _STR_ZH = {
     'Params restored from share link.':'已从分享链接恢复参数。',
     'Share link copied to clipboard!':'分享链接已复制到剪贴板！',
     // Presets
-    '609 — Fengxian Strawberry PFAL':'609 — 奉贤草莓植物工厂',
+    '609 — Fengxian Lettuce PFAL':'609 — 奉贤生菜植物工厂',
     'Lettuce — Standard PFAL':'生菜 — 标准植物工厂',
     // SECTIONS — section labels
     'Building Envelope':'建筑围护结构','LED Lighting':'LED照明','HVAC':'暖通空调',
@@ -2350,7 +2350,7 @@ document.getElementById('mode-tabs').addEventListener('click', (e) => {
    ================================================================ */
 const BUILTIN_PRESETS = {
     '609': {
-        label: '609 — Fengxian Strawberry PFAL',
+        label: '609 — Fengxian Lettuce PFAL',
         yaml: `site:\n  lat: 31.0\n  lon: 121.5\n  city: Shanghai\n  tz_hours: 8\n  tilt: 10\n  azimuth: 180\nenvelope:\n  U_wall_A: 125.3\n  A_window: 0.0\n  eta_solar: 0.15\n  ach: 0.5\n  permeance: 0.0\n  rho_air: 1.2\n  cp_air: 1005\n  V_room: 200\n  C_z: 200000.0\nled:\n  auto_deduce: true\n  ppfd_target: 400\n  efficacy: 2.5\n  light_start_hour: 6\n  photoperiod_hours: 16\n  heat_fraction: 1.0\n  covered_area: 45\nhvac:\n  Q_cool_nom: 15\n  cop_mode: "carnot"\n  eta_II: 0.35\n  delta_T_evap: 8.0\n  delta_T_cond: 15.0\n  heat_mode: "heat_pump"\n  cop_table: {}\n  deadband_c: 1.0\n  min_on_s: 180\n  min_off_s: 180\n  fan_power_w: 70\n  shr_BF: 0.15\n  tau_q: 90\n  tau_m: 60\ndeh:\n  M_deh_nom: 70\n  smer: 2.0\n  deadband_rh: 3.0\n  min_on_s: 180\n  min_off_s: 180\n  fan_power_w: 40\n  tau_q: 90\n  tau_m: 120\nsetpoints:\n  T_light: 22\n  T_dark: 18\n  RH: 65\n  co2_ppm: 800\n  crop_cycle_days: 30\ntranspiration:\n  method: van_henten\n  stage_factor: 1.0\ngrowth:\n  c_alpha_beta: 0.544\n  c_resp_d: 2.65e-7\n  c_pl_d: 53.0\n  c_rad_phot: 1e-8\n  c_co2_1: 5.11e-6\n  c_co2_2: 2.3e-4\n  c_co2_3: 6.29e-4\n  c_Gamma: 5.2e-5\npv:\n  eta_pv: 0.233\n  area_to_power: 4.3\n  eta_inv: 0.97\n  C_pv: 110\n  degradation: 0.004\nbattery:\n  c_energy: 220\n  c_rate: 1.0\n  eta_ch: 0.91\n  eta_dis: 0.91\n  soc_min: 0.1\n  soc_max: 0.9\n  cycle_life: 4000\ntariff:\n  hourly_prices: [0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.3,0.5,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.7,0.5,0.3,0.2,0.1,0.1,0.1]\n  export_price: 0.05\nequipment_power_w: 2000\ninterest_rate: 0.06\ncurrency: CNY\nexchange_rate: 7.2\nspace:\n  timestep_s: 600\n  parameter_ranges: {}\n  objective: lcoe\n`
     },
     'lettuce_standard': {

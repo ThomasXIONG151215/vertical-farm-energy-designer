@@ -181,10 +181,9 @@ def _cmd_evaluate(args):
     if capital_total is not None:
         print(f"  Capital total    = {capital_total:.0f} {getattr(project, 'currency', 'USD')}")
         if capital_total <= 0:
-            print("  [WARNING] all capital costs are zero — the LCOE above covers "
-                  "OPEX only, not the full facility cost. Set capital.cost / "
-                  "capital.rate_per_watt on each component for a meaningful LCOE.",
-                  file=sys.stderr)
+            print(f"  [WARNING] all capital costs are zero — the LCOE above covers "
+                  f"OPEX only, not the full facility cost. Set capital.cost / "
+                  f"capital.rate_per_watt on each component for a meaningful LCOE.")
     if project.pv_area_m2 <= 0 and project.battery_kwh <= 0:
         print(f"  Energy system    = disabled (pv_area_m2=0, battery_kwh=0)")
     pv_gen = summary.get("pv_generation_kwh", 0)
