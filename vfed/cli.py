@@ -158,8 +158,33 @@ def _cmd_evaluate(args):
     print(f"  Biomass (dry)    = {result.get('biomass_kg', 0):.1f} kg")
     print(f"  kWh/kg (dry)     = {result.get('kwh_per_kg', 0):.1f}")
     print(f"  kWh/kg (fresh)   = {result.get('kwh_per_kg_fresh', 0):.1f}")
+    # Humidity / moisture-control summary — RH control and water use are
+    # first-order concerns for prosumers growing leafy greens.
+    water_m3 = summary.get("annual_water_m3")
+    if water_m3 is not None:
+        print(f"  Annual water     = {water_m3:.2f} m3/yr")
+    mc = summary.get("moisture_clamp_stats")
+    if mc:
+        print(f"  RH clamp events  = {mc.get('sat_clip_events', 0)} saturation / "
+              f"{mc.get('floor_clip_events', 0)} floor "
+              f"({mc.get('sat_clip_water_kg', 0):.1f}/{mc.get('floor_clip_water_kg', 0):.1f} kg water)")
+    dh = summary.get("dehumidifier_performance")
+    if dh:
+        print(f"  DEH utilization  = {dh.get('deh_utilization', 1.0) * 100:.0f}% "
+              f"(removal-limited {dh.get('removal_limited_events', 0)} events, "
+              f"{dh.get('removal_limited_water_kg', 0):.1f} kg water)")
+        print(f"  Dehumidified     = {dh.get('deh_actual_dehum_kg', 0):.1f} kg (DEH) + "
+              f"{dh.get('hvac_actual_dehum_kg', 0):.1f} kg (HVAC coil) per yr")
     if summary.get("lcoe") is not None:
         print(f"  LCOE             = {summary['lcoe']:.4f} {getattr(project, 'currency', 'USD')}/kWh")
+    capital_total = summary.get("capital_total")
+    if capital_total is not None:
+        print(f"  Capital total    = {capital_total:.0f} {getattr(project, 'currency', 'USD')}")
+        if capital_total <= 0:
+            print("  [WARNING] all capital costs are zero — the LCOE above covers "
+                  "OPEX only, not the full facility cost. Set capital.cost / "
+                  "capital.rate_per_watt on each component for a meaningful LCOE.",
+                  file=sys.stderr)
     if project.pv_area_m2 <= 0 and project.battery_kwh <= 0:
         print(f"  Energy system    = disabled (pv_area_m2=0, battery_kwh=0)")
     pv_gen = summary.get("pv_generation_kwh", 0)

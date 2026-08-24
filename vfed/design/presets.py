@@ -12,7 +12,17 @@ __all__ = ["preset_default", "preset_609", "PRESETS"]
 
 
 def preset_default() -> DesignProject:
-    return DesignProject(name="default")
+    """Generic starting point (Shanghai, 200 m³ room, 45 m² canopy).
+
+    ``site.city="Shanghai"`` is set deliberately so the bundled offline weather
+    file ``data/weather/Shanghai_2025.csv`` is used on first run — otherwise a
+    bare ``vfed evaluate`` would try a network fetch and fail offline (E003).
+    Weather year is locked to 2025 for offline reference data.
+    """
+    return DesignProject(
+        name="default",
+        site=SiteConfig(lat=31.2, lon=121.5, tz_hours=8.0, city="Shanghai"),
+    )
 
 
 def preset_609() -> DesignProject:
