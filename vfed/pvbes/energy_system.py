@@ -13,7 +13,7 @@ there via ``opex.maintenance_pct``.  Do not read LCOE from this class.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict
 
 import numpy as np
 
@@ -31,17 +31,17 @@ class EnergySystem:
     tariff: Tariff = field(default_factory=Tariff)
     interest_rate: float = 0.06
     lifetime: int = 25
-    maintenance: float = 0.01   # LEGACY (P6-5): the pv/battery maintenance
-                                # config fields were removed in P5; O&M is
-                                # charged uniformly via ``opex.maintenance_pct``
-                                # in sweep/engine.  Only feeds
-                                # calculate_metrics' own (alternative-scope)
-                                # annual_om.
+    maintenance: float = 0.01  # LEGACY (P6-5): the pv/battery maintenance
+    # config fields were removed in P5; O&M is
+    # charged uniformly via ``opex.maintenance_pct``
+    # in sweep/engine.  Only feeds
+    # calculate_metrics' own (alternative-scope)
+    # annual_om.
 
     # ---- simulation -----------------------------------------------------
-    def simulate_performance(self, x, weather: Dict[str, np.ndarray],
-                              load: np.ndarray,
-                              year: int = 0) -> Dict[str, np.ndarray]:
+    def simulate_performance(
+        self, x, weather: Dict[str, np.ndarray], load: np.ndarray, year: int = 0
+    ) -> Dict[str, np.ndarray]:
         A_pv, E_bat = float(x[0]), float(x[1])
         load = np.asarray(load, dtype=float)
         pv_power = self.pv.calculate_pv_output(weather, A_pv, year=year)
@@ -81,9 +81,9 @@ class EnergySystem:
         }
 
     # ---- metrics --------------------------------------------------------
-    def calculate_metrics(self, x, weather: Dict[str, np.ndarray],
-                          load: np.ndarray, dt: float = 1.0,
-                          year: int = 0) -> Dict[str, float]:
+    def calculate_metrics(
+        self, x, weather: Dict[str, np.ndarray], load: np.ndarray, dt: float = 1.0, year: int = 0
+    ) -> Dict[str, float]:
         A_pv, E_bat = float(x[0]), float(x[1])
         load = np.asarray(load, dtype=float)
         perf = self.simulate_performance(x, weather, load, year=year)
@@ -121,8 +121,7 @@ class EnergySystem:
         # every hour, so this is grid dependency, not "loss of power supply".
         grid_dependency_pct = float(np.mean(perf["grid_import"] > 0.0)) * 100.0
         # Classical energy-weighted unmet-load share (LPSP), informational.
-        lpsp_pct = float(np.sum(perf["power_deficit"])) / \
-            max(float(np.sum(load)), 1e-9) * 100.0
+        lpsp_pct = float(np.sum(perf["power_deficit"])) / max(float(np.sum(load)), 1e-9) * 100.0
 
         # P4-15: battery replacement economics.  Equivalent life in years from
         # cycle_life vs actual cycling; if it falls short of the system lifetime
@@ -132,27 +131,32 @@ class EnergySystem:
         # inside ``sweep._annualized_capital`` (NOT as an additive cost here,
         # which would double count against the existing per-component CRF).
         annual_cycles = float(perf["battery_cycles"])
-        battery_life_years = (self.battery.cycle_life / annual_cycles
-                              if annual_cycles > 0.0 else float(self.lifetime))
+        battery_life_years = (
+            self.battery.cycle_life / annual_cycles if annual_cycles > 0.0 else float(self.lifetime)
+        )
         battery_replacement_annual = 0.0
         if np.isfinite(battery_life_years) and battery_life_years < self.lifetime:
             n_extra = int(np.ceil(self.lifetime / battery_life_years)) - 1
             pv_extra = bat_cost["capital_cost"] * sum(
                 (1.0 + self.interest_rate) ** (-(k * battery_life_years))
-                for k in range(1, n_extra + 1))
+                for k in range(1, n_extra + 1)
+            )
             if abs(self.interest_rate) > 1e-12:
-                crf_life = (self.interest_rate * (1 + self.interest_rate) ** self.lifetime
-                            / ((1 + self.interest_rate) ** self.lifetime - 1))
+                crf_life = (
+                    self.interest_rate
+                    * (1 + self.interest_rate) ** self.lifetime
+                    / ((1 + self.interest_rate) ** self.lifetime - 1)
+                )
             else:
                 crf_life = 1.0 / self.lifetime
             battery_replacement_annual = pv_extra * crf_life
 
         return {
             "grid_dependency_pct": grid_dependency_pct,  # P6-6
-            "tlps": grid_dependency_pct,                 # backward-compat alias
-            "lpsp_pct": lpsp_pct,                        # P6-6 energy-weighted LPSP
-            "battery_life_years": battery_life_years,                 # P4-15
-            "battery_replacement_annual": battery_replacement_annual, # P4-15
+            "tlps": grid_dependency_pct,  # backward-compat alias
+            "lpsp_pct": lpsp_pct,  # P6-6 energy-weighted LPSP
+            "battery_life_years": battery_life_years,  # P4-15
+            "battery_replacement_annual": battery_replacement_annual,  # P4-15
             "capital_cost": capital_cost,
             "annual_om": annual_om,
             "annual_grid_cost": net_grid_cost,

@@ -15,8 +15,6 @@ Sign convention:
     M_deh, M_hvac > 0 moisture removal (kg/s)
 """
 
-from typing import Tuple
-
 __all__ = ["RoomODESolver"]
 
 
@@ -25,8 +23,8 @@ class RoomODESolver:
 
     def __init__(
         self,
-        C_z: float,            # Equivalent heat capacity (Wh/K)
-        V_room: float = 200.0, # Room volume (m^3)
+        C_z: float,  # Equivalent heat capacity (Wh/K)
+        V_room: float = 200.0,  # Room volume (m^3)
         rho_air: float = 1.2,  # Air density (kg/m^3)
         T_min: float = -20.0,
         T_max: float = 60.0,
@@ -40,8 +38,9 @@ class RoomODESolver:
         self.T_max = T_max
         self.P_atm = P_atm
 
-    def step_temperature(self, T_z: float, Q_total_W: float, dt: float = 60.0,
-                         return_meta: bool = False):
+    def step_temperature(
+        self, T_z: float, Q_total_W: float, dt: float = 60.0, return_meta: bool = False
+    ):
         """Advance temperature (C) by dt seconds under total heat flux Q_total_W (W).
 
         State is hard-clamped to [T_min, T_max].  A clamp is NOT silently
@@ -66,7 +65,8 @@ class RoomODESolver:
         if not (-100.0 <= T_raw <= 100.0):
             raise RuntimeError(
                 f"Temperature diverged to {T_raw:.1f}°C — check model inputs "
-                f"(Q_total={Q_total_W:.0f}W, T_current={T_z:.1f}°C)")
+                f"(Q_total={Q_total_W:.0f}W, T_current={T_z:.1f}°C)"
+            )
         clipped_deg_c = 0.0
         if T_raw < self.T_min:
             clipped_deg_c = T_raw - self.T_min
@@ -77,8 +77,14 @@ class RoomODESolver:
             return T_new, {"clipped_deg_c": clipped_deg_c}
         return T_new
 
-    def step_humidity(self, W_z: float, M_total_kgs: float, T_z: float = None,
-                      dt: float = 60.0, return_meta: bool = False):
+    def step_humidity(
+        self,
+        W_z: float,
+        M_total_kgs: float,
+        T_z: float = None,
+        dt: float = 60.0,
+        return_meta: bool = False,
+    ):
         """Advance absolute humidity (kg/kg) by dt seconds under net moisture flow (kg/s).
 
         The moisture state is hard-clamped to [0, W_sat(T_z)].  The clamps are
@@ -113,6 +119,7 @@ class RoomODESolver:
         # (documented; not fixed — would require a predictor-corrector step).
         if T_z is not None:
             from .psychrometrics import saturation_vapor_pressure
+
             P_atm = self.P_atm
             p_sat = saturation_vapor_pressure(T_z)
             if P_atm - p_sat > 0.0:

@@ -14,7 +14,6 @@ This is a clean, configuration-free re-implementation of the vendored
 """
 
 import math
-from typing import Tuple
 
 __all__ = [
     "saturation_vapor_pressure",
@@ -74,8 +73,7 @@ def saturation_vapor_pressure(temp_c: float) -> float:
     return c * math.exp((a * temp_c) / (temp_c + b))
 
 
-def temp_rh_to_ah(temp_c: float, rh_pct: float,
-                  pressure_kpa: float = 101.325) -> float:
+def temp_rh_to_ah(temp_c: float, rh_pct: float, pressure_kpa: float = 101.325) -> float:
     """Convert temperature (C) and RH (%) to absolute humidity (kg/kg)."""
     # Guard: RH outside [0,100] would otherwise produce negative AH or a
     # physically impossible one — clamp to the physical range.
@@ -95,12 +93,10 @@ def temp_rh_to_ah(temp_c: float, rh_pct: float,
     return 0.622 * p_vapor / (pressure_kpa - p_vapor)
 
 
-def ah_to_temp_rh(temp_c: float, ah: float,
-                  pressure_kpa: float = 101.325) -> float:
+def ah_to_temp_rh(temp_c: float, ah: float, pressure_kpa: float = 101.325) -> float:
     """Convert temperature (C) and absolute humidity (kg/kg) to RH (%)."""
     if ah < 0.0:
-        raise ValueError(
-            f"absolute humidity cannot be negative, got {ah:.6f} kg/kg")
+        raise ValueError(f"absolute humidity cannot be negative, got {ah:.6f} kg/kg")
     p_sat = saturation_vapor_pressure(temp_c)
     p_vapor = ah * pressure_kpa / (0.622 + ah)
     rh = (p_vapor / p_sat) * 100.0
@@ -130,14 +126,18 @@ def temp_rh_to_dewpoint(temp_c: float, rh_pct: float) -> float:
     return t_dp
 
 
-def temp_rh_to_wetbulb(temp_c: float, rh_pct: float,
-                       pressure_kpa: float = 101.325,
-                       max_iter: int = 50, tol: float = 1e-6) -> float:
+def temp_rh_to_wetbulb(
+    temp_c: float,
+    rh_pct: float,
+    pressure_kpa: float = 101.325,
+    max_iter: int = 50,
+    tol: float = 1e-6,
+) -> float:
     """Wet-bulb temperature (C) via Newton-Raphson on the psychrometric equation."""
     ah = temp_rh_to_ah(temp_c, rh_pct)
     t_wb = temp_c * math.atan(0.151977 * math.sqrt(rh_pct + 8.313659))
     t_wb += math.atan(temp_c + rh_pct) - math.atan(rh_pct - 1.676331)
-    t_wb += 0.00391838 * (rh_pct ** 1.5) * math.atan(0.023101 * rh_pct) - 4.686035
+    t_wb += 0.00391838 * (rh_pct**1.5) * math.atan(0.023101 * rh_pct) - 4.686035
     for _ in range(max_iter):
         p_sat_wb = saturation_vapor_pressure(t_wb)
         ah_sat_wb = 0.622 * p_sat_wb / (pressure_kpa - p_sat_wb)
@@ -146,7 +146,7 @@ def temp_rh_to_wetbulb(temp_c: float, rh_pct: float,
         dp_sat = p_sat_wb * (17.27 * 237.3) / ((t_wb + 237.3) ** 2)
         d_ah_sat = 0.622 * pressure_kpa * dp_sat / ((pressure_kpa - p_sat_wb) ** 2)
         d_h_fg = -2.36
-        d_f = d_ah_sat + (1.006 / h_fg) + (1.006 * (temp_c - t_wb) * d_h_fg) / (h_fg ** 2)
+        d_f = d_ah_sat + (1.006 / h_fg) + (1.006 * (temp_c - t_wb) * d_h_fg) / (h_fg**2)
         if abs(d_f) < 1e-12:
             break
         t_wb_new = t_wb - f / d_f
@@ -156,7 +156,8 @@ def temp_rh_to_wetbulb(temp_c: float, rh_pct: float,
     else:
         raise RuntimeError(
             f"Wet-bulb iteration did not converge after {max_iter} iterations "
-            f"(T={temp_c:.1f}°C, RH={rh_pct:.1f}%)")
+            f"(T={temp_c:.1f}°C, RH={rh_pct:.1f}%)"
+        )
     return t_wb
 
 

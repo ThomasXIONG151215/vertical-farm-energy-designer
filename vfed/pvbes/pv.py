@@ -23,24 +23,24 @@ class PVSystem:
     # MPP power is computed from I_mp x V_mp via the SDM below, so eta_pv does
     # not enter the power calculation — kept as a config-contract field.
     eta_pv: float = 0.233
-    area_to_power: float = 4.3     # m^2 of module per kWp
-    N_s: int = 156                 # cells in series
-    I_sc_stc: float = 13.98        # A
-    V_oc_stc: float = 57.34        # V
-    I_mp_stc: float = 12.66        # A  (JKM580N-78HL4-BDV nameplate)
-    V_mp_stc: float = 45.85        # V  (JKM580N-78HL4-BDV nameplate)
-                                   #    P_module_at_STC = 45.85*12.66 = 580.5 W
-    alpha_sc: float = 0.00045      # /K  (relative, ~0.045 %/K for Jinko 78HL4-BDV)
-    beta_voc: float = -0.0025      # /K  (relative, ~-0.25 %/K for Jinko 78HL4-BDV)
-    NOCT: float = 45.0             # C
-    T_stc: float = 25.0            # C
-    eta_inv: float = 0.97          # inverter efficiency
+    area_to_power: float = 4.3  # m^2 of module per kWp
+    N_s: int = 156  # cells in series
+    I_sc_stc: float = 13.98  # A
+    V_oc_stc: float = 57.34  # V
+    I_mp_stc: float = 12.66  # A  (JKM580N-78HL4-BDV nameplate)
+    V_mp_stc: float = 45.85  # V  (JKM580N-78HL4-BDV nameplate)
+    #    P_module_at_STC = 45.85*12.66 = 580.5 W
+    alpha_sc: float = 0.00045  # /K  (relative, ~0.045 %/K for Jinko 78HL4-BDV)
+    beta_voc: float = -0.0025  # /K  (relative, ~-0.25 %/K for Jinko 78HL4-BDV)
+    NOCT: float = 45.0  # C
+    T_stc: float = 25.0  # C
+    eta_inv: float = 0.97  # inverter efficiency
     # P6-7: aggregate derate for soiling (~2-5 %), DC wiring (~1-2 %) and
     # module mismatch (~1-2 %).  Self-shading neglected (PFAL roof arrays are
     # laid flat).  Applied AFTER eta_inv: total derate = 0.97*0.95 = 0.9215.
     eta_system: float = 0.95
-    C_pv: float = 110.0            # $/kWp
-    degradation: float = 0.004     # per year
+    C_pv: float = 110.0  # $/kWp
+    degradation: float = 0.004  # per year
 
     def cell_temperature(self, G: np.ndarray, T_amb: np.ndarray) -> np.ndarray:
         """Nominal-Operating-Cell-Temperature model."""
@@ -65,15 +65,17 @@ class PVSystem:
         V_mp = V_oc * k_v
         return I_mp * V_mp
 
-    def calculate_pv_output(self, weather: Dict[str, np.ndarray],
-                            A_pv: float, year: int = 0) -> np.ndarray:
+    def calculate_pv_output(
+        self, weather: Dict[str, np.ndarray], A_pv: float, year: int = 0
+    ) -> np.ndarray:
         """Hourly PV AC output (kW).
 
         weather keys: 'direct_radiation', 'diffuse_radiation', 'temperature_2m'.
         Plane-of-array irradiance = direct + diffuse (see weather_bridge.add_poa).
         """
-        G = np.asarray(weather["direct_radiation"], dtype=float) + \
-            np.asarray(weather["diffuse_radiation"], dtype=float)
+        G = np.asarray(weather["direct_radiation"], dtype=float) + np.asarray(
+            weather["diffuse_radiation"], dtype=float
+        )
         T_amb = np.asarray(weather["temperature_2m"], dtype=float)
         G = np.clip(G, 0.0, None)
         T_cell = self.cell_temperature(G, T_amb)

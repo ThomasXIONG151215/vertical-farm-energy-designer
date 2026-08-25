@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-from ..physics.psychrometrics import latent_heat_vaporization, temp_rh_to_ah
+from ..physics.psychrometrics import latent_heat_vaporization
 from ..physics.shr import DynamicSHR
 from .compressor import CompressorState
 from .lag import FirstOrderLag
@@ -29,8 +29,8 @@ __all__ = ["HVACDevice", "COPModel", "size_hvac"]
 # 0.1 K denominator floor + flat 50 cap returned COP up to 17.5 when the
 # refrigerant lift collapsed (T_ext <= T_z), ~3.5x the real 4-5 of a
 # mild-weather unit.
-_COP_MIN_LIFT_C = 5.0    # minimum physical compressor lift (K)
-_COP_COOL_MAX = 4.5      # final cooling COP ceiling
+_COP_MIN_LIFT_C = 5.0  # minimum physical compressor lift (K)
+_COP_COOL_MAX = 4.5  # final cooling COP ceiling
 
 # P4-1 (BLOCKING): humidity-protection guard + physical coil condensation bound.
 #   (a) Below the guard RH the coil stops condensing (SHR->1.0) — temperature-only
@@ -39,11 +39,11 @@ _COP_COOL_MAX = 4.5      # final cooling COP ceiling
 #   (b) Condensate rate is capped by the coil's airflow-limited capacity
 #       (~1.5 g/s per 3 kW rated electrical, real DX condensate 1-2 g/s), so a
 #       capacity/SHR split can never drain the room vapour inventory in one step.
-_SHR_RH_GUARD = 55.0            # % RH; below this the AC stops latent removal
-_SHR_RH_GUARD_BAND = 3.0        # % RH blend width over which the guard engages
-_COIL_CONDENSE_K = 5.0e-7       # kg/s condensate per W rated electrical
-                                # (5e-7 * 3000 W = 1.5 g/s, matching the ~1.5 g/s
-                                # per 3 kW spec above; P4-1b fix: was 5e-4 -> 1.5 kg/s)
+_SHR_RH_GUARD = 55.0  # % RH; below this the AC stops latent removal
+_SHR_RH_GUARD_BAND = 3.0  # % RH blend width over which the guard engages
+_COIL_CONDENSE_K = 5.0e-7  # kg/s condensate per W rated electrical
+# (5e-7 * 3000 W = 1.5 g/s, matching the ~1.5 g/s
+# per 3 kW spec above; P4-1b fix: was 5e-4 -> 1.5 kg/s)
 
 # P2-3 (MINOR): air-source heat pump heating COP bounds and rating condition.
 # EN 14511 A7/W35 rating point (7 degC outdoor / 20 degC indoor) is the
@@ -65,7 +65,7 @@ _EIR_SPEED_A, _EIR_SPEED_B, _EIR_SPEED_C = 0.488, 0.553, -0.041
 # Conservative flat alternative (Maxa i-290 air-to-water same-T measurements):
 # part-load efficiency ~flat, slight dip at deep part load.
 _EIR_FLAT_A, _EIR_FLAT_B, _EIR_FLAT_C = 1.1332, -0.410, 0.280
-_SPEED_M_MIN = 0.2    # lowest continuous speed (turndown, oil-return bound)
+_SPEED_M_MIN = 0.2  # lowest continuous speed (turndown, oil-return bound)
 
 
 @dataclass
@@ -78,6 +78,7 @@ class COPModel:
         "linear"   -> value * (1 - k*(T_ext - T_ref))
         "table"    -> piecewise-linear over ``table`` {edge_c: cop}
     """
+
     mode: str = "carnot"
     value: float = 4.0
     k: float = 0.02
@@ -131,7 +132,7 @@ class HVACDevice:
         P_rated_w: float = 3000.0,
         cop: Optional[COPModel] = None,
         cop_heat: float = 3.0,
-        heat_mode: str = "heat_pump",   # "heat_pump" | "resistive"
+        heat_mode: str = "heat_pump",  # "heat_pump" | "resistive"
         P_rated_heat_w: Optional[float] = None,
         deadband_c: float = 1.0,
         min_on_s: float = 180.0,
@@ -142,9 +143,9 @@ class HVACDevice:
         tau_m: float = 60.0,
         shr_rh_guard: float = _SHR_RH_GUARD,
         rh_guard_band: float = _SHR_RH_GUARD_BAND,
-        coil_condense_max_kgs: float = 0.0,   # 0 -> auto from P_rated (P4-1b)
-        mod_band_c: float = 2.0,              # VFD proportional band (degC)
-        speed_curve: str = "default",         # "default" | "flat" (conservative)
+        coil_condense_max_kgs: float = 0.0,  # 0 -> auto from P_rated (P4-1b)
+        mod_band_c: float = 2.0,  # VFD proportional band (degC)
+        speed_curve: str = "default",  # "default" | "flat" (conservative)
     ):
         self.P_rated = P_rated_w
         self.cop = cop or COPModel()
@@ -154,14 +155,20 @@ class HVACDevice:
         self.shr = shr or DynamicSHR()
         self.shr_rh_guard = shr_rh_guard
         self.rh_guard_band = max(rh_guard_band, 1e-6)
-        self.m_coil_max_kgs = (coil_condense_max_kgs if coil_condense_max_kgs > 0.0
-                               else _COIL_CONDENSE_K * self.P_rated)
+        self.m_coil_max_kgs = (
+            coil_condense_max_kgs
+            if coil_condense_max_kgs > 0.0
+            else _COIL_CONDENSE_K * self.P_rated
+        )
         self.mod_band_c = mod_band_c
         self.speed_curve = speed_curve
         self.comp = CompressorState(
-            deadband=deadband_c, min_on_s=min_on_s, min_off_s=min_off_s,
+            deadband=deadband_c,
+            min_on_s=min_on_s,
+            min_off_s=min_off_s,
             fan_power_w=fan_power_w,
-            proportional_band=mod_band_c, m_min=_SPEED_M_MIN,
+            proportional_band=mod_band_c,
+            m_min=_SPEED_M_MIN,
         )
         self.lag_q = FirstOrderLag(tau_rise=tau_q, tau_fall=tau_q)
         self.lag_m = FirstOrderLag(tau_rise=tau_m, tau_fall=tau_m)
@@ -170,15 +177,15 @@ class HVACDevice:
     def _cap_speed_mod(self, m: float) -> float:
         """Capacity modifier vs speed ratio (variable-speed compressor)."""
         m = min(max(m, _SPEED_M_MIN), 1.0)
-        return (_CAP_SPEED_A + _CAP_SPEED_B * m + _CAP_SPEED_C * m * m)
+        return _CAP_SPEED_A + _CAP_SPEED_B * m + _CAP_SPEED_C * m * m
 
     def _eir_speed_mod(self, m: float) -> float:
         """EIR modifier vs speed ratio.  EIR = 1/COP, so a value < 1 means
         part-load COP is BETTER than full-load (inverter units)."""
         m = min(max(m, _SPEED_M_MIN), 1.0)
         if self.speed_curve == "flat":
-            return (_EIR_FLAT_A + _EIR_FLAT_B * m + _EIR_FLAT_C * m * m)
-        return (_EIR_SPEED_A + _EIR_SPEED_B * m + _EIR_SPEED_C * m * m)
+            return _EIR_FLAT_A + _EIR_FLAT_B * m + _EIR_FLAT_C * m * m
+        return _EIR_SPEED_A + _EIR_SPEED_B * m + _EIR_SPEED_C * m * m
 
     def reset(self) -> None:
         self.comp.reset(False)
@@ -199,17 +206,15 @@ class HVACDevice:
         """
         dT_evap = self.cop.delta_T_evap
         dT_cond = self.cop.delta_T_cond
-        T_cond = T_z + dT_evap + 273.15            # indoor coil (condenser)
-        T_evap = T_ext - dT_cond + 273.15          # outdoor coil (evaporator)
+        T_cond = T_z + dT_evap + 273.15  # indoor coil (condenser)
+        T_evap = T_ext - dT_cond + 273.15  # outdoor coil (evaporator)
         lift = max(T_cond - T_evap, _COP_MIN_LIFT_C)
         cop_carnot = T_cond / lift
         T_cond_ref = _HEAT_REF_INDOOR_C + dT_evap + 273.15
         T_evap_ref = _HEAT_REF_OUTDOOR_C - dT_cond + 273.15
         lift_ref = max(T_cond_ref - T_evap_ref, _COP_MIN_LIFT_C)
         cop_carnot_ref = T_cond_ref / lift_ref
-        return max(_HEAT_COP_MIN,
-                   min(self.cop_heat * cop_carnot / cop_carnot_ref,
-                       _HEAT_COP_MAX))
+        return max(_HEAT_COP_MIN, min(self.cop_heat * cop_carnot / cop_carnot_ref, _HEAT_COP_MAX))
 
     def _apply_rh_guard(self, shr: float, RH_z: float) -> float:
         """Humidity-protection guard (P4-1a): below ``shr_rh_guard`` % RH the
@@ -248,15 +253,15 @@ class HVACDevice:
         # ratio.  m=1 only when the deviation reaches the proportional band.
         if T_z > T_setpoint:
             # Cooling demand: too warm -> demand positive.
-            mod = self.comp.update(T_z - T_setpoint, dt,
-                                   on_threshold=0.0,
-                                   off_threshold=-self.comp.deadband)
+            mod = self.comp.update(
+                T_z - T_setpoint, dt, on_threshold=0.0, off_threshold=-self.comp.deadband
+            )
             mode = "cool"
             self._last_mode = "cool"
         elif is_heating_needed and T_z < T_heat_setpoint:
-            mod = self.comp.update(T_heat_setpoint - T_z, dt,
-                                   on_threshold=0.0,
-                                   off_threshold=-self.comp.deadband)
+            mod = self.comp.update(
+                T_heat_setpoint - T_z, dt, on_threshold=0.0, off_threshold=-self.comp.deadband
+            )
             mode = "heat"
             self._last_mode = "heat"
         else:
@@ -280,8 +285,7 @@ class HVACDevice:
             eir = self._eir_speed_mod(mod)
             Q_total = self.P_rated * cop * cap
             P_elec = self.P_rated * cap * eir + self.comp.fan_power_w
-            shr = self.shr.calc_shr_fallback(T_return=T_z, RH_return=RH_z,
-                                              T_setpoint=T_setpoint)
+            shr = self.shr.calc_shr_fallback(T_return=T_z, RH_return=RH_z, T_setpoint=T_setpoint)
             # P4-1 (BLOCKING): humidity-protection guard (below the guard RH
             # the coil stops condensing, so a humidity-blind AC cannot over-
             # dry the room) + physical coil condensate-rate bound (capped by
@@ -305,8 +309,9 @@ class HVACDevice:
             # DynamicSHR fallback) so M_target shares one L_v source with the
             # room enthalpy balance.
             T_supply = T_setpoint - self.shr.t_coil_drop
-            M_target = min(Q_lat / (latent_heat_vaporization(T_supply) * 1000.0),
-                           self.m_coil_max_kgs)
+            M_target = min(
+                Q_lat / (latent_heat_vaporization(T_supply) * 1000.0), self.m_coil_max_kgs
+            )
         elif mod > 0.0 and mode == "heat":
             if self.heat_mode == "heat_pump":
                 cap = self._cap_speed_mod(mod)
@@ -314,8 +319,9 @@ class HVACDevice:
                 P_elec = self.P_rated_heat * cap * eir + self.comp.fan_power_w
                 # P2-3: heating COP degrades with outdoor temperature instead
                 # of the old flat cop_heat (see _cop_heat_at).
-                Q_target = (self.P_rated_heat * self._cop_heat_at(T_ext, T_z)
-                            * cap + self.comp.fan_power_w)
+                Q_target = (
+                    self.P_rated_heat * self._cop_heat_at(T_ext, T_z) * cap + self.comp.fan_power_w
+                )
             else:
                 # Resistive: no compressor COP curve — power follows the VFD
                 # modulation m linearly, COP = 1.
@@ -386,18 +392,31 @@ def size_hvac(
     q_solar = eta_solar * A_window * GHI_design
     m_dot = ach * V_room * rho_air / 3600.0
     q_inf = m_dot * cp_air * (T_design_ext - T_setpoint)
-    q_sens_raw = (q_env + q_solar + q_inf + led_heat_w
-                  + equipment_power_w + deh_net_heat_w
-                  + deh_latent_residual_w)
+    q_sens_raw = (
+        q_env
+        + q_solar
+        + q_inf
+        + led_heat_w
+        + equipment_power_w
+        + deh_net_heat_w
+        + deh_latent_residual_w
+    )
     if q_sens_raw < 0:
         logging.warning(
             "Net sensible load is negative (%.1f W) — clamping to 0 for HVAC sizing. "
             "Check design conditions: T_ext=%.1f, T_setpoint=%.1f, "
             "q_env=%.1f, q_solar=%.1f, q_inf=%.1f, led=%.1f, equip=%.1f, "
             "deh=%.1f, deh_lat=%.1f",
-            q_sens_raw, T_design_ext, T_setpoint,
-            q_env, q_solar, q_inf, led_heat_w, equipment_power_w,
-            deh_net_heat_w, deh_latent_residual_w,
+            q_sens_raw,
+            T_design_ext,
+            T_setpoint,
+            q_env,
+            q_solar,
+            q_inf,
+            led_heat_w,
+            equipment_power_w,
+            deh_net_heat_w,
+            deh_latent_residual_w,
         )
     q_sens = max(0.0, q_sens_raw)
     q_total = q_sens / max(shr_design, 0.1)

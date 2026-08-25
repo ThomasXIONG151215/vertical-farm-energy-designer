@@ -32,9 +32,11 @@ def _write_results_csv(df, path: str) -> int:
     try:
         df.to_csv(path, index=False)
     except OSError as e:  # FileNotFoundError/IsADirectoryError/PermissionError
-        print(f"[ERROR] cannot write '{path}': {e}. "
-              f"Create the parent directory first (e.g. mkdir -p).",
-              file=sys.stderr)
+        print(
+            f"[ERROR] cannot write '{path}': {e}. "
+            f"Create the parent directory first (e.g. mkdir -p).",
+            file=sys.stderr,
+        )
         return 1
     print(f"  Enumeration table -> {path}")
     return 0
@@ -61,7 +63,8 @@ _YAML_SECTION_COMMENTS = {
         "#                offline data exists only for 2025 (year is locked)\n"
         "#   tz_hours   - UTC offset (h)\n"
         "#   tilt, azimuth - PV panel mounting (degrees)\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "envelope": (
         "# ------------------------------------------------------------------\n"
         "# envelope: grow room\n"
@@ -69,7 +72,8 @@ _YAML_SECTION_COMMENTS = {
         "#   U_wall_A    - envelope conductance (W/K)\n"
         "#   ach         - infiltration air changes per hour\n"
         "#   C_z         - thermal mass (Wh/K)\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "hvac": (
         "# ------------------------------------------------------------------\n"
         "# hvac: air conditioning (cooling + dehumidification by coil)\n"
@@ -79,7 +83,8 @@ _YAML_SECTION_COMMENTS = {
         "#   eta_II / delta_T_evap / delta_T_cond - Carnot model parameters\n"
         "#   datasheet aliases: cooling_capacity_kw (-> Q_cool_nom),\n"
         "#                      cop (-> cop_value), power_w (-> P_rated_w)\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "deh": (
         "# ------------------------------------------------------------------\n"
         "# deh: dehumidifier (removes moisture from transpiration)\n"
@@ -89,7 +94,8 @@ _YAML_SECTION_COMMENTS = {
         "#   M_deh_nom   - alternative spec: nominal removal (L/day)\n"
         "#   datasheet aliases: capacity_l_per_day (-> M_deh_nom),\n"
         "#                      power_w (-> P_ref_w)\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "led": (
         "# ------------------------------------------------------------------\n"
         "# led: lighting\n"
@@ -98,12 +104,14 @@ _YAML_SECTION_COMMENTS = {
         "#   efficacy    - LED efficiency (umol/J)\n"
         "#   covered_area- lit canopy area (m2) — set to YOUR grow area!\n"
         "#   photoperiod_hours / light_start_hour - light schedule\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "transpiration": (
         "# ------------------------------------------------------------------\n"
         "# transpiration: crop water-loss model\n"
         "#   method - van_henten (coupled to growth) | daily | per_plant | ...\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "setpoints": (
         "# ------------------------------------------------------------------\n"
         "# setpoints: indoor climate targets\n"
@@ -111,29 +119,34 @@ _YAML_SECTION_COMMENTS = {
         "#   RH      - relative humidity (%)\n"
         "#   co2_ppm - CO2 concentration (ppm)\n"
         "#   crop_cycle_days - days from seeding to harvest\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "growth": (
         "# ------------------------------------------------------------------\n"
         "# growth: Van Henten crop-growth parameters (keep defaults)\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "pv": (
         "# ------------------------------------------------------------------\n"
         "# pv: solar array\n"
         "#   area_to_power - m2 per kWp (typical 4.3)\n"
         "#   eta_pv / degradation - panel efficiency / annual loss (fraction)\n"
         "#   C_pv - legacy unit price ($/kWp)\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "battery": (
         "# ------------------------------------------------------------------\n"
         "# battery: storage\n"
         "#   c_energy - legacy unit price (currency/kWh)\n"
         "#   c_rate, eta_ch/eta_dis, soc_min/soc_max, cycle_life\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "tariff": (
         "# ------------------------------------------------------------------\n"
         "# tariff: grid prices (24 hourly values, project currency/kWh)\n"
         "#   export_price - feed-in / buy-back rate\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "space": (
         "# ------------------------------------------------------------------\n"
         "# space: design sweep\n"
@@ -141,17 +154,20 @@ _YAML_SECTION_COMMENTS = {
         "#     building: ppfd_target, efficacy, photoperiod_hours, T_light, ...\n"
         "#     energy  : pv_area (or pv_area_m2), battery (or battery_kwh)\n"
         "#   objective - lcoe | kwh_per_kg_fresh | cost_per_kg_fresh\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "equipment_power_w": (
         "# ------------------------------------------------------------------\n"
         "# equipment_power_w: constant facility base load (W)\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "equipment_capital": (
         "# ------------------------------------------------------------------\n"
         "# capital costs (mode: direct = total cost; per_watt = rate x rated W;\n"
         "# cost, rate_per_watt, depreciation_years)\n"
         "# NOTE: if ALL capital costs are 0, LCOE covers OPEX only.\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "envelope_capital": None,  # same comment already emitted by equipment_capital
     "pump_capital": None,
     "opex": (
@@ -159,18 +175,18 @@ _YAML_SECTION_COMMENTS = {
         "# opex: annual operating costs\n"
         "#   labor_cost_per_year / misc_opex_per_year (currency/yr)\n"
         "#   water_cost_per_m3 (currency/m3), maintenance_pct (fraction of capital)\n"
-        "# ------------------------------------------------------------------\n"),
-    "interest_rate": (
-        "# interest_rate: discount rate (fraction, e.g. 0.06 = 6%)\n"),
-    "currency": (
-        "# currency / exchange_rate: monetary units (exchange_rate = currency per USD)\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
+    "interest_rate": ("# interest_rate: discount rate (fraction, e.g. 0.06 = 6%)\n"),
+    "currency": ("# currency / exchange_rate: monetary units (exchange_rate = currency per USD)\n"),
     "exchange_rate": None,
     "pv_area_m2": (
         "# ------------------------------------------------------------------\n"
         "# energy-system sizing (0 = skip PV/battery)\n"
         "#   pv_area_m2  - PV array area (m2)\n"
         "#   battery_kwh - battery capacity (kWh)\n"
-        "# ------------------------------------------------------------------\n"),
+        "# ------------------------------------------------------------------\n"
+    ),
     "battery_kwh": None,
 }
 
@@ -183,6 +199,7 @@ def _commented_project_yaml(project) -> str:
     """
     import io
     import yaml
+
     buf = io.StringIO()
     yaml.safe_dump(project.to_dict(), buf, sort_keys=False, allow_unicode=True)
     lines = buf.getvalue().splitlines()
@@ -206,8 +223,7 @@ def _cmd_design_new(args):
     if args.city is not None:
         canonical = lookup_city(args.city)
         if canonical is None:
-            print(f"City '{args.city}' not found. Available cities:",
-                  file=sys.stderr)
+            print(f"City '{args.city}' not found. Available cities:", file=sys.stderr)
             for c in list_cities():
                 print(f"  {c['name']}", file=sys.stderr)
             sys.exit(1)
@@ -215,11 +231,16 @@ def _cmd_design_new(args):
         coords = city_coords(canonical)
         if coords is not None:
             preset.site.lat, preset.site.lon, preset.site.tz_hours = coords
-            print(f"Set '{canonical}' -> lat={preset.site.lat:.3f}, "
-                  f"lon={preset.site.lon:.3f}, tz={preset.site.tz_hours:+.1f} h")
+            print(
+                f"Set '{canonical}' -> lat={preset.site.lat:.3f}, "
+                f"lon={preset.site.lon:.3f}, tz={preset.site.tz_hours:+.1f} h"
+            )
         else:
-            print(f"[WARN] no pre-downloaded coordinates for '{canonical}'; "
-                  f"lat/lon may need manual override.", file=sys.stderr)
+            print(
+                f"[WARN] no pre-downloaded coordinates for '{canonical}'; "
+                f"lat/lon may need manual override.",
+                file=sys.stderr,
+            )
     if args.lat is not None:
         preset.site.lat = args.lat
     if args.lon is not None:
@@ -229,13 +250,13 @@ def _cmd_design_new(args):
     if args.tariff is not None:
         rec = lookup_tariff(args.tariff)
         if rec is None:
-            print(f"Tariff region '{args.tariff}' not found. Available:",
-                  file=sys.stderr)
+            print(f"Tariff region '{args.tariff}' not found. Available:", file=sys.stderr)
             for r in list_regions():
                 print(f"  {r['id']:15s}  {r['label']}", file=sys.stderr)
             sys.exit(1)
         preset.tariff = TariffConfig(
-            hourly_prices=rec["hourly_prices"], export_price=rec["export_price"])
+            hourly_prices=rec["hourly_prices"], export_price=rec["export_price"]
+        )
         print(f"Set tariff '{args.tariff}' ({rec['label']})")
     out = Path(args.out) if args.out else Path(args.name + ".yaml")
     if out.exists():
@@ -265,30 +286,38 @@ def _cmd_tariffs(args):
 def _cmd_validate(args):
     """Validate a project YAML without running the simulation."""
     if not Path(args.project).is_file():
-        print(f"[ERROR E001] project file not found: '{args.project}'. "
-              f"Create one with 'vfed design new <name> [--preset 609]'.",
-              file=sys.stderr)
+        print(
+            f"[ERROR E001] project file not found: '{args.project}'. "
+            f"Create one with 'vfed design new <name> [--preset 609]'.",
+            file=sys.stderr,
+        )
         return 1
     try:
         project = DesignProject.load(args.project)
         from .design.sweep import _validate_ranges
+
         _validate_ranges(project.space.parameter_ranges)
     except Exception as e:
         print(f"[ERROR E001] invalid project config: {e}", file=sys.stderr)
         return 1
-    print(f"OK: '{args.project}' is a valid VFED project "
-          f"({project.name}, timestep {project.space.timestep_s}s, "
-          f"objective {project.space.objective}).")
+    print(
+        f"OK: '{args.project}' is a valid VFED project "
+        f"({project.name}, timestep {project.space.timestep_s}s, "
+        f"objective {project.space.objective})."
+    )
     return 0
 
 
 def _cmd_evaluate(args):
     """Evaluate a single design — building simulation only (no sweep)."""
     import numpy as np
+
     if not Path(args.project).is_file():
-        print(f"[ERROR E001] project file not found: '{args.project}'. "
-              f"Create one with 'vfed design new <name> [--preset 609]'.",
-              file=sys.stderr)
+        print(
+            f"[ERROR E001] project file not found: '{args.project}'. "
+            f"Create one with 'vfed design new <name> [--preset 609]'.",
+            file=sys.stderr,
+        )
         return 1
     try:
         project = DesignProject.load(args.project)
@@ -296,8 +325,11 @@ def _cmd_evaluate(args):
         print(f"[ERROR E001] invalid project config: {e}", file=sys.stderr)
         return 1
     engine = DesignEngine(cache_dir=args.cache)
-    print(f"Fetching weather for ({project.site.lat:.1f}, {project.site.lon:.1f}) "
-          f"year {project.site.year} (cache: '{args.cache}')...", file=sys.stderr)
+    print(
+        f"Fetching weather for ({project.site.lat:.1f}, {project.site.lon:.1f}) "
+        f"year {project.site.year} (cache: '{args.cache}')...",
+        file=sys.stderr,
+    )
     try:
         result = engine.run(project)
     except WeatherFetchError as e:
@@ -309,9 +341,11 @@ def _cmd_evaluate(args):
     summary = result.summary
     annual_load = result.get("load", np.zeros(1)).sum()
     if annual_load <= 0:
-        print("[ERROR E103] load profile is empty or zero "
-              "(check LED power / equipment_power_w / setpoints)",
-              file=sys.stderr)
+        print(
+            "[ERROR E103] load profile is empty or zero "
+            "(check LED power / equipment_power_w / setpoints)",
+            file=sys.stderr,
+        )
         return 1
     print(f"Project: {project.name}")
     print(f"  Annual load      = {annual_load:.0f} kWh/yr")
@@ -325,27 +359,37 @@ def _cmd_evaluate(args):
         print(f"  Annual water     = {water_m3:.2f} m3/yr")
     mc = summary.get("moisture_clamp_stats")
     if mc:
-        print(f"  RH clamp events  = {mc.get('sat_clip_events', 0)} saturation / "
-              f"{mc.get('floor_clip_events', 0)} floor "
-              f"({mc.get('sat_clip_water_kg', 0):.1f}/{mc.get('floor_clip_water_kg', 0):.1f} kg water)")
+        print(
+            f"  RH clamp events  = {mc.get('sat_clip_events', 0)} saturation / "
+            f"{mc.get('floor_clip_events', 0)} floor "
+            f"({mc.get('sat_clip_water_kg', 0):.1f}/{mc.get('floor_clip_water_kg', 0):.1f} kg water)"
+        )
     dh = summary.get("dehumidifier_performance")
     if dh:
-        print(f"  DEH utilization  = {dh.get('deh_utilization', 1.0) * 100:.0f}% "
-              f"(removal-limited {dh.get('removal_limited_events', 0)} events, "
-              f"{dh.get('removal_limited_water_kg', 0):.1f} kg water)")
-        print(f"  Dehumidified     = {dh.get('deh_actual_dehum_kg', 0):.1f} kg (DEH) + "
-              f"{dh.get('hvac_actual_dehum_kg', 0):.1f} kg (HVAC coil) per yr")
+        print(
+            f"  DEH utilization  = {dh.get('deh_utilization', 1.0) * 100:.0f}% "
+            f"(removal-limited {dh.get('removal_limited_events', 0)} events, "
+            f"{dh.get('removal_limited_water_kg', 0):.1f} kg water)"
+        )
+        print(
+            f"  Dehumidified     = {dh.get('deh_actual_dehum_kg', 0):.1f} kg (DEH) + "
+            f"{dh.get('hvac_actual_dehum_kg', 0):.1f} kg (HVAC coil) per yr"
+        )
     if summary.get("lcoe") is not None:
-        print(f"  LCOE             = {summary['lcoe']:.4f} {getattr(project, 'currency', 'USD')}/kWh")
+        print(
+            f"  LCOE             = {summary['lcoe']:.4f} {getattr(project, 'currency', 'USD')}/kWh"
+        )
     capital_total = summary.get("capital_total")
     if capital_total is not None:
         print(f"  Capital total    = {capital_total:.0f} {getattr(project, 'currency', 'USD')}")
         if capital_total <= 0:
-            print(f"  [WARNING] all capital costs are zero — the LCOE above covers "
-                  f"OPEX only, not the full facility cost. Set capital.cost / "
-                  f"capital.rate_per_watt on each component for a meaningful LCOE.")
+            print(
+                "  [WARNING] all capital costs are zero — the LCOE above covers "
+                "OPEX only, not the full facility cost. Set capital.cost / "
+                "capital.rate_per_watt on each component for a meaningful LCOE."
+            )
     if project.pv_area_m2 <= 0 and project.battery_kwh <= 0:
-        print(f"  Energy system    = disabled (pv_area_m2=0, battery_kwh=0)")
+        print("  Energy system    = disabled (pv_area_m2=0, battery_kwh=0)")
     pv_gen = summary.get("pv_generation_kwh", 0)
     if pv_gen > 0:
         print(f"  PV generation    = {pv_gen:.0f} kWh/yr")
@@ -364,16 +408,19 @@ def _cmd_evaluate(args):
 def _cmd_sweep(args):
     """Run design sweep (single-point if parameter_ranges is empty)."""
     if not Path(args.project).is_file():
-        print(f"[ERROR E001] project file not found: '{args.project}'. "
-              f"Create one with 'vfed design new <name> [--preset 609]'.",
-              file=sys.stderr)
+        print(
+            f"[ERROR E001] project file not found: '{args.project}'. "
+            f"Create one with 'vfed design new <name> [--preset 609]'.",
+            file=sys.stderr,
+        )
         return 1
-    print(f"Loading '{args.project}', fetching weather if needed "
-          f"(cache: '{args.cache}')...", file=sys.stderr)
+    print(
+        f"Loading '{args.project}', fetching weather if needed " f"(cache: '{args.cache}')...",
+        file=sys.stderr,
+    )
     res = agent_evaluate(args.project, cache_dir=args.cache)
     if not res["success"]:
-        print(f"[ERROR {res.get('error_code','?')}] {res['message']}",
-              file=sys.stderr)
+        print(f"[ERROR {res.get('error_code', '?')}] {res['message']}", file=sys.stderr)
         return 1
 
     project = res.get("project", "unnamed")
@@ -399,6 +446,7 @@ def _cmd_sweep(args):
         print(f"  Biomass (dry)           = {best.get('biomass_kg', 0):.1f} kg")
         if args.out:
             import pandas as pd
+
             return _write_results_csv(pd.DataFrame([best]), args.out)
         return 0
 
@@ -427,15 +475,29 @@ def _cmd_sweep(args):
 
     # swept parameter values
     for key, val in best.items():
-        if key in ("lcoe", "cost_per_kg_fresh", "kwh_per_kg_fresh",
-                   "annual_load_kwh", "biomass_kg",
-                   "annual_pv_generation", "annual_grid_import",
-                   "annual_grid_export", "battery_cycles", "peak_power_kwp",
-                   "capital_total", "annual_capital", "annual_om",
-                   "annual_grid_cost",
-                   "capital_led", "capital_hvac", "capital_deh",
-                   "capital_pv", "capital_battery",
-                   "capital_equipment", "capital_envelope"):
+        if key in (
+            "lcoe",
+            "cost_per_kg_fresh",
+            "kwh_per_kg_fresh",
+            "annual_load_kwh",
+            "biomass_kg",
+            "annual_pv_generation",
+            "annual_grid_import",
+            "annual_grid_export",
+            "battery_cycles",
+            "peak_power_kwp",
+            "capital_total",
+            "annual_capital",
+            "annual_om",
+            "annual_grid_cost",
+            "capital_led",
+            "capital_hvac",
+            "capital_deh",
+            "capital_pv",
+            "capital_battery",
+            "capital_equipment",
+            "capital_envelope",
+        ):
             continue
         elif key == "pv_area":
             print(f"    pv_area                 = {val:.1f} m2")
@@ -459,8 +521,7 @@ def _cmd_sweep(args):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vfed",
-                                description="VFED design simulator")
+    p = argparse.ArgumentParser(prog="vfed", description="VFED design simulator")
     # Not required=True: a bare `vfed` prints help and exits 2 (P7-9) instead
     # of leaking the internal `arguments required: cmd` message.
     sub = p.add_subparsers(dest="cmd")
@@ -468,22 +529,30 @@ def build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("design", help="project management")
     dsub = d.add_subparsers(dest="dcmd", required=True)
     dn = dsub.add_parser("new", help="create a new project YAML")
-    dn.add_argument("name",
-                    help="project name (also the default output filename)")
-    dn.add_argument("--preset", choices=["default", "609"], default="default",
-                    help="starting preset template (default: default)")
-    dn.add_argument("--out", default=None,
-                    help="output YAML path (default: '<name>.yaml')")
-    dn.add_argument("--city", default=None,
-                    help="pre-downloaded city name (use 'design cities' to list)")
-    dn.add_argument("--lat", type=float, default=None,
-                    help="latitude, overrides preset/city (e.g. --lat 31.23)")
-    dn.add_argument("--lon", type=float, default=None,
-                    help="longitude, overrides preset/city (e.g. --lon 121.47)")
-    dn.add_argument("--year", type=int, default=None,
-                    help="weather year (default: 2025)")
-    dn.add_argument("--tariff", default=None,
-                    help="load a regional TOU tariff (use 'design tariffs' to list)")
+    dn.add_argument("name", help="project name (also the default output filename)")
+    dn.add_argument(
+        "--preset",
+        choices=["default", "609"],
+        default="default",
+        help="starting preset template (default: default)",
+    )
+    dn.add_argument("--out", default=None, help="output YAML path (default: '<name>.yaml')")
+    dn.add_argument(
+        "--city", default=None, help="pre-downloaded city name (use 'design cities' to list)"
+    )
+    dn.add_argument(
+        "--lat", type=float, default=None, help="latitude, overrides preset/city (e.g. --lat 31.23)"
+    )
+    dn.add_argument(
+        "--lon",
+        type=float,
+        default=None,
+        help="longitude, overrides preset/city (e.g. --lon 121.47)",
+    )
+    dn.add_argument("--year", type=int, default=None, help="weather year (default: 2025)")
+    dn.add_argument(
+        "--tariff", default=None, help="load a regional TOU tariff (use 'design tariffs' to list)"
+    )
     dn.set_defaults(func=_cmd_design_new)
     dp = dsub.add_parser("presets", help="list available presets")
     dp.set_defaults(func=_cmd_design_presets)
@@ -499,19 +568,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     e = sub.add_parser("evaluate", help="simulate a single design configuration")
     e.add_argument("project", help="path to the project YAML file")
-    e.add_argument("--cache", default="weather_cache",
-                   help="weather cache directory (default: weather_cache)")
-    e.add_argument("--export", default=None,
-                   help="directory to write summary.csv / timeseries.csv / "
-                        "monthly.csv (created if missing)")
+    e.add_argument(
+        "--cache", default="weather_cache", help="weather cache directory (default: weather_cache)"
+    )
+    e.add_argument(
+        "--export",
+        default=None,
+        help="directory to write summary.csv / timeseries.csv / "
+        "monthly.csv (created if missing)",
+    )
     e.set_defaults(func=_cmd_evaluate)
 
     s = sub.add_parser("sweep", help="run a design sweep (single-point if no ranges)")
     s.add_argument("project", help="path to the project YAML file")
-    s.add_argument("--cache", default="weather_cache",
-                   help="weather cache directory (default: weather_cache)")
-    s.add_argument("--out", default=None,
-                   help="CSV output file for the enumeration table")
+    s.add_argument(
+        "--cache", default="weather_cache", help="weather cache directory (default: weather_cache)"
+    )
+    s.add_argument("--out", default=None, help="CSV output file for the enumeration table")
     s.set_defaults(func=_cmd_sweep)
 
     return p

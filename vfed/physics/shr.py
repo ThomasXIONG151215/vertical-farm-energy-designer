@@ -10,7 +10,6 @@ Physics: air passes through a DX cooling coil at apparatus dewpoint T_adp.
     SHR = q_sens / (q_sens + q_lat),  q_lat = L_v(T_adp) * max(0, W_in - W_out)
 """
 
-import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -28,8 +27,8 @@ __all__ = ["DynamicSHR"]
 class DynamicSHR:
     """Dynamic SHR calculator (BF-ADP coil model)."""
 
-    BF: float = 0.15          # Bypass factor (0.10-0.20 for a 4-row DX coil)
-    cp_air: float = 1005.0    # J/(kg.K)
+    BF: float = 0.15  # Bypass factor (0.10-0.20 for a 4-row DX coil)
+    cp_air: float = 1005.0  # J/(kg.K)
     # q_lat uses the temperature-correlated latent heat
     # latent_heat_vaporization(T_adp)*1000 J/kg — no fixed h_fg field.
     # shr_min: real ACs rarely put more than ~55% of capacity into latent
@@ -41,7 +40,7 @@ class DynamicSHR:
     # (not a physics change) to remove the dewpoint knife-edge flip; see
     # calc_shr.  Larger values give a softer, more damped duty ramp.
     shr_transition_band: float = 0.5
-    P_atm: float = 101.325    # kPa
+    P_atm: float = 101.325  # kPa
     t_coil_drop: float = 9.0  # default supply-air depression (T_supply = T_setpoint - t_coil_drop)
 
     def calc_shr(self, T_return: float, RH_return: float, T_supply: float) -> float:
@@ -83,8 +82,13 @@ class DynamicSHR:
             shr = max(self.shr_min, min(self.shr_max, shr))
         return shr
 
-    def calc_shr_fallback(self, T_return: float, RH_return: float,
-                          T_setpoint: float, T_coil_drop: Optional[float] = None) -> float:
+    def calc_shr_fallback(
+        self,
+        T_return: float,
+        RH_return: float,
+        T_setpoint: float,
+        T_coil_drop: Optional[float] = None,
+    ) -> float:
         """Estimate SHR without measured supply temperature.
 
         T_coil_drop approximates the supply-air temperature depression

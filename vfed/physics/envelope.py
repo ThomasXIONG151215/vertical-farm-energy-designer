@@ -8,9 +8,8 @@ envelope is UA conduction; solar gain is ``eta_solar * A_window * GHI``.
 """
 
 from typing import Tuple
-import math
 
-from .psychrometrics import temp_rh_to_ah, latent_heat_vaporization
+from .psychrometrics import latent_heat_vaporization
 
 __all__ = ["Envelope"]
 
@@ -69,8 +68,9 @@ class Envelope:
         return self.eta_solar * self.A_window * solar_radiation_wm2
 
     # -- Infiltration (sensible + latent) ---------------------------------
-    def infiltration(self, T_ext: float, T_z: float,
-                     W_ext: float, W_z: float) -> Tuple[float, float, float]:
+    def infiltration(
+        self, T_ext: float, T_z: float, W_ext: float, W_z: float
+    ) -> Tuple[float, float, float]:
         """Mass-flow infiltration with explicit sensible + latent energy.
 
         Returns
@@ -86,9 +86,9 @@ class Envelope:
         if self.ach <= 0.0:
             return 0.0, 0.0, 0.0
         m_dot = self.ach * self.V_room * self.rho_air / 3600.0  # kg/s
-        Q_sens = m_dot * self.cp_air * (T_ext - T_z)             # W
-        M_lat = m_dot * (W_ext - W_z)                            # kg/s
-        Q_lat = M_lat * latent_heat_vaporization(T_z) * 1000.0   # W  (kJ/kg -> J/kg)
+        Q_sens = m_dot * self.cp_air * (T_ext - T_z)  # W
+        M_lat = m_dot * (W_ext - W_z)  # kg/s
+        Q_lat = M_lat * latent_heat_vaporization(T_z) * 1000.0  # W  (kJ/kg -> J/kg)
         return Q_sens, M_lat, Q_lat
 
     def envelope_moisture(self, W_ext: float, W_z: float) -> float:

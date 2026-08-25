@@ -26,18 +26,21 @@ import pandas as pd
 
 try:
     import requests
+
     _HAS_REQUESTS = True
 except ImportError:
     _HAS_REQUESTS = False
 
 try:
     from pyodide.http import open_url as _py_open_url
+
     _HAS_PYODIDE = True
 except ImportError:
     _HAS_PYODIDE = False
 
 OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
 OPEN_METEO_FCST = "https://api.open-meteo.com/v1/forecast"
+
 
 class WeatherFetchError(Exception):
     """Raised when weather data cannot be acquired (error code E003).
@@ -51,14 +54,19 @@ class WeatherFetchError(Exception):
 __all__ = ["fetch_weather", "add_poa", "erbs_split", "WeatherFetchError"]
 
 
-def _cache_path(cache_dir: Path, lat: float, lon: float, year: int,
-                tilt: float = 20.0, azimuth: float = 180.0,
-                tz_hours: float = 8.0) -> Path:
+def _cache_path(
+    cache_dir: Path,
+    lat: float,
+    lon: float,
+    year: int,
+    tilt: float = 20.0,
+    azimuth: float = 180.0,
+    tz_hours: float = 8.0,
+) -> Path:
     """Tilt-aware cache key — POA depends on (tilt, azimuth, tz_hours)."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / (
-        f"weather_{lat:.3f}_{lon:.3f}_{year}"
-        f"_t{tilt:.3f}_a{azimuth:.3f}_z{tz_hours:.3f}.csv"
+        f"weather_{lat:.3f}_{lon:.3f}_{year}" f"_t{tilt:.3f}_a{azimuth:.3f}_z{tz_hours:.3f}.csv"
     )
 
 
@@ -81,8 +89,9 @@ def _find_city_csv(city: str, year: int) -> Optional[Path]:
     return None
 
 
-def _solar_geometry(lat: float, lon: float, tz_hours: float,
-                    dt: pd.DatetimeIndex) -> Tuple[np.ndarray, np.ndarray]:
+def _solar_geometry(
+    lat: float, lon: float, tz_hours: float, dt: pd.DatetimeIndex
+) -> Tuple[np.ndarray, np.ndarray]:
     """Return solar zenith and azimuth (degrees) for each timestamp."""
     lat_r = np.deg2rad(lat)
     doy = dt.dayofyear.values
@@ -92,14 +101,14 @@ def _solar_geometry(lat: float, lon: float, tz_hours: float,
     lst = dt.hour.values + dt.minute.values / 60.0 + (tz_hours - lon / 15.0)
     decl = np.deg2rad(23.45 * np.sin(np.deg2rad(360.0 * (284.0 + doy) / 365.0)))
     hour_angle = np.deg2rad(15.0 * (lst - 12.0))
-    sin_alt = (np.sin(lat_r) * np.sin(decl) +
-               np.cos(lat_r) * np.cos(decl) * np.cos(hour_angle))
+    sin_alt = np.sin(lat_r) * np.sin(decl) + np.cos(lat_r) * np.cos(decl) * np.cos(hour_angle)
     sin_alt = np.clip(sin_alt, -1.0, 1.0)
     altitude = np.arcsin(sin_alt)
     zenith = np.pi / 2 - altitude
     # Azimuth (from south, +/-)
     cos_az = (np.sin(decl) - np.sin(lat_r) * sin_alt) / np.maximum(
-        np.cos(lat_r) * np.cos(altitude), 1e-6)
+        np.cos(lat_r) * np.cos(altitude), 1e-6
+    )
     cos_az = np.clip(cos_az, -1.0, 1.0)
     az = np.arccos(cos_az)
     az = np.where(hour_angle > 0, 2 * np.pi - az, az)
@@ -124,8 +133,9 @@ def erbs_split(ghi: np.ndarray, zenith_deg: np.ndarray) -> Tuple[np.ndarray, np.
     m1 = kt <= 0.22
     df[m1] = 1.0 - 0.09 * kt[m1]
     m2 = (kt > 0.22) & (kt <= 0.80)
-    df[m2] = 0.9511 - 0.1604 * kt[m2] + 4.388 * kt[m2] ** 2 - \
-             16.638 * kt[m2] ** 3 + 12.336 * kt[m2] ** 4
+    df[m2] = (
+        0.9511 - 0.1604 * kt[m2] + 4.388 * kt[m2] ** 2 - 16.638 * kt[m2] ** 3 + 12.336 * kt[m2] ** 4
+    )
     m3 = kt > 0.80
     df[m3] = 0.165
     diffuse = df * ghi
@@ -134,8 +144,14 @@ def erbs_split(ghi: np.ndarray, zenith_deg: np.ndarray) -> Tuple[np.ndarray, np.
     return diffuse, dni
 
 
-def add_poa(df: pd.DataFrame, tilt: float = 20.0, azimuth: float = 180.0,
-           lat: float = 31.2, lon: float = 121.5, tz_hours: float = 8.0) -> pd.DataFrame:
+def add_poa(
+    df: pd.DataFrame,
+    tilt: float = 20.0,
+    azimuth: float = 180.0,
+    lat: float = 31.2,
+    lon: float = 121.5,
+    tz_hours: float = 8.0,
+) -> pd.DataFrame:
     """Add ``poa_radiation`` (and overwrite direct/diffuse as POA components).
 
     Model = beam (``dni * cos(incidence)``) + isotropic diffuse
@@ -154,14 +170,14 @@ def add_poa(df: pd.DataFrame, tilt: float = 20.0, azimuth: float = 180.0,
             "POA-ised direct/diffuse and recomputing from GHI (Erbs split).",
             stacklevel=2,
         )
-        out = out.drop(
-            columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
+        out = out.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
     ghi = out["shortwave_radiation"].values.astype(float)
-    has_components = ("direct_radiation" in out.columns and
-                      not np.allclose(
-                          out["direct_radiation"] if "direct_radiation" in out.columns
-                          else pd.Series(0.0, index=out.index),
-                          0))
+    has_components = "direct_radiation" in out.columns and not np.allclose(
+        out["direct_radiation"]
+        if "direct_radiation" in out.columns
+        else pd.Series(0.0, index=out.index),
+        0,
+    )
     if has_components:
         # Input carries horizontal beam/diffuse (Open-Meteo convention):
         # direct_radiation == horizontal beam (DNI * cos(zen)), so dividing by
@@ -169,7 +185,8 @@ def add_poa(df: pd.DataFrame, tilt: float = 20.0, azimuth: float = 180.0,
         # poa_radiation guard above for POA-ised inputs.
         diffuse_h = out["diffuse_radiation"].values.astype(float)
         dni = out["direct_radiation"].values.astype(float) / np.maximum(
-            np.cos(np.deg2rad(_solar_geometry(lat, lon, tz_hours, out.index)[0])), 1e-3)
+            np.cos(np.deg2rad(_solar_geometry(lat, lon, tz_hours, out.index)[0])), 1e-3
+        )
     else:
         zen, _ = _solar_geometry(lat, lon, tz_hours, out.index)
         diffuse_h, dni = erbs_split(ghi, zen)
@@ -177,8 +194,9 @@ def add_poa(df: pd.DataFrame, tilt: float = 20.0, azimuth: float = 180.0,
     zen, sol_az = _solar_geometry(lat, lon, tz_hours, out.index)
     zen_r, sol_az_r = np.deg2rad(zen), np.deg2rad(sol_az)
     tilt_r, surf_az_r = np.deg2rad(tilt), np.deg2rad(azimuth)
-    cos_inc = (np.sin(zen_r) * np.cos(surf_az_r - sol_az_r) * np.sin(tilt_r) +
-               np.cos(zen_r) * np.cos(tilt_r))
+    cos_inc = np.sin(zen_r) * np.cos(surf_az_r - sol_az_r) * np.sin(tilt_r) + np.cos(
+        zen_r
+    ) * np.cos(tilt_r)
     cos_inc = np.clip(cos_inc, 0.0, None)
     cos_z = np.clip(np.cos(zen_r), 1e-3, 1.0)
     # Beam (POA)
@@ -271,8 +289,7 @@ def fetch_weather(
                     f"azimuth={azimuth}, tz_hours={tz_hours} from GHI.",
                     stacklevel=2,
                 )
-                df = df.drop(
-                    columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
+                df = df.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
                 df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
             return df
         # Pre-fix cache (window shifted by tz_hours): keep it as an offline
@@ -287,7 +304,8 @@ def fetch_weather(
     if not _HAS_REQUESTS and not _HAS_PYODIDE:
         raise WeatherFetchError(
             "The 'requests' package is required to fetch weather from "
-            "Open-Meteo. Install it or provide a cached CSV.")
+            "Open-Meteo. Install it or provide a cached CSV."
+        )
 
     # One extra day on each side so the tz-shifted data still covers the full
     # local year [year-01-01 00:00, (year+1)-01-01 00:00) for any |tz_hours|<24
@@ -300,17 +318,21 @@ def fetch_weather(
         "longitude": lon,
         "start_date": start,
         "end_date": end,
-        "hourly": ("temperature_2m,relative_humidity_2m,surface_pressure,"
-                   "shortwave_radiation,direct_radiation,diffuse_radiation"),
+        "hourly": (
+            "temperature_2m,relative_humidity_2m,surface_pressure,"
+            "shortwave_radiation,direct_radiation,diffuse_radiation"
+        ),
         "timezone": "UTC",
         "wind_speed_unit": "ms",
     }
 
     # P7-6: long first-run fetches (up to ~2 min) print a progress line so the
     # user is not staring at a silent 120 s.
-    print(f"Fetching weather for lat={lat:.3f}, lon={lon:.3f}, "
-          f"year={year} from Open-Meteo (timeout={timeout:.0f}s)...",
-          flush=True)
+    print(
+        f"Fetching weather for lat={lat:.3f}, lon={lon:.3f}, "
+        f"year={year} from Open-Meteo (timeout={timeout:.0f}s)...",
+        flush=True,
+    )
     try:
         if _HAS_REQUESTS:
             resp = requests.get(url, params=params, timeout=timeout)
@@ -321,6 +343,7 @@ def fetch_weather(
             # open_url returns the body as a file-like object; non-2xx raises.
             import json as _json
             from urllib.parse import urlencode
+
             full_url = f"{url}?{urlencode(params)}"
             try:
                 body = _py_open_url(full_url).read()
@@ -347,22 +370,24 @@ def fetch_weather(
                 # P6-1: stale legacy POA geometry is unknown — recompute from
                 # GHI so the offline fallback still honours the requested
                 # tilt/azimuth (pure numpy, no network needed).
-                fb = fb.drop(
-                    columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
+                fb = fb.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
                 fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours)
             return fb
         raise WeatherFetchError(
             f"weather fetch failed: {e}. Check network connectivity or "
-            f"provide a cached/offline weather CSV.") from e
-    df = pd.DataFrame({
-        "timestamp": pd.to_datetime(data["time"], utc=True),
-        "temperature_2m": data["temperature_2m"],
-        "relative_humidity_2m": data["relative_humidity_2m"],
-        "surface_pressure": data.get("surface_pressure", [101.325] * len(data["time"])),
-        "shortwave_radiation": data.get("shortwave_radiation", [0] * len(data["time"])),
-        "direct_radiation": data.get("direct_radiation", [0] * len(data["time"])),
-        "diffuse_radiation": data.get("diffuse_radiation", [0] * len(data["time"])),
-    })
+            f"provide a cached/offline weather CSV."
+        ) from e
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(data["time"], utc=True),
+            "temperature_2m": data["temperature_2m"],
+            "relative_humidity_2m": data["relative_humidity_2m"],
+            "surface_pressure": data.get("surface_pressure", [101.325] * len(data["time"])),
+            "shortwave_radiation": data.get("shortwave_radiation", [0] * len(data["time"])),
+            "direct_radiation": data.get("direct_radiation", [0] * len(data["time"])),
+            "diffuse_radiation": data.get("diffuse_radiation", [0] * len(data["time"])),
+        }
+    )
     # Convert to local time as a fixed-offset zone, then align to the local
     # calendar year (P4-16).  tz_convert(None) would keep the UTC wall clock;
     # only tz_localize(None) keeps the local wall clock for the naive cache.

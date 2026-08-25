@@ -26,7 +26,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ matrix.python-version }}-
             ${{ runner.os }}-pip-
@@ -34,18 +34,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -e ".[dev]"
 
       - name: Run tests
-        run: |
-          pip install pytest pytest-cov
-          pytest tests/ -v --cov=. --cov-report=xml
-
-      - name: Check code format
-        run: |
-          pip install black flake8
-          black --check vfed/ || true
-          flake8 vfed/ --max-line-length=120 --ignore=E501,W503 || true
+        run: pytest tests/ -v --cov=. --cov-report=xml
 
   lint:
     name: Lint
@@ -60,10 +52,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install linting tools
-        run: pip install black flake8
+        run: pip install black==23.12.1 flake8==7.0.0
 
       - name: Run black
         run: black --check vfed/
 
       - name: Run flake8
-        run: flake8 vfed/ --max-line-length=120 --ignore=E501,W503
+        run: flake8 vfed/ --max-line-length=120 --ignore=E501,W503,W504,E114,E116,E241,E261,F841

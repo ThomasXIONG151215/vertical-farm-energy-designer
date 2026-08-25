@@ -8,14 +8,12 @@ vendored digital twin).
 """
 
 import math
-from typing import Optional
 
 __all__ = ["FirstOrderLag"]
 
 
 class FirstOrderLag:
-    def __init__(self, tau_rise: float = 60.0, tau_fall: float = 30.0,
-                 initial: float = 0.0):
+    def __init__(self, tau_rise: float = 60.0, tau_fall: float = 30.0, initial: float = 0.0):
         self.tau_rise = tau_rise
         self.tau_fall = tau_fall
         self._current = initial
@@ -32,8 +30,7 @@ class FirstOrderLag:
         # cooling Q<0: 0 -> -7000 W) grows in |target| while target < current;
         # the old signed comparison wrongly selected tau_fall.  When
         # tau_rise == tau_fall (all current call sites) this is bitwise identical.
-        tau = (self.tau_rise if abs(target) >= abs(self._current)
-               else self.tau_fall)
+        tau = self.tau_rise if abs(target) >= abs(self._current) else self.tau_fall
         if tau <= 0:
             self._current = target
             return self._current

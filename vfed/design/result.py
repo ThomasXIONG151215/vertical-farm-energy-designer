@@ -10,7 +10,7 @@ import csv
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 __all__ = ["SimulationResult"]
 
@@ -95,8 +95,10 @@ class SimulationResult:
             "annual_load_kwh": lambda: self.summary.get("annual_energy_kwh"),
             "biomass_kg": lambda: self.summary.get("annual_harvest_kg"),
             "kwh_per_kg": lambda: (
-                self.summary.get("specific_energy_kwh_per_kg", 0) / self.summary.get("dry_matter_fraction", 0.05)
-                if self.summary.get("specific_energy_kwh_per_kg") else 0
+                self.summary.get("specific_energy_kwh_per_kg", 0)
+                / self.summary.get("dry_matter_fraction", 0.05)
+                if self.summary.get("specific_energy_kwh_per_kg")
+                else 0
             ),
             "timeseries": lambda: self._as_dataframe(),
         }
@@ -120,7 +122,9 @@ class SimulationResult:
     def _as_dataframe(self):
         """Return timeseries as a pandas DataFrame (backward compat)."""
         import pandas as pd
+
         return pd.DataFrame(self.timeseries)
+
     def to_dict(self) -> dict:
         """Serialize to the standard JSON schema (v1.0)."""
         raw = {

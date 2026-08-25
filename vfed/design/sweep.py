@@ -26,32 +26,32 @@ __all__ = ["sweep_design"]
 # Hard limits — ranges outside these bounds raise an error.
 # ---------------------------------------------------------------------------
 HARD_LIMITS: Dict[str, tuple] = {
-    "ppfd_target":        (50, 500),
-    "efficacy":           (1.5, 4.0),
-    "photoperiod_hours":  (0, 24),
-    "light_start_hour":   (0, 23),
-    "T_light":            (15, 30),
-    "T_dark":             (10, 28),
-    "RH":                 (40, 90),
-    "co2_ppm":            (300, 2000),
-    "crop_cycle_days":    (15, 60),
-    "pv_area":            (0, 1000),
-    "battery":            (0, 500),
+    "ppfd_target": (50, 500),
+    "efficacy": (1.5, 4.0),
+    "photoperiod_hours": (0, 24),
+    "light_start_hour": (0, 23),
+    "T_light": (15, 30),
+    "T_dark": (10, 28),
+    "RH": (40, 90),
+    "co2_ppm": (300, 2000),
+    "crop_cycle_days": (15, 60),
+    "pv_area": (0, 1000),
+    "battery": (0, 500),
 }
 
 # ---------------------------------------------------------------------------
 # Mapping: parameter_ranges key → (project_dict_section, field_name)
 # ---------------------------------------------------------------------------
 _PARAM_PATH_MAP: Dict[str, tuple] = {
-    "ppfd_target":       ("led", "ppfd_target"),
-    "efficacy":          ("led", "efficacy"),
-    "light_start_hour":  ("led", "light_start_hour"),
+    "ppfd_target": ("led", "ppfd_target"),
+    "efficacy": ("led", "efficacy"),
+    "light_start_hour": ("led", "light_start_hour"),
     "photoperiod_hours": ("led", "photoperiod_hours"),
-    "T_light":           ("setpoints", "T_light"),
-    "T_dark":            ("setpoints", "T_dark"),
-    "RH":                ("setpoints", "RH"),
-    "co2_ppm":           ("setpoints", "co2_ppm"),
-    "crop_cycle_days":   ("setpoints", "crop_cycle_days"),
+    "T_light": ("setpoints", "T_light"),
+    "T_dark": ("setpoints", "T_dark"),
+    "RH": ("setpoints", "RH"),
+    "co2_ppm": ("setpoints", "co2_ppm"),
+    "crop_cycle_days": ("setpoints", "crop_cycle_days"),
 }
 
 # params handled by EnergySystem (not project overrides)
@@ -78,13 +78,13 @@ _VALID_CAPITAL_MODES = {"direct", "per_watt"}
 def _derived_led_power(project: DesignProject) -> float:
     """LED electrical power (W) as actually run (auto-deduced or direct)."""
     if project.led.auto_deduce:
-        return (project.led.ppfd_target * project.led.covered_area
-                / max(project.led.efficacy, 0.1))
+        return project.led.ppfd_target * project.led.covered_area / max(project.led.efficacy, 0.1)
     return project.led.power_w
 
 
-def _resolve_capital(cfg: CapitalCostConfig, rated_value: float,
-                     legacy_fallback: float = 0.0) -> float:
+def _resolve_capital(
+    cfg: CapitalCostConfig, rated_value: float, legacy_fallback: float = 0.0
+) -> float:
     """Resolve a single component's capital cost.
 
     Args:
@@ -97,8 +97,8 @@ def _resolve_capital(cfg: CapitalCostConfig, rated_value: float,
     """
     if cfg.mode not in _VALID_CAPITAL_MODES:
         raise ValueError(
-            f"Unknown capital.mode '{cfg.mode}'. "
-            f"Valid: {sorted(_VALID_CAPITAL_MODES)}")
+            f"Unknown capital.mode '{cfg.mode}'. " f"Valid: {sorted(_VALID_CAPITAL_MODES)}"
+        )
     if cfg.mode == "per_watt":
         return cfg.rate_per_watt * rated_value
     if cfg.mode == "direct" and cfg.cost > 0:
@@ -106,24 +106,27 @@ def _resolve_capital(cfg: CapitalCostConfig, rated_value: float,
     return legacy_fallback
 
 
-def _total_capital(project: DesignProject, pv_area: float,
-                   battery_kwh: float) -> Dict[str, float]:
+def _total_capital(project: DesignProject, pv_area: float, battery_kwh: float) -> Dict[str, float]:
     """Compute per-component capital breakdown, including legacy fallbacks."""
     led_w = _derived_led_power(project)
     # PV peak kWp = pv_area (m²) / area_to_power (m²/kWp)
     pv_kwp = pv_area / project.pv.area_to_power
 
     breakdown = {
-        "LED":       _resolve_capital(project.led.capital, led_w),
-        "HVAC":      _resolve_capital(project.hvac.capital, project.hvac.P_rated_w),
-        "DEH":       _resolve_capital(project.deh.capital, project.deh.P_ref_w),
-        "PV":        _resolve_capital(project.pv.capital, pv_kwp,
-                                      legacy_fallback=project.pv.C_pv * pv_kwp),
-        "Battery":   _resolve_capital(project.battery.capital, battery_kwh,
-                                      legacy_fallback=project.battery.c_energy * battery_kwh),
+        "LED": _resolve_capital(project.led.capital, led_w),
+        "HVAC": _resolve_capital(project.hvac.capital, project.hvac.P_rated_w),
+        "DEH": _resolve_capital(project.deh.capital, project.deh.P_ref_w),
+        "PV": _resolve_capital(
+            project.pv.capital, pv_kwp, legacy_fallback=project.pv.C_pv * pv_kwp
+        ),
+        "Battery": _resolve_capital(
+            project.battery.capital,
+            battery_kwh,
+            legacy_fallback=project.battery.c_energy * battery_kwh,
+        ),
         "Equipment": _resolve_capital(project.equipment_capital, 0),
-        "Envelope":  _resolve_capital(project.envelope_capital, 0),
-        "Pump":      _resolve_capital(project.pump_capital, 0),   # P5-1: pump capital was never counted
+        "Envelope": _resolve_capital(project.envelope_capital, 0),
+        "Pump": _resolve_capital(project.pump_capital, 0),  # P5-1: pump capital was never counted
     }
     breakdown["total"] = sum(breakdown.values())
     return breakdown
@@ -137,9 +140,11 @@ def _crf(i: float, n: float) -> float:
     return i * (1 + i) ** n / ((1 + i) ** n - 1)
 
 
-def _annualized_capital(project: DesignProject,
-                        capital_breakdown: Dict[str, float],
-                        battery_life_years: Optional[float] = None) -> float:
+def _annualized_capital(
+    project: DesignProject,
+    capital_breakdown: Dict[str, float],
+    battery_life_years: Optional[float] = None,
+) -> float:
     """CRF-weighted annualised capital using per-component depreciation years.
 
     P6-4 (group-C coordination): ``battery_life_years`` (from
@@ -154,14 +159,14 @@ def _annualized_capital(project: DesignProject,
     if battery_life_years is not None:
         battery_dep = min(battery_dep, battery_life_years)
     dep_map = {
-        "LED":       project.led.capital.depreciation_years,
-        "HVAC":      project.hvac.capital.depreciation_years,
-        "DEH":       project.deh.capital.depreciation_years,
-        "PV":        project.pv.capital.depreciation_years,
-        "Battery":   battery_dep,
+        "LED": project.led.capital.depreciation_years,
+        "HVAC": project.hvac.capital.depreciation_years,
+        "DEH": project.deh.capital.depreciation_years,
+        "PV": project.pv.capital.depreciation_years,
+        "Battery": battery_dep,
         "Equipment": project.equipment_capital.depreciation_years,
-        "Envelope":  project.envelope_capital.depreciation_years,
-        "Pump":      project.pump_capital.depreciation_years,   # P5-1: same CRF / own depreciation
+        "Envelope": project.envelope_capital.depreciation_years,
+        "Pump": project.pump_capital.depreciation_years,  # P5-1: same CRF / own depreciation
     }
     i = project.interest_rate
     total = 0.0
@@ -170,8 +175,9 @@ def _annualized_capital(project: DesignProject,
     return total
 
 
-def _compute_lcoe(annual_capital: float, annual_om: float,
-                  net_grid_cost: float, annual_energy: float) -> float:
+def _compute_lcoe(
+    annual_capital: float, annual_om: float, net_grid_cost: float, annual_energy: float
+) -> float:
     """Levelised facility cost per kWh of building load.
 
     (annualised capital + OPEX + net grid purchase) / annual building load,
@@ -185,9 +191,13 @@ def _compute_lcoe(annual_capital: float, annual_om: float,
     return (annual_capital + annual_om + net_grid_cost) / annual_energy
 
 
-def _compute_cost_per_kg_fresh(annual_capital: float, annual_om: float,
-                                net_grid_cost: float, biomass_kg: float,
-                                dry_matter_fraction: float = 0.05) -> float:
+def _compute_cost_per_kg_fresh(
+    annual_capital: float,
+    annual_om: float,
+    net_grid_cost: float,
+    biomass_kg: float,
+    dry_matter_fraction: float = 0.05,
+) -> float:
     """$/kg fresh-mass cost."""
     fresh_kg = biomass_kg / dry_matter_fraction
     if fresh_kg <= 0:
@@ -201,19 +211,28 @@ def _compute_cost_per_kg_fresh(annual_capital: float, annual_om: float,
 def _build_energy_system(project: DesignProject) -> EnergySystem:
     """Re-use project PV / battery / tariff defaults for EnergySystem."""
     pv = PVSystem(
-        eta_pv=project.pv.eta_pv, area_to_power=project.pv.area_to_power,
-        N_s=project.pv.N_s, I_sc_stc=project.pv.I_sc_stc,
-        V_oc_stc=project.pv.V_oc_stc, I_mp_stc=project.pv.I_mp_stc,
-        V_mp_stc=project.pv.V_mp_stc, alpha_sc=project.pv.alpha_sc,
-        beta_voc=project.pv.beta_voc, NOCT=project.pv.NOCT,
-        eta_inv=project.pv.eta_inv, C_pv=project.pv.C_pv,
+        eta_pv=project.pv.eta_pv,
+        area_to_power=project.pv.area_to_power,
+        N_s=project.pv.N_s,
+        I_sc_stc=project.pv.I_sc_stc,
+        V_oc_stc=project.pv.V_oc_stc,
+        I_mp_stc=project.pv.I_mp_stc,
+        V_mp_stc=project.pv.V_mp_stc,
+        alpha_sc=project.pv.alpha_sc,
+        beta_voc=project.pv.beta_voc,
+        NOCT=project.pv.NOCT,
+        eta_inv=project.pv.eta_inv,
+        C_pv=project.pv.C_pv,
         degradation=project.pv.degradation,
-        eta_system=project.pv.eta_system,   # P6-7
+        eta_system=project.pv.eta_system,  # P6-7
     )
     battery = BatterySystem(
-        c_energy=project.battery.c_energy, c_rate=project.battery.c_rate,
-        eta_ch=project.battery.eta_ch, eta_dis=project.battery.eta_dis,
-        soc_min=project.battery.soc_min, soc_max=project.battery.soc_max,
+        c_energy=project.battery.c_energy,
+        c_rate=project.battery.c_rate,
+        eta_ch=project.battery.eta_ch,
+        eta_dis=project.battery.eta_dis,
+        soc_min=project.battery.soc_min,
+        soc_max=project.battery.soc_max,
         cycle_life=project.battery.cycle_life,
     )
     tariff = Tariff(
@@ -238,8 +257,7 @@ def _validate_ranges(ranges: dict) -> None:
     for name, rng in ranges.items():
         if not isinstance(rng, (list, tuple)) or len(rng) != 3:
             raise ValueError(
-                f"parameter_ranges['{name}'] must be a [min, max, step] "
-                f"triple, got {rng!r}"
+                f"parameter_ranges['{name}'] must be a [min, max, step] " f"triple, got {rng!r}"
             )
         lo, hi, step = rng
         if name not in HARD_LIMITS:
@@ -250,13 +268,10 @@ def _validate_ranges(ranges: dict) -> None:
         hard_lo, hard_hi = HARD_LIMITS[name]
         if lo < hard_lo or hi > hard_hi:
             raise ValueError(
-                f"'{name}' range [{lo}, {hi}] exceeds hard limits "
-                f"[{hard_lo}, {hard_hi}]"
+                f"'{name}' range [{lo}, {hi}] exceeds hard limits " f"[{hard_lo}, {hard_hi}]"
             )
         if step <= 0 or hi <= lo:
-            raise ValueError(
-                f"Invalid range for '{name}': [{lo}, {hi}, {step}]"
-            )
+            raise ValueError(f"Invalid range for '{name}': [{lo}, {hi}, {step}]")
         n_steps = (hi - lo) / step
         if not np.isclose(n_steps, round(n_steps), rtol=1e-9, atol=1e-9):
             raise ValueError(
@@ -282,8 +297,7 @@ def _override_project(project: DesignProject, overrides: dict) -> DesignProject:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def sweep_design(project: DesignProject,
-                 cache_dir: str = "weather_cache") -> Dict:
+def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Dict:
     """Enumerate parameter_ranges → build sim per building combo → PVBES eval.
 
     Returns
@@ -305,10 +319,7 @@ def sweep_design(project: DesignProject,
             ranges[canonical] = ranges.pop(alias)
     objective = getattr(project.space, "objective", "lcoe")
     if objective not in _VALID_OBJECTIVES:
-        raise ValueError(
-            f"Unknown objective '{objective}'. "
-            f"Valid: {sorted(_VALID_OBJECTIVES)}"
-        )
+        raise ValueError(f"Unknown objective '{objective}'. " f"Valid: {sorted(_VALID_OBJECTIVES)}")
 
     # ── single-point evaluation ──────────────────────────────────────────
     if not ranges:
@@ -354,8 +365,7 @@ def sweep_design(project: DesignProject,
     # ── building combos ───────────────────────────────────────────────────
     if building_names:
         building_arrays = [
-            np.arange(ranges[n][0], ranges[n][1] + 1e-9, ranges[n][2])
-            for n in building_names
+            np.arange(ranges[n][0], ranges[n][1] + 1e-9, ranges[n][2]) for n in building_names
         ]
         building_combos = list(itertools.product(*building_arrays))
     else:
@@ -382,25 +392,28 @@ def sweep_design(project: DesignProject,
             for A_pv in pv_areas:
                 for E_bat in bats:
                     m = es.calculate_metrics(
-                        [A_pv, E_bat], sim["weather"], sim["load"],
+                        [A_pv, E_bat],
+                        sim["weather"],
+                        sim["load"],
                         # Mid-life degradation year: LCOE uses CRF over the
                         # lifetime, so pair it with the average (mid-life)
                         # PV output rather than pristine first-year output.
                         year=es.lifetime // 2,
                     )
                     cap = _total_capital(p, A_pv, E_bat)
-                    annual_cap = _annualized_capital(
-                        p, cap, m.get("battery_life_years"))
+                    annual_cap = _annualized_capital(p, cap, m.get("battery_life_years"))
                     annual_water_m3 = float(sim.summary.get("annual_water_m3", 0.0))
-                    annual_om = (p.opex.maintenance_pct * cap["total"]
-                                 + p.opex.water_cost_per_m3 * annual_water_m3
-                                 + p.opex.labor_cost_per_year
-                                 + p.opex.misc_opex_per_year)
+                    annual_om = (
+                        p.opex.maintenance_pct * cap["total"]
+                        + p.opex.water_cost_per_m3 * annual_water_m3
+                        + p.opex.labor_cost_per_year
+                        + p.opex.misc_opex_per_year
+                    )
                     net_grid = m["annual_grid_cost"]
                     lcoe = _compute_lcoe(annual_cap, annual_om, net_grid, annual_load)
                     cost_kg = _compute_cost_per_kg_fresh(
-                        annual_cap, annual_om, net_grid, biomass_kg,
-                        p.growth.dry_matter_fraction)
+                        annual_cap, annual_om, net_grid, biomass_kg, p.growth.dry_matter_fraction
+                    )
 
                     row = {
                         **base,
@@ -445,7 +458,9 @@ def sweep_design(project: DesignProject,
                 if es is None:
                     es = _build_energy_system(project)
                 m = es.calculate_metrics(
-                    [A_pv, E_bat], sim["weather"], sim["load"],
+                    [A_pv, E_bat],
+                    sim["weather"],
+                    sim["load"],
                     year=es.lifetime // 2,
                 )
                 net_grid = m["annual_grid_cost"]
@@ -453,17 +468,18 @@ def sweep_design(project: DesignProject,
                 m = None
                 net_grid = 0.0
             cap = _total_capital(p, A_pv, E_bat)
-            annual_cap = _annualized_capital(
-                p, cap, (m or {}).get("battery_life_years"))
+            annual_cap = _annualized_capital(p, cap, (m or {}).get("battery_life_years"))
             annual_water_m3 = float(sim.summary.get("annual_water_m3", 0.0))
-            annual_om = (p.opex.maintenance_pct * cap["total"]
-                         + p.opex.water_cost_per_m3 * annual_water_m3
-                         + p.opex.labor_cost_per_year
-                         + p.opex.misc_opex_per_year)
+            annual_om = (
+                p.opex.maintenance_pct * cap["total"]
+                + p.opex.water_cost_per_m3 * annual_water_m3
+                + p.opex.labor_cost_per_year
+                + p.opex.misc_opex_per_year
+            )
             lcoe = _compute_lcoe(annual_cap, annual_om, net_grid, annual_load)
             cost_kg = _compute_cost_per_kg_fresh(
-                annual_cap, annual_om, net_grid, biomass_kg,
-                p.growth.dry_matter_fraction)
+                annual_cap, annual_om, net_grid, biomass_kg, p.growth.dry_matter_fraction
+            )
 
             row = {
                 **base,
@@ -486,12 +502,14 @@ def sweep_design(project: DesignProject,
                 "biomass_kg": biomass_kg,
             }
             if m is not None:
-                row.update({
-                    "annual_pv_generation": m["annual_pv_generation"],
-                    "annual_grid_import": m["annual_grid_import"],
-                    "annual_grid_export": m["annual_grid_export"],
-                    "battery_cycles": m["battery_cycles"],
-                })
+                row.update(
+                    {
+                        "annual_pv_generation": m["annual_pv_generation"],
+                        "annual_grid_import": m["annual_grid_import"],
+                        "annual_grid_export": m["annual_grid_export"],
+                        "battery_cycles": m["battery_cycles"],
+                    }
+                )
             rows.append(row)
             if best is None or row[objective] < best[objective]:
                 best = row

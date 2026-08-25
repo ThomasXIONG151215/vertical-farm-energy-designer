@@ -6,8 +6,7 @@ so the new simulator can be validated against the archived digital twin. Other
 presets provide convenient starting points.
 """
 
-from .project import (DEHConfig, DesignProject, EnvelopeConfig, HVACConfig,
-                      LEDConfig, SiteConfig)
+from .project import DEHConfig, DesignProject, EnvelopeConfig, HVACConfig, LEDConfig, SiteConfig
 
 __all__ = ["preset_default", "preset_609", "PRESETS"]
 
@@ -28,15 +27,15 @@ def preset_default() -> DesignProject:
         name="default",
         site=SiteConfig(lat=31.2, lon=121.5, tz_hours=8.0, city="Shanghai"),
         envelope=EnvelopeConfig(
-            U_wall_A=20.0,        # W/K — insulated small room (~10 m² footprint)
+            U_wall_A=20.0,  # W/K — insulated small room (~10 m² footprint)
             A_window=0.0,
             eta_solar=0.15,
             ach=0.001,
             permeance=0.0,
-            V_room=40.0,          # m³
-            C_z=40000.0,          # Wh/K
+            V_room=40.0,  # m³
+            C_z=40000.0,  # Wh/K
         ),
-        led=LEDConfig(covered_area=10.0),   # 10 m² canopy → auto power ~1600 W
+        led=LEDConfig(covered_area=10.0),  # 10 m² canopy → auto power ~1600 W
         hvac=HVACConfig(auto_size=True),
         deh=DEHConfig(auto_size=True),
     )

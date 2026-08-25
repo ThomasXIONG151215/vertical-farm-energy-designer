@@ -69,26 +69,29 @@ _LEGACY_METHOD_HINTS = {
 
 @dataclass
 class TranspirationModel:
-    method: str = "van_henten"      # see module docstring / VALID_METHODS
-    daily_water_L: float = 40.0     # daily water for whole canopy (L/day), "daily"
-    plant_count: int = 0            # number of plants, "per_plant" family
+    method: str = "van_henten"  # see module docstring / VALID_METHODS
+    daily_water_L: float = 40.0  # daily water for whole canopy (L/day), "daily"
+    plant_count: int = 0  # number of plants, "per_plant" family
     ml_per_plant_day: float = 80.0  # mL water per plant per day, "per_plant"
     period_days: List[float] = field(
-        default_factory=lambda: [10.0, 10.0, 10.0])  # stage widths (days)
+        default_factory=lambda: [10.0, 10.0, 10.0]
+    )  # stage widths (days)
     daily_water_L_period: List[float] = field(
-        default_factory=lambda: [30.0, 45.0, 60.0])  # L/day per stage
+        default_factory=lambda: [30.0, 45.0, 60.0]
+    )  # L/day per stage
     ml_per_plant_day_period: List[float] = field(
-        default_factory=lambda: [10.0, 30.0, 50.0])  # mL/plant/day per stage
+        default_factory=lambda: [10.0, 30.0, 50.0]
+    )  # mL/plant/day per stage
     photoperiod_hours: float = 16.0  # light hours per day
-    k_van_henten: float = 1.0e-4     # biomass-scaled gain (1/(s·kPa)), van_henten
+    k_van_henten: float = 1.0e-4  # biomass-scaled gain (1/(s·kPa)), van_henten
     #   P3-1 (calibrated 4e-4 -> 1e-4): 4e-4 gave harvest λE≈616 W/m²
     #   (14.5 L/m²/day) — ~7x the available LED PAR (87.5 W/m²), physically
     #   impossible.  1e-4 is calibrated to the ACTUAL 30-day-cycle harvest
     #   X_d≈0.45 (87.5 W/m² PAR), giving harvest λE≈102 W/m² (2.4 L/m²/day)
     #   — the same physical level as the former vpd method (113 W/m²).
     #   Cycle-mean light-period λE≈50 W/m² is what the DEH auto-size consumes.
-    stage_factor: float = 1.0        # growth-stage scale (0-1+), all methods
-    area_m2: float = 45.0            # canopy area (rates are per m²)
+    stage_factor: float = 1.0  # growth-stage scale (0-1+), all methods
+    area_m2: float = 45.0  # canopy area (rates are per m²)
     dark_transpiration_frac: float = 0.15  # night rate as a fraction of the
     #   light-period rate (all methods).  Physical basis: Caird et al. 2007
     #   (E_night/E_day 5-15%, up to 30%) × plant-factory night VPD ≈ day VPD
@@ -100,10 +103,10 @@ class TranspirationModel:
         RH_z: float,
         is_light: bool,
         dt: float = 60.0,
-        X_d: Optional[float] = None,        # kg/m²  (needed by "van_henten")
+        X_d: Optional[float] = None,  # kg/m²  (needed by "van_henten")
         light_wm2: Optional[float] = None,  # kept for a uniform call signature
         cycle_day: Optional[float] = None,  # days since harvest, needed by
-                                            # "*_per_period" methods
+        # "*_per_period" methods
     ) -> float:
         """Return transpiration rate E_trans (kg/s) for the whole canopy.
 
@@ -120,12 +123,17 @@ class TranspirationModel:
             # initial_dry_weight (P3-13).
             _xd = X_d if X_d is not None else 0.02
             vpd = compute_vpd(T_z, RH_z)
-            return (self.k_van_henten * max(_xd, 0.0) * max(0.0, vpd)
-                    * area * light_factor * self.stage_factor)
+            return (
+                self.k_van_henten
+                * max(_xd, 0.0)
+                * max(0.0, vpd)
+                * area
+                * light_factor
+                * self.stage_factor
+            )
         if self.method == "daily":
             pph = max(self.photoperiod_hours, 0.1)
-            return (self.daily_water_L * self.stage_factor
-                    / (pph * 3600.0) * light_factor)
+            return self.daily_water_L * self.stage_factor / (pph * 3600.0) * light_factor
         if self.method == "per_plant":
             # Dark period: no transpiration only when dark_transpiration_frac
             # is explicitly 0; then no config check is needed (P3-5).
@@ -134,8 +142,7 @@ class TranspirationModel:
             self._require_plant_count()
             pph = max(self.photoperiod_hours, 0.1)
             daily_L = self.plant_count * self.ml_per_plant_day / 1000.0
-            return (daily_L * self.stage_factor
-                    / (pph * 3600.0) * light_factor)
+            return daily_L * self.stage_factor / (pph * 3600.0) * light_factor
         if self.method in ("daily_per_period", "per_plant_per_period"):
             # Dark period: same early-return as per_plant when the dark
             # fraction is explicitly 0; stage/cycle-day checks only when the
@@ -147,17 +154,16 @@ class TranspirationModel:
                     f"transpiration.method='{self.method}' requires cycle_day "
                     f"(days since the last harvest) to select the current "
                     f"stage.  The engine passes it automatically; direct "
-                    f"TranspirationModel use must pass cycle_day=... .")
+                    f"TranspirationModel use must pass cycle_day=... ."
+                )
             idx = self._stage_index(cycle_day)
             if self.method == "daily_per_period":
                 daily_L = self.daily_water_L_period[idx]
             else:
                 self._require_plant_count()
-                daily_L = (self.plant_count
-                           * self.ml_per_plant_day_period[idx] / 1000.0)
+                daily_L = self.plant_count * self.ml_per_plant_day_period[idx] / 1000.0
             pph = max(self.photoperiod_hours, 0.1)
-            return (daily_L * self.stage_factor
-                    / (pph * 3600.0) * light_factor)
+            return daily_L * self.stage_factor / (pph * 3600.0) * light_factor
         raise ValueError(self._unknown_method_message())
 
     def design_rate_kgs(self) -> float:
@@ -181,21 +187,23 @@ class TranspirationModel:
             if not self.daily_water_L_period:
                 raise ValueError(
                     "transpiration.daily_water_L_period must not be empty "
-                    "for the daily_per_period method")
+                    "for the daily_per_period method"
+                )
             daily_L = max(self.daily_water_L_period)
         elif self.method == "per_plant_per_period":
             self._require_plant_count()
             if not self.ml_per_plant_day_period:
                 raise ValueError(
                     "transpiration.ml_per_plant_day_period must not be empty "
-                    "for the per_plant_per_period method")
-            daily_L = (self.plant_count
-                       * max(self.ml_per_plant_day_period) / 1000.0)
+                    "for the per_plant_per_period method"
+                )
+            daily_L = self.plant_count * max(self.ml_per_plant_day_period) / 1000.0
         elif self.method == "van_henten":
             raise ValueError(
                 "design_rate_kgs() is not defined for the 'van_henten' method "
                 "— its biomass evolves over the crop cycle, so the engine "
-                "sizes the DEH with a cycle pre-run peak instead (P3-4).")
+                "sizes the DEH with a cycle pre-run peak instead (P3-4)."
+            )
         else:
             raise ValueError(self._unknown_method_message())
         return daily_L * self.stage_factor / (pph * 3600.0)
@@ -215,8 +223,8 @@ class TranspirationModel:
             raise ValueError(f"cycle_day must be >= 0, got {cycle_day}")
         if not self.period_days:
             raise ValueError(
-                "transpiration.period_days must not be empty for "
-                "period-staged methods")
+                "transpiration.period_days must not be empty for " "period-staged methods"
+            )
         acc = 0.0
         for i, d in enumerate(self.period_days):
             acc += max(0.0, d)
@@ -233,13 +241,15 @@ class TranspirationModel:
                 f"transpiration.method='{self.method}' requires "
                 f"transpiration.plant_count > 0, got {self.plant_count}. "
                 f"Set transpiration.plant_count in the project YAML "
-                f"(and optionally transpiration.ml_per_plant_day).")
+                f"(and optionally transpiration.ml_per_plant_day)."
+            )
 
     def _unknown_method_message(self) -> str:
-        msg = (f"transpiration.method='{self.method}' is not a valid method. "
-               f"Valid methods: {'|'.join(VALID_METHODS)}.")
+        msg = (
+            f"transpiration.method='{self.method}' is not a valid method. "
+            f"Valid methods: {'|'.join(VALID_METHODS)}."
+        )
         hint = _LEGACY_METHOD_HINTS.get(self.method)
         if hint:
-            msg += (f"  '{self.method}' was removed — migrate to "
-                    f"'{hint}'.")
+            msg += f"  '{self.method}' was removed — migrate to " f"'{hint}'."
         return msg

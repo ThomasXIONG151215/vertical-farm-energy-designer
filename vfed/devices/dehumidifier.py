@@ -25,7 +25,6 @@ kg water / kWh electricity). The EnthalpyEfficiency class is deprecated and
 retained only for backward compatibility.
 """
 
-from dataclasses import dataclass, field
 from typing import Dict
 
 from ..physics.psychrometrics import latent_heat_vaporization, temp_rh_to_ah
@@ -42,7 +41,7 @@ __all__ = ["DEHDevice", "EnthalpyEfficiency", "size_deh"]
 # Normalised to 1.0 at m = 1.0.  DOE even concludes inverter drives are not
 # a viable efficiency path for dehumidifiers.
 _SMER_SPEED_B0, _SMER_SPEED_B1, _SMER_SPEED_B2 = 0.30, 1.0467, -0.3467
-_DEH_SPEED_M_MIN = 0.2    # compressor turndown (lowest continuous speed)
+_DEH_SPEED_M_MIN = 0.2  # compressor turndown (lowest continuous speed)
 
 
 class EnthalpyEfficiency:
@@ -86,11 +85,11 @@ class DEHDevice:
         min_on_s: float = 180.0,
         min_off_s: float = 180.0,
         fan_power_w: float = 40.0,
-        smer: float = 2.0,          # kg water / kWh COMPRESSOR input (P2-5);
-                                    # realistic 1.5-3.0, fan excluded from SMER
+        smer: float = 2.0,  # kg water / kWh COMPRESSOR input (P2-5);
+        # realistic 1.5-3.0, fan excluded from SMER
         tau_q: float = 90.0,
         tau_m: float = 120.0,
-        mod_band_rh: float = 4.0,   # VFD proportional band (% RH)
+        mod_band_rh: float = 4.0,  # VFD proportional band (% RH)
     ):
         self.P_ref = P_ref_w
         self.poly_e = poly_e
@@ -103,9 +102,12 @@ class DEHDevice:
         self.fan_power_w = fan_power_w
         self.mod_band_rh = mod_band_rh
         self.comp = CompressorState(
-            deadband=deadband_rh, min_on_s=min_on_s, min_off_s=min_off_s,
+            deadband=deadband_rh,
+            min_on_s=min_on_s,
+            min_off_s=min_off_s,
             fan_power_w=fan_power_w,
-            proportional_band=mod_band_rh, m_min=_DEH_SPEED_M_MIN,
+            proportional_band=mod_band_rh,
+            m_min=_DEH_SPEED_M_MIN,
         )
         self.lag_q = FirstOrderLag(tau_rise=tau_q, tau_fall=tau_q)
         self.lag_m = FirstOrderLag(tau_rise=tau_m, tau_fall=tau_m)
@@ -126,8 +128,7 @@ class DEHDevice:
         """SMER modifier vs speed ratio (DOE measured variable-speed curve):
         part-load SMER falls as the evaporator approaches the dew point."""
         m = min(max(m, _DEH_SPEED_M_MIN), 1.0)
-        return max(_SMER_SPEED_B0 + _SMER_SPEED_B1 * m + _SMER_SPEED_B2 * m * m,
-                   0.05)
+        return max(_SMER_SPEED_B0 + _SMER_SPEED_B1 * m + _SMER_SPEED_B2 * m * m, 0.05)
 
     def step(
         self,
@@ -148,9 +149,9 @@ class DEHDevice:
         compressor power ``P_comp = P_full * m / smer_mod`` rises faster than
         linearly — running a dehumidifier at low speed wastes efficiency.
         """
-        mod = self.comp.update(RH_z - deh_setpoint, dt,
-                               on_threshold=0.0,
-                               off_threshold=-self.comp.deadband)
+        mod = self.comp.update(
+            RH_z - deh_setpoint, dt, on_threshold=0.0, off_threshold=-self.comp.deadband
+        )
 
         Q_sens_target, M_target, P_elec = 0.0, 0.0, 0.0
         s_dh = 0.0

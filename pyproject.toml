@@ -64,6 +64,9 @@ Discussions = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designe
 [project.scripts]
 vfed = "vfed.cli:main"
 
+[tool.hatch.version]
+fallback-version = "2.0.0"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/vfed",

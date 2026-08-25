@@ -26,21 +26,19 @@ turndown; ``m_min`` models the lowest continuous speed of real inverter
 compressors (~15-25% rated, oil return constraint).
 """
 
-from typing import Optional
-
 __all__ = ["CompressorState"]
 
 
 class CompressorState:
     def __init__(
         self,
-        deadband: float = 1.0,   # band width (used as default off_threshold magnitude)
+        deadband: float = 1.0,  # band width (used as default off_threshold magnitude)
         min_on_s: float = 180.0,
         min_off_s: float = 180.0,
         fan_power_w: float = 70.0,
         initial_on: bool = False,
         proportional_band: float = 0.0,  # control band for VFD modulation (0 = bang-bang)
-        m_min: float = 0.2,              # lowest continuous speed (turndown)
+        m_min: float = 0.2,  # lowest continuous speed (turndown)
     ):
         self.deadband = deadband
         self.min_on = min_on_s
@@ -59,8 +57,9 @@ class CompressorState:
         self._on = initial_on
         self._t_in_state = 0.0
 
-    def update(self, demand: float, dt: float,
-               on_threshold: float = 0.0, off_threshold: float = None) -> float:
+    def update(
+        self, demand: float, dt: float, on_threshold: float = 0.0, off_threshold: float = None
+    ) -> float:
         """Advance state given a signed demand signal.
 
         Returns the modulation coefficient ``m`` in [0, 1] (0 = OFF,

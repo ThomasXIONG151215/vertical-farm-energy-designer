@@ -32,24 +32,23 @@ class VanHenten:
 
     # literature defaults  (all SI)
     _defaults = {
-        "c_alpha_beta": 0.544,      # dimensionless conversion efficiency
-        "c_resp_d": 2.65e-7,        # s⁻¹  dark respiration coefficient (25 °C)
-        "c_pl_d": 53.0,             # m²/kg  light extinction per LAI
-        "c_rad_phot": 1e-8,         # kg/J  radiation use efficiency (calibratable)
+        "c_alpha_beta": 0.544,  # dimensionless conversion efficiency
+        "c_resp_d": 2.65e-7,  # s⁻¹  dark respiration coefficient (25 °C)
+        "c_pl_d": 53.0,  # m²/kg  light extinction per LAI
+        "c_rad_phot": 1e-8,  # kg/J  radiation use efficiency (calibratable)
         #   CALIBRATION BASIS (C-fix, 2026-08-16): Van Henten 2003 tomato
         #   literature default, NOT recalibrated for 609 lettuce.  Reference
         #   calibration band (reference/van-henten/PSO_Win.py) is 25-100 W/m²
         #   PAR (nominal 70); engine feeds ~87.5 W/m² (PPFD/par_factor), which
         #   falls inside the band.  Model yields ~109 kg fresh/m²/yr vs 30-60
         #   for real PFAL lettuce (~2x high) — see GrowthConfig docstring.
-        "c_co2_1": 5.11e-6,         # m/(s·°C²)
-        "c_co2_2": 2.3e-4,          # m/(s·°C)
-        "c_co2_3": 6.29e-4,         # m/s
-        "c_Gamma": 5.2e-5,          # kg/m³  CO₂ compensation point
+        "c_co2_1": 5.11e-6,  # m/(s·°C²)
+        "c_co2_2": 2.3e-4,  # m/(s·°C)
+        "c_co2_3": 6.29e-4,  # m/s
+        "c_Gamma": 5.2e-5,  # kg/m³  CO₂ compensation point
     }
 
-    def __init__(self, co2_ppm: float = 800.0, P_atm: float = 101.325,
-                 **overrides):
+    def __init__(self, co2_ppm: float = 800.0, P_atm: float = 101.325, **overrides):
         self.params = dict(self._defaults)
         self.params.update(overrides)
         self.co2_ppm = co2_ppm
@@ -76,16 +75,14 @@ class VanHenten:
     def _phi_phot_c(self, X_d: float, T_z: float, light: float) -> float:
         """Canopy gross photosynthesis rate  φ_phot,c  (kg/(m²·s))."""
         p = self.params
-        co2_term = (-p["c_co2_1"] * T_z ** 2
-                    + p["c_co2_2"] * T_z
-                    - p["c_co2_3"])
+        co2_term = -p["c_co2_1"] * T_z**2 + p["c_co2_2"] * T_z - p["c_co2_3"]
         # Guard: the CO₂ response quadratic turns negative above ~42 °C.  Past
         # that, the denominator `c_rad_phot*light + co2_term*(X_c - Γ)` crosses
         # zero (~44.5 °C) and φ flips sign / blows up, collapsing X_d.  Net
         # canopy photosynthesis cannot be negative, so stop cleanly here.
         if co2_term <= 0.0:
             return 0.0
-        X_c = self._co2_density(T_z)   # T/P-aware (P3-11)
+        X_c = self._co2_density(T_z)  # T/P-aware (P3-11)
         Gamma = p["c_Gamma"]
         num = p["c_rad_phot"] * light * co2_term * (X_c - Gamma)
         den = p["c_rad_phot"] * light + co2_term * (X_c - Gamma)
@@ -94,9 +91,7 @@ class VanHenten:
         light_response = 1.0 - __import__("math").exp(-p["c_pl_d"] * X_d)
         return light_response * num / den
 
-    def step(
-        self, T_z: float, light: float, X_d: float, dt: float = 60.0
-    ) -> tuple[float, float]:
+    def step(self, T_z: float, light: float, X_d: float, dt: float = 60.0) -> tuple[float, float]:
         """Advance the biomass state by *dt* seconds.
 
         Parameters

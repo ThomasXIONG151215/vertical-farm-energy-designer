@@ -19,55 +19,55 @@ __all__ = ["BatterySystem"]
 
 @dataclass
 class BatterySystem:
-    c_energy: float = 220.0      # $/kWh
-    c_rate: float = 1.0          # max C-rate (1/h)
+    c_energy: float = 220.0  # $/kWh
+    c_rate: float = 1.0  # max C-rate (1/h)
     eta_ch: float = 0.91
     eta_dis: float = 0.91
     soc_min: float = 0.10
     soc_max: float = 0.90
-    cycle_life: int = 4000      # full (dis)charge cycles to end-of-life.
-                                # P4-15: equivalent life years = cycle_life /
-                                # battery_cycles; if < system lifetime a
-                                # mid-life replacement is due (computed in
-                                # EnergySystem.calculate_metrics).
-    self_discharge: float = 0.0   # per hour (fraction)
-    maintenance: float = 0.01     # LEGACY (P4-15/P5): config field removed,
-                                # never read anywhere; kept for interface
-                                # stability only.
+    cycle_life: int = 4000  # full (dis)charge cycles to end-of-life.
+    # P4-15: equivalent life years = cycle_life /
+    # battery_cycles; if < system lifetime a
+    # mid-life replacement is due (computed in
+    # EnergySystem.calculate_metrics).
+    self_discharge: float = 0.0  # per hour (fraction)
+    maintenance: float = 0.01  # LEGACY (P4-15/P5): config field removed,
+    # never read anywhere; kept for interface
+    # stability only.
 
     def calculate_battery_flows(
         self,
-        power_balance: np.ndarray,   # pv - load (kW)
-        load_profile: np.ndarray,    # kW (used only for shape)
+        power_balance: np.ndarray,  # pv - load (kW)
+        load_profile: np.ndarray,  # kW (used only for shape)
         E_bat: float,
         dt: float = 1.0,
         soc0: float = 0.5,
     ) -> Dict[str, np.ndarray]:
         n = len(power_balance)
-        battery_power = np.zeros(n)      # signed: + discharge, - charge
+        battery_power = np.zeros(n)  # signed: + discharge, - charge
         battery_discharge = np.zeros(n)  # kW delivered to load
-        battery_charge = np.zeros(n)     # kW into battery
+        battery_charge = np.zeros(n)  # kW into battery
         battery_soc = np.zeros(n)
         soc = float(soc0)
         total_charged = 0.0
         total_discharged = 0.0
         for i in range(n):
             net = power_balance[i]
-            soc *= (1.0 - self.self_discharge * dt)
+            soc *= 1.0 - self.self_discharge * dt
             if E_bat <= 0:
                 battery_soc[i] = 0.0
                 continue
-            p_charge_max = min(self.c_rate * E_bat,
-                               (self.soc_max - soc) * E_bat / dt)
-            p_discharge_max = min(self.c_rate * E_bat,
-                                  (soc - self.soc_min) * E_bat / dt) * self.eta_dis
+            p_charge_max = min(self.c_rate * E_bat, (self.soc_max - soc) * E_bat / dt)
+            p_discharge_max = (
+                min(self.c_rate * E_bat, (soc - self.soc_min) * E_bat / dt) * self.eta_dis
+            )
             if net >= 0:  # surplus -> charge
                 ch = min(net, max(0.0, p_charge_max))
                 soc += ch * self.eta_ch * dt / E_bat
                 battery_charge[i] = ch
                 battery_power[i] = -ch
                 total_charged += ch * dt
-            else:         # deficit -> discharge
+            else:  # deficit -> discharge
                 deficit = -net
                 dch = min(deficit, max(0.0, p_discharge_max))
                 soc -= dch * dt / (self.eta_dis * E_bat)
@@ -91,7 +91,7 @@ class BatterySystem:
         if E_bat > 0 and n > 0:
             need_stored = E_bat * (soc_target - soc_end)
             if need_stored > 0.0:
-                recon_grid_kwh = need_stored / self.eta_ch   # grid top-up (import)
+                recon_grid_kwh = need_stored / self.eta_ch  # grid top-up (import)
                 total_charged += recon_grid_kwh
             elif need_stored < 0.0:
                 recon_grid_kwh = -(-need_stored) * self.eta_dis  # dump (export)
@@ -104,7 +104,12 @@ class BatterySystem:
             "battery_soc": battery_soc,
             "total_charged": total_charged,
             "total_discharged": total_discharged,
-            "battery_cycles": (total_charged * self.eta_ch + total_discharged / max(self.eta_dis, 0.01)) / (2.0 * E_bat) if E_bat > 0 else 0.0,
+            "battery_cycles": (
+                total_charged * self.eta_ch + total_discharged / max(self.eta_dis, 0.01)
+            )
+            / (2.0 * E_bat)
+            if E_bat > 0
+            else 0.0,
             "soc_end": soc_end,
             "recon_grid_kwh": recon_grid_kwh,
         }
