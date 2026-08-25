@@ -48,9 +48,9 @@ Smoke-test evidence (temp dir, offline env):
 
 | # | Item | Where | Proposed fix |
 |---|---|---|---|
-| S1 | Hardware naming inconsistency (`P_rated_w` vs `P_ref_w` vs `Q_cool_nom` kW vs `M_deh_nom` L/day vs `P_rated_max`) | `project.py` + web | Establish one vocabulary with units; add alias support or a documented unit/naming map. Caution: `from_dict` strictly rejects unknown keys — add aliases only via explicit normalization, keep back-compat. |
+| ✅ S1 | Hardware naming inconsistency (`P_rated_w` vs `P_ref_w` vs `Q_cool_nom` kW vs `M_deh_nom` L/day vs `P_rated_max`) | `project.py` + web | Establish one vocabulary with units; add alias support or a documented unit/naming map. Caution: `from_dict` strictly rejects unknown keys — add aliases only via explicit normalization, keep back-compat. — **DONE**, see dashboard. |
 | S2 | Preset crop label mismatch ("Fengxian Strawberry" web vs "Fengxian lettuce" CLI) | `vfed-web/index.html:814,2353` | Change label text to "Fengxian lettuce PFAL" (matches `presets.py` / `cli.py:90`). Source text only; bundle rebuild deferred with R3. |
-| S3 | README research-oriented, no DIY onboarding | `README.md` | Add DIY/prosumer section: 10 m² factory tutorial, hardware-spec-to-YAML walkthrough, offline quick start that works with default preset. |
+| ✅ S3 | README research-oriented, no DIY onboarding | `README.md` | Add DIY/prosumer section: 10 m² factory tutorial, hardware-spec-to-YAML walkthrough, offline quick start that works with default preset. — **DONE**, see dashboard. |
 
 ### C. Record-only (untouched now — existence must stay unforgettable)
 
@@ -88,8 +88,8 @@ Smoke-test evidence (temp dir, offline env):
 | F3 commented unit-annotated YAML emit | completed | cli.py added _commented_project_yaml() + _YAML_HEADER + _YAML_SECTION_COMMENTS; _cmd_design_new now writes commented YAML (data still canonical to_dict()). Fixed a %% artifact in interest_rate comment. Verified: design new output 327 lines with section comments, validates OK. |
 | F4 preset_default small-scale + auto_size=True | completed | presets.py preset_default now returns small-scale DIY base: site city=Shanghai (2025 locked), envelope V_room=40 m3, U_wall_A=20 W/K, C_z=40000 Wh/K, led covered_area=10 m2 (auto power ~1600W), hvac.auto_size=True, deh.auto_size=True. preset_609 untouched. Verified: evaluate offline → Annual load 17,586 kWh/yr (was 66,324), DEH utilization 61% (sized to load). |
 | Phase 2 verify (F7/F6/F3/F4) | completed | pytest 226 passed / 1 failed (test_weather_no_cache = pre-existing offline ConnectionRefusedError, unrelated). |
-| S1 hardware naming map / aliases | pending | Style; careful with strict validation |
-| S3 README DIY onboarding (10 m² tutorial) | pending | Docs |
+| ✅ S1 hardware naming map / aliases | completed | project.py added module-level `HARDWARE_ALIASES` dict (hvac: cooling_capacity_kw→Q_cool_nom, cop→cop_value, power_w→P_rated_w; deh: capacity_l_per_day→M_deh_nom, power_w→P_ref_w) exported in __all__; from_dict gained `_normalize_aliases` helper applied to deh+hvac sections before sub() — canonical keys still work, both-spellings-different rejected as ambiguous; cli.py hvac/deh YAML emit comments now advertise the datasheet aliases. |
+| ✅ S3 README DIY onboarding (10 m² tutorial) | completed | README.md gained `## DIY / Prosumer Guide` section (offline quick start with default preset, scale-to-your-grow-room table, datasheet-alias YAML walkthrough, capital-cost guidance, PV/battery sweep, humidity/--export notes); CLI Reference row for evaluate now documents `--export dir`; web preset label corrected to "Fengxian Lettuce PFAL"; Quick Start step 1 has a prosumer pointer. |
 | R1 LED auto_deduce surprise | recorded — deferred | Do not implement now |
 | R2 small/home-scale presets | recorded — deferred | Do not implement now |
 | R3 vfed-web engine divergence | recorded — deferred | Engine untouched; only S2 allowed |
@@ -101,3 +101,4 @@ Smoke-test evidence (temp dir, offline env):
 - Reference materials: full review report is in the session context (10 Always Flag findings with file:line evidence); REVIEW.md update was NOT confirmed by user and is parked.
 - Phase 1 (F1/F2/F5/S2) done and verified. test_weather_no_cache fails only due to offline env (network required).
 - Phase 2 (F7/F6/F3/F4) done and verified. Only test_weather_no_cache fails (offline env, network required).
+- S1+S3 verified: alias smoke test 4/4 (alias-only, back-compat, alias==canonical ok, ambiguous rejected); tests 226 passed / 1 failed (test_06_edge_cases::test_weather_no_cache, pre-existing Open-Meteo network-only, offline env); README DIY guide commands reproduced end-to-end offline (design new → evaluate, all humidity lines + capital warning printed).

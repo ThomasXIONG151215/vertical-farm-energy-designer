@@ -50,7 +50,7 @@ pip install -e ".[dev]"
 vfed design new my_farm --preset 609 --city Shanghai --year 2025
 ```
 
-Creates `my_farm.yaml` from the Fengxian lettuce preset. The default output name is `<name>.yaml` — use `--out path.yaml` to change it. `--city` fills in latitude/longitude/timezone from the built-in city table (list with `vfed design cities`) and lets the whole quickstart run **fully offline** from the pre-downloaded `data/weather/Shanghai_2025.csv`. For an arbitrary site use `--lat <deg> --lon <deg> [--year YYYY]` instead; the first run then needs a network connection (see "Weather Data" below). `--year` defaults to 2025.
+Creates `my_farm.yaml` from the Fengxian lettuce preset. The default output name is `<name>.yaml` — use `--out path.yaml` to change it. `--city` fills in latitude/longitude/timezone from the built-in city table (list with `vfed design cities`) and lets the whole quickstart run **fully offline** from the pre-downloaded `data/weather/Shanghai_2025.csv`. For an arbitrary site use `--lat <deg> --lon <deg> [--year YYYY]` instead; the first run then needs a network connection (see "Weather Data" below). `--year` defaults to 2025. A prosumer (no `--preset`)? The default preset is a small ~10 m² room that also runs fully offline — see the *DIY / Prosumer Guide* below.
 
 ### 2. Validate the Configuration
 
@@ -100,6 +100,84 @@ Weather is fetched hourly from Open-Meteo by lat/lon/year on first use and cache
 3. **Open-Meteo live** — for any other (lat, lon, year) combination. Requires internet; on failure the CLI aborts with `[ERROR E003]`. To stay offline, use a cached year or pass `--cache`.
 
 For an offline quickstart, stick with a built-in city and `--year 2025`. To run an arbitrary site offline, fetch once while online (`vfed evaluate <yaml> --cache weather_cache`), then reuse the cache. Note that `preset 609` keeps `site.city: Shanghai` even when `--lat/--lon` override the coordinates — the city CSV wins whenever its year matches. Set `site.city: null` in the YAML to force the lat/lon (online) path. The example sweep files (`example_sweep.yaml`, `example_lcoe_full.yaml`) use year 2023 with explicit lat/lon, so their first run fetches from Open-Meteo (~1-2 min) and subsequent runs hit the cache.
+
+## DIY / Prosumer Guide
+
+VFED is a research tool, but the **default preset** is now a usable starting point for a small grow room: a ~10 m² lit canopy in a 40 m³ room, with `auto_size` HVAC and dehumidifier, located in Shanghai with bundled 2025 weather — the whole flow below works **fully offline**.
+
+### 1. Offline quick start
+
+```bash
+vfed design new my_farm              # default preset: 10 m² room, Shanghai 2025
+vfed evaluate my_farm.yaml --cache weather_cache
+```
+
+No `--preset` and no `--city` needed: the default preset sets `site.city: Shanghai`, so the pre-downloaded `data/weather/Shanghai_2025.csv` is used automatically. The generated YAML is fully commented (units + guidance on every section).
+
+### 2. Scale it to your grow room
+
+Open `my_farm.yaml` and edit the numbers to match your facility:
+
+| Your hardware | Edit |
+|---|---|
+| Lit canopy area | `led.covered_area` (m²) |
+| Room size / insulation | `envelope.V_room` (m³), `envelope.U_wall_A` (W/K) |
+| Lights | `led.ppfd_target`, `led.efficacy`, `led.photoperiod_hours` |
+| Climate targets | `setpoints.T_light` / `setpoints.T_dark` / `setpoints.RH` |
+| Crop cycle | `growth.crop_cycle_days`, `transpiration.method` |
+
+`hvac.auto_size: true` and `deh.auto_size: true` derive equipment capacity from your design load automatically — keep them on unless you have a specific unit in mind.
+
+### 3. Enter your actual hardware (datasheet vocabulary)
+
+VFED accepts the numbers printed on a real datasheet. Instead of the internal names (`Q_cool_nom` in kW, `P_rated_w` / `P_ref_w` in W, `M_deh_nom` in L/day) you can write:
+
+```yaml
+hvac:
+  auto_size: false
+  cooling_capacity_kw: 3.5     # datasheet cooling capacity (kW) → Q_cool_nom
+  cop: 3.2                     # datasheet COP → cop_value
+  power_w: 1200                # rated electrical input (W) → P_rated_w
+deh:
+  capacity_l_per_day: 12       # datasheet dehumidification (L/day) → M_deh_nom
+  power_w: 260                 # rated electrical input (W) → P_ref_w
+  smer: 2.0                    # specific moisture extraction (kg water/kWh)
+```
+
+The complete alias table is in `vfed/design/project.py` (`HARDWARE_ALIASES`). Canonical names still work unchanged; a config that sets both spellings to different values is rejected as ambiguous. When you specify a fixed unit, set `auto_size: false` — otherwise the engine overwrites the capacity with its auto-sized value.
+
+### 4. Add real costs before trusting the economics
+
+`vfed evaluate` warns when `capital_total` is 0 — in that case LCOE is operating cost only, not a design-level number. Add capital via `mode: per_watt` rates per component:
+
+```yaml
+led:      { capital: { mode: per_watt, rate_per_watt: 1.5 } }
+hvac:     { capital: { mode: per_watt, rate_per_watt: 1.0 } }
+deh:      { capital: { mode: per_watt, rate_per_watt: 2.0 } }
+pv:       { capital: { mode: per_watt, rate_per_watt: 3.5 } }
+battery:  { capital: { mode: per_watt, rate_per_watt: 500 } }
+```
+
+(`example_lcoe_full.yaml` shows a complete cost model.) Then tune `opex` — especially `labor_cost_per_year` and `misc_opex_per_year`, which dominate small-scale economics.
+
+### 5. Size PV + battery for your site
+
+```yaml
+space:
+  parameter_ranges:
+    pv_area: [0, 50, 10]      # m²
+    battery: [0, 20, 5]       # kWh
+```
+
+```bash
+vfed sweep my_farm.yaml --cache weather_cache --out results.csv
+```
+
+`results.csv` is sorted by the objective (LCOE by default); the first row is the best PV × battery combination. The same aliases work in sweep ranges (`pv_area_m2` / `battery_kwh` are accepted). Offline at a different site? Pick one of the 51 built-in cities (`vfed design cities`) and set `site.city` — 2025 weather is bundled for all of them.
+
+### Humidity and moisture results
+
+`vfed evaluate` prints more than energy: annual water use, RH clamp events, DEH utilization, and how much moisture the dehumidifier vs the HVAC coil removed. `vfed evaluate ... --export out/` also writes `summary.csv`, `timeseries.csv` (8,760 hourly rows) and `monthly.csv` for your own analysis.
 
 ## Architecture
 
@@ -168,7 +246,7 @@ Each subfolder under `research/` has its own `README.md` with detailed documenta
 | `vfed design cities` | List built-in cities (pre-downloaded 2025 weather) |
 | `vfed design tariffs` | List built-in tariff regions |
 | `vfed validate <project.yaml>` | Validate a project YAML without running the simulation |
-| `vfed evaluate <project.yaml> [--cache dir]` | Run the building simulation for one configuration |
+| `vfed evaluate <project.yaml> [--cache dir] [--export dir]` | Run the building simulation for one configuration; `--export` writes `summary.csv` / `timeseries.csv` / `monthly.csv` into `dir` |
 | `vfed sweep <project.yaml> [--cache dir] [--out results.csv]` | Enumerate `space.parameter_ranges` (e.g. PV area × battery capacity) into a CSV; evaluate a single fixed configuration if no ranges are declared |
 
 ## Configuration
@@ -265,7 +343,7 @@ Do not double-click `index.html` directly (Web Workers cannot load under `file:/
 
 ### Built-in presets and the simulation path
 
-- **Built-in presets** `BUILTIN_PRESETS`: `609` (Fengxian Strawberry PFAL), `lettuce_standard` (Lettuce — Standard PFAL).
+- **Built-in presets** `BUILTIN_PRESETS`: `609` (Fengxian Lettuce PFAL), `lettuce_standard` (Lettuce — Standard PFAL).
 - **Simulation path**: form → `generateYaml()` → `postMessage({type:'simulate', projectYaml})` → Pyodide in the Worker runs the vfed simulation → results post back → charts render.
 - **Rebundling**: after changing `vfed/` Python code or updating `weather_cache/`, re-run `python bundle.py` in `vfed-web/` to embed the sources and weather cache into `worker.js`.
 

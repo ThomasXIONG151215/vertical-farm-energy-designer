@@ -27,7 +27,31 @@ __all__ = [
     "VanHentenConfig",
     "TranspirationConfig", "SetpointConfig", "PVConfig", "BatteryConfig",
     "TariffConfig", "DesignSpace", "DesignProject",
+    "HARDWARE_ALIASES",
 ]
+
+
+# ── S1: hardware spec-sheet vocabulary (datasheet → canonical) ────────
+# VFED's canonical HVAC/DEH keys mix units: P_rated_w (W), Q_cool_nom (kW),
+# M_deh_nom (L/day), P_ref_w (W), P_rated_max.  A prosumer knows their
+# equipment by the numbers on the datasheet (cooling capacity in kW, COP,
+# dehumidification capacity in L/day, rated input in W), so ``from_dict``
+# accepts these friendly aliases and normalises them onto the canonical key.
+# Back-compat is preserved: canonical keys still work unchanged, and a config
+# that sets BOTH spellings to different values is rejected as ambiguous.
+HARDWARE_ALIASES = {
+    "hvac": {
+        # datasheet name          canonical VFED key   unit
+        "cooling_capacity_kw": "Q_cool_nom",   # nominal cooling capacity, kW
+        "cop":                 "cop_value",    # COP at rated condition
+        "power_w":             "P_rated_w",    # rated electrical input, W
+    },
+    "deh": {
+        # datasheet name          canonical VFED key   unit
+        "capacity_l_per_day": "M_deh_nom",     # dehumidification capacity, L/day
+        "power_w":            "P_ref_w",       # reference electrical input, W
+    },
+}
 
 
 @dataclass
@@ -478,11 +502,40 @@ class DesignProject:
                         f"{cfg_name}.{f} must be a number, "
                         f"got {type(v).__name__}: {v!r}")
 
+        def _normalize_aliases(data, *, section: str, yaml_path: str) -> dict:
+            """Map datasheet-style hardware names onto the canonical VFED
+            config key (S1).  ``HARDWARE_ALIASES`` defines the vocabulary per
+            section; canonical keys still work unchanged (back-compat).  A
+            config that specifies BOTH an alias and its canonical key with
+            different values is ambiguous and rejected."""
+            data = data or {}
+            aliases = HARDWARE_ALIASES.get(section, {})
+            if not aliases:
+                return dict(data)
+            out = dict(data)
+            for alias, canon in aliases.items():
+                if alias not in out:
+                    continue
+                if canon in out:
+                    if out[canon] != out[alias]:
+                        raise ValueError(
+                            f"Ambiguous '{yaml_path}' config: both '{alias}' "
+                            f"and '{canon}' are given with different values "
+                            f"({out[alias]!r} vs {out[canon]!r}). "
+                            f"Set only one of them."
+                        )
+                    del out[alias]      # equal values: drop the alias
+                    continue
+                out[canon] = out.pop(alias)
+            return out
+
         # ── humidity-related sub-configs (validated, then applied) ──
         transp_cfg = sub(TranspirationConfig, d.get("transpiration", {}),
                          yaml_path="transpiration")
-        deh_cfg = sub(DEHConfig, d.get("deh", {}), yaml_path="deh",
-                      has_nested_capital=True)
+        deh_cfg = sub(DEHConfig,
+                      _normalize_aliases(d.get("deh", {}),
+                                         section="deh", yaml_path="deh"),
+                      yaml_path="deh", has_nested_capital=True)
         sp_cfg = sub(SetpointConfig, d.get("setpoints", {}),
                      yaml_path="setpoints")
         _require_number(
@@ -524,8 +577,10 @@ class DesignProject:
         # (Q_total<0 → Q_target>0, M_target<0); an unknown cop_mode falls through
         # to `return self.value`; shr_BF=1.0 divides by zero in the BF-ADP coil
         # model. Reject all of these at load time.
-        hvac_cfg = sub(HVACConfig, d.get("hvac", {}), yaml_path="hvac",
-                       has_nested_capital=True)
+        hvac_cfg = sub(HVACConfig,
+                       _normalize_aliases(d.get("hvac", {}),
+                                          section="hvac", yaml_path="hvac"),
+                       yaml_path="hvac", has_nested_capital=True)
         _require_nonnegative(
             ["cop_value", "cop_heat", "eta_II", "delta_T_evap",
              "delta_T_cond", "P_rated_w", "P_rated_heat_w",

@@ -77,6 +77,8 @@ _YAML_SECTION_COMMENTS = {
         "#   auto_size   - true = size capacity from design load\n"
         "#   cop_mode    - carnot | constant | linear | table\n"
         "#   eta_II / delta_T_evap / delta_T_cond - Carnot model parameters\n"
+        "#   datasheet aliases: cooling_capacity_kw (-> Q_cool_nom),\n"
+        "#                      cop (-> cop_value), power_w (-> P_rated_w)\n"
         "# ------------------------------------------------------------------\n"),
     "deh": (
         "# ------------------------------------------------------------------\n"
@@ -85,6 +87,8 @@ _YAML_SECTION_COMMENTS = {
         "#   smer        - specific moisture extraction (kg water / kWh)\n"
         "#   auto_size   - true = size capacity from design moisture load\n"
         "#   M_deh_nom   - alternative spec: nominal removal (L/day)\n"
+        "#   datasheet aliases: capacity_l_per_day (-> M_deh_nom),\n"
+        "#                      power_w (-> P_ref_w)\n"
         "# ------------------------------------------------------------------\n"),
     "led": (
         "# ------------------------------------------------------------------\n"
