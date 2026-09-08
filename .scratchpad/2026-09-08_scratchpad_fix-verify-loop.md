@@ -31,7 +31,7 @@
 | P0-1 | 统一资本单位（rate_per_watt 1000× 陷阱：PV 乘 kWp/电池乘 kWh 名实不符；example 3.5→3500 RMB/kWp 口径；C_pv 默认提市场区间；输出单位造价自证行） | 已验证 | 3155c10 | PASS-with-notes：物理基线 0.0000% 漂移（66,310 kWh/yr 逐列一致）；斜率 813.95=3500/4.3 精确；sweep 最优 200m² 边界→150m²+40kWh 内部最优；旧拼写 E001 fail-fast 带迁移指引；pytest 247 passed（229+18）；engine.py 零改动 |
 | P0-2 | 无 PV 电费静默归零（energy system 禁用时按 grid_import×tariff 计价；对齐 evaluate/sweep 口径；LCOE 标注） | 已验证 | 93add0f | PASS：evaluate lcoe 0.6284 == sweep (0,0) 逐位一致（0.004%）；邮票实验跳变消除（0.6284 vs 0.6281, 0.048%）；物理基线逐位不变（66,309.99 kWh/yr、13.0615 kWh/kg、5,076.75 kg）；pytest 251 passed（247+4）；engine enabled 路径零触碰 |
 | P0-3 | 产量 2× 警示前移（growth 节 yaml 明示番茄系数未标定、年产约为商业 PFAL 2-4×；README 警示） | 已验证 | 3079495 | PASS 全 8 项：yaml 注释 3/3 要素（tomato/2-4x/optimistic）；README 双语两处警示；物理基线逐位不变（66,309.99 kWh/yr、13.0615 kWh/kg、5,076.75 kg）；pytest 251 passed；engine/plants/physics 零改动 |
-| P0-4 | 满载/可达性诊断（HVAC/DEH 连续满载>24h 输出 WARNING）+ 修 609 preset (T_dark,C_z,P_rated) 三元组【会改物理基线，完成后记录新基线】 | 未开始 | — | — |
+| P0-4 | 满载/可达性诊断（HVAC/DEH 连续满载>24h 输出 WARNING）+ 修 609 preset (T_dark,C_z,P_rated) 三元组【会改物理基线，完成后记录新基线】 | 已验证 | 896db3b | PASS：新基线 64,184 kWh/yr / HVAC 10,393（16.2%）/ 暗期满速 195/2920 / 暗期均温 22.32°C（设定 21，偏差 1.32K）/ 12.7060 kWh/kg；双向告警（cooling/heating/DEH）真实+合成双验证；pytest 262 passed（251+11）；物理守恒全保；ODE/设备模型零触碰 |
 | P0-5 | sweep 护栏（capital=0 警告同步到 sweep 分支；best 打印补 annual_om；边界最优提示 "optimum at grid boundary"） | 未开始 | — | — |
 | P1-1 | DEH 湿控器循环模式（on/off ±deadband、满速取铭牌 SMER）与 VFD 并列 + 报告 effective SMER | 未开始 | — | — |
 | P1-2 | 投资指标：CSV 补 grid_independence/self_consumption/annual_savings/payback 列（后两代码已算）+ NPV/IRR 增量口径 + 电池"允许电网充电"开关 | 未开始 | — | — |
@@ -51,7 +51,8 @@
 | 第 0 轮 | 2026-09-08 12:40 | P0-1 | ✅ 已验证+已提交(3155c10) | 模板轮：fix(方案B按组件改名 per_kwp/per_kwh/per_watt)→verify PASS-with-notes→commit |
 | 第 1 轮 | 2026-09-08 14:20 | P0-2 | ✅ 已验证+已提交(93add0f) | 心跳轮：fix(tariff 按全负荷计价+sweep 同缺陷同修+CLI 自证行)→verify PASS 全 5 项→commit |
 | 第 2 轮 | 2026-09-08 16:25 | P0-3 | ✅ 已验证+已提交(3079495) | 心跳轮：fix(yaml 模板 7 行 WARNING+README 双语警示，纯文档层)→verify PASS 全 8 项→commit |
-| 第 3 轮 | 待心跳触发 | P0-4 | 排队中 | 满载/可达性诊断 + 修 609 preset (T_dark,C_z,P_rated) 三元组；会改物理基线，完成后记录新基线 |
+| 第 3 轮 | 2026-09-08 18:40 | P0-4 | ✅ 已验证+已提交(896db3b) | 心跳轮：fix(仅改 T_dark 18→21.0+engine 汇报层双向满载诊断+CLI WARNING)→verify PASS 8 项声明全证实→commit 896db3b+新基线写回回归卡 |
+| 第 4 轮 | 待心跳触发 | P0-5 | 排队中 | sweep 护栏（capital=0 警告同步到 sweep 分支；best 打印补 annual_om；边界最优提示）|
 
 ## 5. Executor Feedback or Help Requests
 - 基线数字（回归对照）：609 preset 基准 66,310 kWh/yr、13.06 kWh/kg fresh、HVAC 占比 18.2%（P0-4 修复后 HVAC 占比应显著下降并记录新基线）
@@ -70,3 +71,6 @@
 - 【P0-3 遗留观察】turnaround_days（茬间空床）未做：需 engine.py 年化逻辑 365/(cycle+turnaround) 改动，超出文档层安全边界，留独立任务；cli.py 实际新增 6 行注释（fix 报告称 7 行含 banner 计数差 1，无实质影响）
 - 【P0-3 验证注意】基线复现必须用 preset 默认坐标（奉贤 30.9/121.5）——verify 曾误用 --lat 31.23 --lon 121.47 触发坐标覆盖 WARN，得到 66,285 kWh/yr（0.04% 偏差），属复现参数错误非 fix 缺陷
 - 【P0-3 行为变化】无：纯警示/文档层，所有数值输出逐位不变（P0-2 后经济基线仍为准：无 PV lcoe 0.6284、specific_cost_per_kg 含电费口径）
+- 【P0-4 新物理基线（权威，896db3b）】609 preset @Shanghai2025：annual load 64,184 kWh/yr、HVAC 10,393 kWh/yr（16.2%）、暗期满速 195/2920、暗期均温 22.32°C（T_dark=21）、kwh_per_kg_fresh 12.7060、暗期 min T_z 21.67——**P0-5 及全部 P1/P2/P3 验证以此为准**（旧基线 66,310/13.0615 已作废）；回归卡 user-gym/regression/README.md 卡 P0-4 下表已写回
+- 【P0-4 行为变化提醒】preset_609 显式 T_dark=21.0（原走默认 18）；SetpointConfig 类默认 18 不变，default preset 不受影响（回归 17,586 kWh/yr 正常无告警）；已生成的旧 yaml（T_dark=18）不受影响且会触发满载 WARNING（设计使然，是诊断正确性的证据）
+- 【P0-4 遗留观察】①满速口径双轨：summary 子步≥99% 口径 210h vs p04_night_check.py 能量口径 195h（mod≈0.997 边缘差异，均 <<1460 通过阈）；②DEH 满载阈值 60%（609 修复后 49.8%/default 41.3% 属正常态，病理才趋近 100%）；③T_dark=21 均温偏差 1.32K 距 1.5K 上限余量 0.18K，换天气年份/围护改动需复验；④vfed-web/worker.js 生成物未同步（无功能影响）
