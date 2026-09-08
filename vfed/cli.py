@@ -81,6 +81,95 @@ def _print_capital_unit_check(project, currency: str) -> None:
     _print_unit_price("  ", "DEH unit cost", cap["DEH"], project.deh.P_ref_w, "W", currency)
 
 
+# P0-5: shared capital = 0 warning — the evaluate path printed it, the sweep
+# path did not, so sweep-only users never learned their "LCOE" is OPEX-only.
+# Kept word-for-word identical between the two paths; pure ASCII (no em-dash)
+# so it survives GBK consoles.
+_CAPITAL_ZERO_WARNING = (
+    "[WARNING] all capital costs are zero - the LCOE above covers "
+    "OPEX only, not the full facility cost. Set capital costs per "
+    "component (mode per_watt x rated W for LED/HVAC/DEH, per_kwp x "
+    "kWp for PV, per_kwh x kWh for battery) for a meaningful LCOE."
+)
+
+# P0-5: best-row keys that are never swept parameters (metrics + currency);
+# used by _print_boundary_hints to pick out the swept axes of a sweep row.
+_SWEEP_METRIC_KEYS = frozenset(
+    {
+        "currency",
+        "lcoe",
+        "cost_per_kg_fresh",
+        "kwh_per_kg_fresh",
+        "annual_load_kwh",
+        "biomass_kg",
+        "annual_pv_generation",
+        "annual_grid_import",
+        "annual_grid_export",
+        "battery_cycles",
+        "peak_power_kwp",
+        "capital_total",
+        "annual_capital",
+        "annual_om",
+        "annual_grid_cost",
+        "capital_led",
+        "capital_hvac",
+        "capital_deh",
+        "capital_pv",
+        "capital_battery",
+        "capital_equipment",
+        "capital_envelope",
+    }
+)
+
+
+def _near_endpoint(a: float, b: float) -> bool:
+    """Float-tolerant endpoint comparison (np.arange scan grids can carry
+    ~1e-12 noise on the last step, so best == range max needs a tolerance)."""
+    return abs(a - b) <= 1e-6 * max(1.0, abs(a), abs(b))
+
+
+def _print_boundary_hints(best, results, indent: str) -> None:
+    """P0-5: flag a best design whose swept value sits on a scan-range edge.
+
+    When the optimum equals a range endpoint, the true optimum may lie outside
+    the scanned grid (e.g. example_lcoe_full's battery = 40 kWh caps its own
+    [0, 40] range).  Report-only hint — the LCOE numbers themselves are never
+    altered: example_sweep's pv = 200 m2 edge is a genuine economic optimum
+    under market pricing, so the text says "consider widening", not "wrong".
+    Range endpoints are read from the enumeration table itself (the Cartesian
+    product covers every grid value, so each axis column spans the full
+    [min, max] of the scanned range).
+    """
+    if results is None or getattr(results, "empty", True):
+        return
+    for key, val in best.items():
+        if key in _SWEEP_METRIC_KEYS or key not in results.columns:
+            continue
+        try:
+            bval = float(val)
+        except (TypeError, ValueError):
+            continue
+        col = results[key].astype(float)
+        lo, hi = float(col.min()), float(col.max())
+        if _near_endpoint(bval, lo):
+            endpoint, eval_val = "min", lo
+        elif _near_endpoint(bval, hi):
+            endpoint, eval_val = "max", hi
+        else:
+            continue
+        if key == "pv_area":
+            name, shown = "pv_area", f"{bval:.1f} m2"
+        elif key == "battery_kwh":
+            name, shown = "battery", f"{bval:.1f} kWh"
+        else:
+            name, shown = key, f"{bval:g}"
+        print(
+            f"{indent}[NOTE] optimum at grid boundary - {name} = {shown} is at "
+            f"the scan range {endpoint} ({eval_val:g}); "
+            f"consider widening the scan range"
+        )
+
+
 # F3: per-section annotations for the generated project YAML.  The data itself
 # is always the canonical ``DesignProject.to_dict()`` (schema cannot drift);
 # these comments only annotate sections with units / guidance for prosumers.
@@ -464,12 +553,9 @@ def _cmd_evaluate(args):
     if capital_total is not None:
         print(f"  Capital total    = {capital_total:.0f} {getattr(project, 'currency', 'USD')}")
         if capital_total <= 0:
-            print(
-                "  [WARNING] all capital costs are zero - the LCOE above covers "
-                "OPEX only, not the full facility cost. Set capital costs per "
-                "component (mode per_watt x rated W for LED/HVAC/DEH, per_kwp x "
-                "kWp for PV, per_kwh x kWh for battery) for a meaningful LCOE."
-            )
+            # P0-5: text lives in _CAPITAL_ZERO_WARNING so sweep prints the
+            # identical caveat (word-for-word parity between the two paths).
+            print(f"  {_CAPITAL_ZERO_WARNING}")
         else:
             # P0-1: unit-price self-check lines (capital / rating per component)
             _print_capital_unit_check(project, getattr(project, "currency", "USD"))
@@ -538,6 +624,20 @@ def _cmd_sweep(args):
         print(f"  kWh/kg (fresh, {dm * 100:.0f}% DM) = {best.get('kwh_per_kg_fresh', 0):.1f}")
         print(f"  Annual load             = {best.get('annual_load_kwh', 0):.0f} kWh/yr")
         print(f"  Biomass (dry)           = {best.get('biomass_kg', 0):.1f} kg")
+        # P0-5: surface the economics that used to be CSV-only on this path —
+        # LCOE, annual OPEX and the capital = 0 caveat (same wording as the
+        # evaluate branch).  Single-point users previously got none of them.
+        lcoe = best.get("lcoe")
+        if lcoe is not None:
+            print(f"  LCOE                    = {lcoe:.4f} {currency}/kWh")
+        annual_om = best.get("annual_om")
+        if annual_om is not None:
+            print(f"  annual_om               = {annual_om:.0f} {currency}/yr")
+        capital_total = best.get("capital_total")
+        if capital_total is not None:
+            print(f"  Capital total           = {capital_total:.0f} {currency}")
+            if capital_total <= 0:
+                print(f"  {_CAPITAL_ZERO_WARNING}")
         # P0-1: PV / battery unit-price self-check.  PV area and battery kWh
         # are config-fixed (not swept here), so a re-loaded project gives the
         # same ratings the sweep priced against.
@@ -599,6 +699,11 @@ def _cmd_sweep(args):
             "kWh",
             currency,
         )
+    else:
+        # P0-5: the same capital = 0 caveat the evaluate path prints — a
+        # sweep-only user previously never saw it and could mistake an
+        # OPEX-only "LCOE" for a full facility cost.
+        print(f"    {_CAPITAL_ZERO_WARNING}")
 
     # swept parameter values
     for key, val in best.items():
@@ -633,9 +738,17 @@ def _cmd_sweep(args):
         else:
             print(f"    {key:24s} = {val}")
 
+    # P0-5: a best design pinned at a scan-range edge usually means the true
+    # optimum lies outside the scanned grid (example_lcoe_full: battery = 40
+    # kWh caps its own [0, 40] range).  Report-only; never alters results.
+    _print_boundary_hints(best, results, "    ")
+
     print(f"    annual_load_kwh         = {best.get('annual_load_kwh', 0):.0f} kWh/yr")
     print(f"    biomass_kg (dry)        = {best.get('biomass_kg', 0):.1f} kg")
     print(f"    annual_capital          = {best.get('annual_capital', 0):.0f} {currency}/yr")
+    # P0-5: annual OPEX is 72-96% of LCOE's numerator — print it next to the
+    # annualised capital so the best row is self-evidencing (was CSV-only).
+    print(f"    annual_om               = {best.get('annual_om', 0):.0f} {currency}/yr")
     print(f"    annual_grid_cost        = {best.get('annual_grid_cost', 0):.0f} {currency}/yr")
     if "annual_pv_generation" in best:
         print(f"    annual_pv_generation    = {best.get('annual_pv_generation', 0):.0f} kWh/yr")

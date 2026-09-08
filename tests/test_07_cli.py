@@ -328,3 +328,143 @@ def test_capital_unit_check_prints_pv_and_battery_lines(capsys):
     assert "3500.00 RMB/kWp" in out
     assert "(3.50 RMB/Wp)" in out
     assert "500.00 RMB/kWh" in out
+
+
+# ---------------------------------------------------------------------------
+# 7.7  Sweep guardrails: LCOE / capital=0 warning / boundary hint (P0-5)
+# ---------------------------------------------------------------------------
+def test_sweep_single_point_prints_lcoe_om_and_zero_capital_warning(cli_project_yaml, capsys):
+    """P0-5 A: a single-point sweep must surface the LCOE, annual OPEX and,
+    because preset 609 carries no capital blocks (capital_total = 0), the same
+    OPEX-only warning the evaluate path prints (previously CSV-only)."""
+    rc = main(["sweep", str(cli_project_yaml), "--cache", "weather_cache"])
+    out = capsys.readouterr()
+    assert rc == 0
+    assert "LCOE" in out.out
+    assert "annual_om" in out.out
+    assert "Capital total" in out.out
+    assert "all capital costs are zero" in out.out
+    assert "OPEX only" in out.out
+
+
+def _synthetic_sweep_payload(rows, best):
+    """Build an agent_evaluate-shaped payload without running the engine —
+    the sweep CLI only formats this dict, so tests can pin exact outputs."""
+    import pandas as pd
+
+    return {
+        "success": True,
+        "project": "synthetic",
+        "currency": "USD",
+        "exchange_rate": 1.0,
+        "objective": "lcoe",
+        "dry_matter_fraction": 0.05,
+        "best": best,
+        "results": pd.DataFrame(rows),
+    }
+
+
+def test_sweep_best_prints_annual_om_and_boundary_hints(cli_project_yaml, monkeypatch, capsys):
+    """P0-5 B/C: the multi-point best block must print annual_om and flag an
+    optimum pinned at a scan-range boundary.  pv_area = 200 caps its [0, 200]
+    grid and battery = 40 caps its [0, 40] grid (two hints), while the
+    interior T_light axis stays silent."""
+    from vfed import cli as cli_mod
+
+    def row(t_light, pv, bat, lcoe):
+        return {
+            "T_light": t_light,
+            "currency": "USD",
+            "pv_area": pv,
+            "battery_kwh": bat,
+            "lcoe": lcoe,
+            "cost_per_kg_fresh": lcoe * 10.0,
+            "kwh_per_kg_fresh": 13.0,
+            "capital_total": 182791.0,
+            "capital_pv": 162791.0,
+            "capital_battery": 20000.0,
+            "annual_capital": 15000.0,
+            "annual_om": 35000.0,
+            "annual_grid_cost": 6000.0,
+            "annual_load_kwh": 66000.0,
+            "biomass_kg": 250.0,
+        }
+
+    rows = [
+        row(20.0, 0.0, 0.0, 0.90),
+        row(21.0, 200.0, 40.0, 0.73),
+        row(22.0, 100.0, 20.0, 0.80),
+    ]
+    monkeypatch.setattr(
+        cli_mod,
+        "agent_evaluate",
+        lambda path, cache_dir=None: _synthetic_sweep_payload(rows, rows[1]),
+    )
+    rc = cli_mod.main(["sweep", str(cli_project_yaml), "--cache", "weather_cache"])
+    out = capsys.readouterr()
+    assert rc == 0
+    assert "annual_om" in out.out
+    assert "35000 USD/yr" in out.out
+    assert out.out.count("optimum at grid boundary") == 2
+    assert "pv_area = 200.0 m2 is at the scan range max" in out.out
+    assert "battery = 40.0 kWh is at the scan range max" in out.out
+    assert "consider widening the scan range" in out.out
+    # interior axis (T_light = 21 within [20, 22]) must NOT be flagged
+    assert "T_light = 21 is at the scan range" not in out.out
+
+
+def test_sweep_multipoint_zero_capital_warning(cli_project_yaml, monkeypatch, capsys):
+    """P0-5: a multi-point sweep whose best row has capital_total = 0 prints
+    the same OPEX-only caveat as evaluate (user1's case: all capital blocks
+    omitted).  Best is interior, so no boundary hint may appear."""
+    from vfed import cli as cli_mod
+
+    def row(t_light, lcoe):
+        return {
+            "T_light": t_light,
+            "currency": "USD",
+            "lcoe": lcoe,
+            "cost_per_kg_fresh": lcoe * 10.0,
+            "kwh_per_kg_fresh": 13.0,
+            "capital_total": 0.0,
+            "annual_capital": 0.0,
+            "annual_om": 35000.0,
+            "annual_grid_cost": 6000.0,
+            "annual_load_kwh": 66000.0,
+            "biomass_kg": 250.0,
+        }
+
+    rows = [row(20.0, 0.66), row(21.0, 0.63), row(22.0, 0.65)]
+    monkeypatch.setattr(
+        cli_mod,
+        "agent_evaluate",
+        lambda path, cache_dir=None: _synthetic_sweep_payload(rows, rows[1]),
+    )
+    rc = cli_mod.main(["sweep", str(cli_project_yaml), "--cache", "weather_cache"])
+    out = capsys.readouterr()
+    assert rc == 0
+    assert "all capital costs are zero" in out.out
+    assert "OPEX only" in out.out
+    assert "Total capital" not in out.out
+    assert "optimum at grid boundary" not in out.out
+
+
+def test_boundary_hint_flags_min_endpoint_and_skips_interior(capsys):
+    """P0-5: the boundary hint also fires at a range MIN (battery = 0 kWh is
+    a legitimate optimum) and stays silent for interior values."""
+    import pandas as pd
+
+    from vfed.cli import _print_boundary_hints
+
+    results = pd.DataFrame(
+        [
+            {"battery_kwh": 0.0, "lcoe": 0.50},
+            {"battery_kwh": 20.0, "lcoe": 0.60},
+            {"battery_kwh": 40.0, "lcoe": 0.70},
+        ]
+    )
+    _print_boundary_hints({"battery_kwh": 0.0, "lcoe": 0.50}, results, "    ")
+    out = capsys.readouterr().out
+    assert "battery = 0.0 kWh is at the scan range min" in out
+    _print_boundary_hints({"battery_kwh": 20.0, "lcoe": 0.60}, results, "    ")
+    assert capsys.readouterr().out == ""
