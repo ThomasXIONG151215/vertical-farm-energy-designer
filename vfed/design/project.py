@@ -326,14 +326,15 @@ class VanHentenConfig:
     c_resp_d: float = 2.65e-7  # dark respiration at 25°C (s⁻¹)
     dry_matter_fraction: float = 0.05  # dry→fresh weight conversion (−)
     c_pl_d: float = 53.0  # light extinction per LAI (m²/kg)
-    c_rad_phot: float = 1e-8  # radiation use efficiency (kg/J)
-    #   CALIBRATION BASIS (C-fix, 2026-08-16): this is the Van Henten 2003
-    #   tomato literature default, NOT recalibrated for 609 lettuce.  The
-    #   reference calibration band (reference/van-henten/PSO_Win.py) is
-    #   25-100 W/m² PAR (nominal 70); the engine feeds ppfd_target/par_factor
-    #   = 87.5 W/m² (LED PAR), which falls inside that band.  Model yields
-    #   ~109 kg fresh/m²/yr vs 30-60 for real PFAL lettuce (~2x high) — growth
-    #   is calibrated to the greenhouse reference, not to 609 field data.
+    c_rad_phot: float = 3.5e-9  # radiation use efficiency (kg/J), lettuce-calibrated
+    #   CALIBRATION BASIS (P0-3R, 2026-09-08): recalibrated for PFAL lettuce
+    #   to the commercial PFAL yield band 30-60 kg fresh/m2/yr (Kozai et al.
+    #   2016): 3.5e-9 anchors the band midpoint (~45 kg/m2/yr at the 609
+    #   operating point; engine-verified ~45 kg/m2/yr).  The former 1e-8 kg/J
+    #   literature default implied a quantum yield at the C3 theoretical
+    #   maximum (no canopy / respiration / whole-cycle discount) and
+    #   overpredicted yield 2-4x.  Full derivation and cross-checks:
+    #   vfed/plants/van_henten.py; new baseline: user-gym/regression/README.md.
     c_co2_1: float = 5.11e-6  # CO₂ assimilation coef (m/(s·°C²))
     c_co2_2: float = 2.3e-4  # CO₂ assimilation coef (m/(s·°C))
     c_co2_3: float = 6.29e-4  # CO₂ assimilation coef (m/s)

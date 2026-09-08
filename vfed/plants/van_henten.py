@@ -35,13 +35,29 @@ class VanHenten:
         "c_alpha_beta": 0.544,  # dimensionless conversion efficiency
         "c_resp_d": 2.65e-7,  # s⁻¹  dark respiration coefficient (25 °C)
         "c_pl_d": 53.0,  # m²/kg  light extinction per LAI
-        "c_rad_phot": 1e-8,  # kg/J  radiation use efficiency (calibratable)
-        #   CALIBRATION BASIS (C-fix, 2026-08-16): Van Henten 2003 tomato
-        #   literature default, NOT recalibrated for 609 lettuce.  Reference
-        #   calibration band (reference/van-henten/PSO_Win.py) is 25-100 W/m²
-        #   PAR (nominal 70); engine feeds ~87.5 W/m² (PPFD/par_factor), which
-        #   falls inside the band.  Model yields ~109 kg fresh/m²/yr vs 30-60
-        #   for real PFAL lettuce (~2x high) — see GrowthConfig docstring.
+        "c_rad_phot": 3.5e-9,  # kg/J  radiation use efficiency (lettuce-calibrated)
+        #   CALIBRATION BASIS (P0-3R, 2026-09-08): recalibrated for PFAL
+        #   LETTUCE.  The former Van Henten 2003 literature default 1e-8 kg/J
+        #   implies an initial-slope quantum yield of 0.0497 mol CO2 per mol
+        #   photon (white-LED spectrum, 4.57 umol/J) -- the C3 leaf theoretical
+        #   maximum (Bjorkman & Demmig 1987: 0.052-0.057 mol/mol absorbed)
+        #   applied to INCIDENT photons with no canopy / respiration /
+        #   whole-cycle discount.  That overpredicted 609 yield 2-4x (112.8 vs
+        #   30-60 kg fresh/m2/yr for commercial PFAL lettuce, Kozai et al.
+        #   2016, Plant Factory handbook).  3.5e-9 anchors the band midpoint
+        #   (~45 kg/m2/yr) at the 609 operating point (30 d cycle, 87.5 W/m2
+        #   PAR, 800 ppm CO2, 22/21 C): predicted 45.3 kg fresh/m2/yr, i.e.
+        #   ~3.7 kg FW/m2/cycle (250-350 g/plant at 12-15 plants/m2).  Implied:
+        #   initial-slope quantum yield 0.0174 mol/mol (~35% of the C3 leaf
+        #   max; the remainder is canopy absorption, photo/light respiration
+        #   and whole-cycle averaging) and whole-cycle LUE 1.22 g DM per MJ
+        #   incident PAR (low end of the greenhouse-lettuce band ~1.6-2.7 g/MJ
+        #   measured on a mature-canopy intercepted basis, discounted ~0.85x
+        #   canopy absorption x ~0.9 establishment phase).  Residual
+        #   uncertainty: single-parameter calibration; the 30-60 kg/m2/yr band
+        #   is applied per m2 of LIT CANOPY area here (sources quoting per m2
+        #   of building footprint are not directly comparable).  Engine-
+        #   verified: user-gym/regression/README.md (P0-3R baseline).
         "c_co2_1": 5.11e-6,  # m/(s·°C²)
         "c_co2_2": 2.3e-4,  # m/(s·°C)
         "c_co2_3": 6.29e-4,  # m/s

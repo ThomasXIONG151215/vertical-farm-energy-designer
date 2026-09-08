@@ -23,10 +23,27 @@ class TestEngineRegression:
         assert 45000 < e < 75000, f"annual_load_kwh = {e:.0f} outside expected range"
 
     def test_biomass_stable(self, sim_609):
-        """Biomass should be 180-350 kg dry/yr for preset_609
-        (after light_wm2 bugfix: PAR correctly calculated from PPFD)."""
+        """Biomass 80-130 kg dry/yr for preset_609.
+
+        P0-3R baseline change (2026-09-08): c_rad_phot recalibrated for PFAL
+        lettuce (1e-8 -> 3.5e-9 kg/J), pinning yield to the commercial band
+        30-60 kg fresh/m2/yr (44.5 kg/m2/yr on the 45 m2 canopy = 100.2 kg
+        dry/yr).  The former 180-350 kg band was set by the uncalibrated
+        literature default that overpredicted yield 2-4x.
+        """
         b = sim_609["biomass_kg"]
-        assert 180.0 < b < 350.0, f"biomass_kg = {b:.1f} outside expected range"
+        assert 80.0 < b < 130.0, f"biomass_kg = {b:.1f} outside expected range"
+
+    def test_annual_fresh_yield_band(self, sim_609):
+        """P0-3R hard criterion: fresh yield must sit inside the commercial
+        PFAL lettuce band 30-60 kg/m2/yr over the 45 m2 canopy (mid-band
+        anchor ~45).  Guards against yield regressions in either direction."""
+        fw = sim_609.summary["annual_harvest_fw_kg"]
+        per_m2 = fw / 45.0
+        assert 30.0 <= per_m2 <= 60.0, (
+            f"fresh yield {per_m2:.1f} kg/m2/yr outside commercial PFAL "
+            f"band [30, 60] (annual_harvest_fw_kg={fw:.1f})"
+        )
 
     def test_timeseries_has_all_columns(self, sim_609):
         """Timeseries dataframe must contain core columns."""
@@ -172,12 +189,17 @@ class TestEngineRegression:
         assert 3.0 <= wf <= 12.0, f"water/fresh = {wf:.2f} L/kg outside healthy band [3, 12]"
 
     def test_growth_energy_use_efficiency_band(self, sim_609):
-        """RUE must stay in a physically plausible band (C-fix, 2026-08-16).
+        """Whole-cycle light-use efficiency must stay physically plausible.
 
-        Model RUE (dry-mass gain per intercepted PAR energy) is ~2.9 g/MJ
-        from the Van Henten 2003 defaults — inside the C3-crop band 2.2-3.5
-        g/MJ.  This guards against future growth-model recalibration that
-        would break the energy basis declared in GrowthConfig.c_rad_phot.
+        P0-3R baseline change (2026-09-08): with c_rad_phot lettuce-calibrated
+        to the commercial PFAL yield band, the whole-cycle LUE is ~1.2 g dry
+        per MJ of incident PAR.  This is the low end of the greenhouse-lettuce
+        literature band (~1.6-2.7 g/MJ, measured on a mature-canopy
+        intercepted basis) discounted for canopy absorption (~0.85x) and the
+        seedling establishment phase (~0.9x) -- coherent with a model that
+        has zero inter-crop gap time (which would otherwise bias annual
+        yield upward).  Band [0.9, 1.6] guards the calibrated energy basis
+        declared in GrowthConfig.c_rad_phot against future drift.
         """
         s = sim_609.summary
         harvest_dry = s["annual_harvest_kg"]  # kg dry / yr
@@ -185,7 +207,7 @@ class TestEngineRegression:
         # → ×365 = 22,995 kWh/yr = 22,995 × 3.6 = 82,782 MJ/yr.
         par_energy_MJ = 22995.0 * 3.6
         rue = harvest_dry * 1000.0 / par_energy_MJ  # g dry / MJ
-        assert 1.5 <= rue <= 4.0, f"RUE = {rue:.2f} g/MJ outside C3 band [1.5, 4]"
+        assert 0.9 <= rue <= 1.6, f"LUE = {rue:.2f} g/MJ outside calibrated band [0.9, 1.6]"
 
 
 class TestFullLoadDiagnostics:

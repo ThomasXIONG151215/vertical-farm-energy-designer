@@ -141,8 +141,14 @@ class TestEngineOutputs:
         assert sim_609["annual_load_kwh"] > 0
 
     def test_biomass_positive(self, sim_609):
-        """Harvested biomass must be > 100 kg dry / yr."""
-        assert sim_609["biomass_kg"] > 100.0, \
+        """Harvested biomass must be > 70 kg dry / yr (no-growth-collapse guard).
+
+        P0-3R (2026-09-08): lettuce recalibration of c_rad_phot lowered the
+        baseline to ~100 kg dry/yr (commercial PFAL band), so the old >100
+        threshold had no margin; 70 still excludes any feedback collapse
+        while allowing normal parameter-driven variation.
+        """
+        assert sim_609["biomass_kg"] > 70.0, \
             f"biomass too low: {sim_609['biomass_kg']}"
 
     def test_kwh_per_kg_below_50(self, sim_609):
