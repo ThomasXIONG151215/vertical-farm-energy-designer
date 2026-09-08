@@ -29,7 +29,7 @@
 | 项 | 内容 | 状态 | commit | 验证结论 |
 |---|---|---|---|---|
 | P0-1 | 统一资本单位（rate_per_watt 1000× 陷阱：PV 乘 kWp/电池乘 kWh 名实不符；example 3.5→3500 RMB/kWp 口径；C_pv 默认提市场区间；输出单位造价自证行） | 已验证 | 3155c10 | PASS-with-notes：物理基线 0.0000% 漂移（66,310 kWh/yr 逐列一致）；斜率 813.95=3500/4.3 精确；sweep 最优 200m² 边界→150m²+40kWh 内部最优；旧拼写 E001 fail-fast 带迁移指引；pytest 247 passed（229+18）；engine.py 零改动 |
-| P0-2 | 无 PV 电费静默归零（energy system 禁用时按 grid_import×tariff 计价；对齐 evaluate/sweep 口径；LCOE 标注） | 未开始 | — | — |
+| P0-2 | 无 PV 电费静默归零（energy system 禁用时按 grid_import×tariff 计价；对齐 evaluate/sweep 口径；LCOE 标注） | 已验证 | 93add0f | PASS：evaluate lcoe 0.6284 == sweep (0,0) 逐位一致（0.004%）；邮票实验跳变消除（0.6284 vs 0.6281, 0.048%）；物理基线逐位不变（66,309.99 kWh/yr、13.0615 kWh/kg、5,076.75 kg）；pytest 251 passed（247+4）；engine enabled 路径零触碰 |
 | P0-3 | 产量 2× 警示前移（growth 节 yaml 明示番茄系数未标定、年产约为商业 PFAL 2-4×；README 警示） | 未开始 | — | — |
 | P0-4 | 满载/可达性诊断（HVAC/DEH 连续满载>24h 输出 WARNING）+ 修 609 preset (T_dark,C_z,P_rated) 三元组【会改物理基线，完成后记录新基线】 | 未开始 | — | — |
 | P0-5 | sweep 护栏（capital=0 警告同步到 sweep 分支；best 打印补 annual_om；边界最优提示 "optimum at grid boundary"） | 未开始 | — | — |
@@ -49,7 +49,8 @@
 | 轮次 | 时间(北京) | 项 | 结果 | 备注 |
 |---|---|---|---|---|
 | 第 0 轮 | 2026-09-08 12:40 | P0-1 | ✅ 已验证+已提交(3155c10) | 模板轮：fix(方案B按组件改名 per_kwp/per_kwh/per_watt)→verify PASS-with-notes→commit |
-| 第 1 轮 | 待心跳触发 | P0-2 | 排队中 | 2h 心跳接管，下一项：无 PV 电费静默归零 |
+| 第 1 轮 | 2026-09-08 14:20 | P0-2 | ✅ 已验证+已提交(93add0f) | 心跳轮：fix(tariff 按全负荷计价+sweep 同缺陷同修+CLI 自证行)→verify PASS 全 5 项→commit |
+| 第 2 轮 | 待心跳触发 | P0-3 | 排队中 | 2h 心跳接管，下一项：产量 2× 警示前移 |
 
 ## 5. Executor Feedback or Help Requests
 - 基线数字（回归对照）：609 preset 基准 66,310 kWh/yr、13.06 kWh/kg fresh、HVAC 占比 18.2%（P0-4 修复后 HVAC 占比应显著下降并记录新基线）
@@ -62,3 +63,5 @@
 - 【并行心跳资产】3h 心跳 bfd3cf1e 首轮（12:00）产出：①user-gym/regression/ P0-1..P0-5 五张回归验证卡（复现命令+基线数字，verify subagent 即用）②user6 极端气候测试（Harbin/Dubai/Bangkok vs 上海，新发现并入 SYNTHESIS.md §9）
 - 【本轮新增笔记】.scratchpad/2026-09-08_scratchpad_p0-1-capital-units.md（fix 笔记）、p0-regression-cards.md、user6-extreme-climate.md
 - 【验证基线更新】P0-1 后的新快照：609 preset 66,310 kWh/yr / 13.06 kWh/kg 不变；example_lcoe_full capital total 115,516 RMB、PV 单价 3500 RMB/kWp 自证行；example_sweep legacy total 23,256 USD=500×46.512
+- 【P0-2 行为变化提醒】无 PV evaluate 的 lcoe 0.5284→0.6284、specific_cost_per_kg 变为含电费口径（~7.21→8.21）——后续 P0-3/P0-5/P1 项验证对照经济数字时以此为准（回归卡 L244 联动规则）
+- 【P0-2 遗留观察】flake8 用 verify 严格参数（max-line-length=100）有 6 处存量告警（cli.py:435/project.py:244 E501、engine.py:878-879/pv.py:58/weather_bridge.py:201 F841），CI 实际参数（120 + ignore E501/F841）下干净 exit=0——非本修复引入，暂不处理
