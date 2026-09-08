@@ -30,7 +30,7 @@
 |---|---|---|---|---|
 | P0-1 | 统一资本单位（rate_per_watt 1000× 陷阱：PV 乘 kWp/电池乘 kWh 名实不符；example 3.5→3500 RMB/kWp 口径；C_pv 默认提市场区间；输出单位造价自证行） | 已验证 | 3155c10 | PASS-with-notes：物理基线 0.0000% 漂移（66,310 kWh/yr 逐列一致）；斜率 813.95=3500/4.3 精确；sweep 最优 200m² 边界→150m²+40kWh 内部最优；旧拼写 E001 fail-fast 带迁移指引；pytest 247 passed（229+18）；engine.py 零改动 |
 | P0-2 | 无 PV 电费静默归零（energy system 禁用时按 grid_import×tariff 计价；对齐 evaluate/sweep 口径；LCOE 标注） | 已验证 | 93add0f | PASS：evaluate lcoe 0.6284 == sweep (0,0) 逐位一致（0.004%）；邮票实验跳变消除（0.6284 vs 0.6281, 0.048%）；物理基线逐位不变（66,309.99 kWh/yr、13.0615 kWh/kg、5,076.75 kg）；pytest 251 passed（247+4）；engine enabled 路径零触碰 |
-| P0-3 | 产量 2× 警示前移（growth 节 yaml 明示番茄系数未标定、年产约为商业 PFAL 2-4×；README 警示） | 未开始 | — | — |
+| P0-3 | 产量 2× 警示前移（growth 节 yaml 明示番茄系数未标定、年产约为商业 PFAL 2-4×；README 警示） | 已验证 | 3079495 | PASS 全 8 项：yaml 注释 3/3 要素（tomato/2-4x/optimistic）；README 双语两处警示；物理基线逐位不变（66,309.99 kWh/yr、13.0615 kWh/kg、5,076.75 kg）；pytest 251 passed；engine/plants/physics 零改动 |
 | P0-4 | 满载/可达性诊断（HVAC/DEH 连续满载>24h 输出 WARNING）+ 修 609 preset (T_dark,C_z,P_rated) 三元组【会改物理基线，完成后记录新基线】 | 未开始 | — | — |
 | P0-5 | sweep 护栏（capital=0 警告同步到 sweep 分支；best 打印补 annual_om；边界最优提示 "optimum at grid boundary"） | 未开始 | — | — |
 | P1-1 | DEH 湿控器循环模式（on/off ±deadband、满速取铭牌 SMER）与 VFD 并列 + 报告 effective SMER | 未开始 | — | — |
@@ -50,7 +50,8 @@
 |---|---|---|---|---|
 | 第 0 轮 | 2026-09-08 12:40 | P0-1 | ✅ 已验证+已提交(3155c10) | 模板轮：fix(方案B按组件改名 per_kwp/per_kwh/per_watt)→verify PASS-with-notes→commit |
 | 第 1 轮 | 2026-09-08 14:20 | P0-2 | ✅ 已验证+已提交(93add0f) | 心跳轮：fix(tariff 按全负荷计价+sweep 同缺陷同修+CLI 自证行)→verify PASS 全 5 项→commit |
-| 第 2 轮 | 待心跳触发 | P0-3 | 排队中 | 2h 心跳接管，下一项：产量 2× 警示前移 |
+| 第 2 轮 | 2026-09-08 16:25 | P0-3 | ✅ 已验证+已提交(3079495) | 心跳轮：fix(yaml 模板 7 行 WARNING+README 双语警示，纯文档层)→verify PASS 全 8 项→commit |
+| 第 3 轮 | 待心跳触发 | P0-4 | 排队中 | 满载/可达性诊断 + 修 609 preset (T_dark,C_z,P_rated) 三元组；会改物理基线，完成后记录新基线 |
 
 ## 5. Executor Feedback or Help Requests
 - 基线数字（回归对照）：609 preset 基准 66,310 kWh/yr、13.06 kWh/kg fresh、HVAC 占比 18.2%（P0-4 修复后 HVAC 占比应显著下降并记录新基线）
@@ -65,3 +66,7 @@
 - 【验证基线更新】P0-1 后的新快照：609 preset 66,310 kWh/yr / 13.06 kWh/kg 不变；example_lcoe_full capital total 115,516 RMB、PV 单价 3500 RMB/kWp 自证行；example_sweep legacy total 23,256 USD=500×46.512
 - 【P0-2 行为变化提醒】无 PV evaluate 的 lcoe 0.5284→0.6284、specific_cost_per_kg 变为含电费口径（~7.21→8.21）——后续 P0-3/P0-5/P1 项验证对照经济数字时以此为准（回归卡 L244 联动规则）
 - 【P0-2 遗留观察】flake8 用 verify 严格参数（max-line-length=100）有 6 处存量告警（cli.py:435/project.py:244 E501、engine.py:878-879/pv.py:58/weather_bridge.py:201 F841），CI 实际参数（120 + ignore E501/F841）下干净 exit=0——非本修复引入，暂不处理
+- 【独立交叉验证 round 2（2026-09-08，HEAD=a57fe60）】P0-1/P0-2 双 PASS + pytest 251 passed；报告：user-gym/regression/crosscheck_round2.md。**基线勘误**：example_sweep legacy best LCOE 可复现值为 **0.7300**（非 0.7305）——已用临时 worktree 检出 3155c10 + 同一 weather_cache 重跑逐位复核（0.7300/capital 23,256 完全一致），P0-2 对 enabled 路径零漂移；0.7305 判定为当时心跳环境性偏差（疑似联网实拉天气）。后续 P0-5/P1-2 验证以 **0.7300** 为准。另：沙盒 venv user1 无 pytest，交叉验证用系统 Python 3.12.6（251 passed 与账本一致）
+- 【P0-3 遗留观察】turnaround_days（茬间空床）未做：需 engine.py 年化逻辑 365/(cycle+turnaround) 改动，超出文档层安全边界，留独立任务；cli.py 实际新增 6 行注释（fix 报告称 7 行含 banner 计数差 1，无实质影响）
+- 【P0-3 验证注意】基线复现必须用 preset 默认坐标（奉贤 30.9/121.5）——verify 曾误用 --lat 31.23 --lon 121.47 触发坐标覆盖 WARN，得到 66,285 kWh/yr（0.04% 偏差），属复现参数错误非 fix 缺陷
+- 【P0-3 行为变化】无：纯警示/文档层，所有数值输出逐位不变（P0-2 后经济基线仍为准：无 PV lcoe 0.6284、specific_cost_per_kg 含电费口径）
