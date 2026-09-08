@@ -77,6 +77,33 @@ def test_design_new_city_coords(tmp_path, monkeypatch):
     assert p.site.tz_hours == 6.0
 
 
+def test_design_new_latlon_clears_preset_city(tmp_path, monkeypatch, capsys):
+    """CRITICAL-1: explicit --lat/--lon must clear the preset's hard-coded
+    city so fetch_weather follows the given coordinates instead of silently
+    simulating the preset city's climate."""
+    from vfed.design.project import DesignProject
+
+    monkeypatch.chdir(tmp_path)
+    rc = main(["design", "new", "nyc", "--preset", "609",
+               "--lat", "40.71", "--lon", "-74.01", "--year", "2025"])
+    assert rc == 0
+    p = DesignProject.load(tmp_path / "nyc.yaml")
+    assert p.site.city is None
+    assert p.site.lat == pytest.approx(40.71)
+    assert p.site.lon == pytest.approx(-74.01)
+    assert "clearing preset city" in capsys.readouterr().err
+
+
+def test_design_new_latlon_conflicts_city(tmp_path, monkeypatch, capsys):
+    """CRITICAL-1: --city combined with --lat/--lon is ambiguous -> fail fast."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        main(["design", "new", "x", "--preset", "609",
+              "--city", "Shanghai", "--lat", "40.71"])
+    assert exc.value.code == 1
+    assert "cannot be combined" in capsys.readouterr().err
+
+
 # ---------------------------------------------------------------------------
 # 7.2  evaluate
 # ---------------------------------------------------------------------------

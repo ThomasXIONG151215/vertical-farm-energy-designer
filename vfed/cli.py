@@ -241,6 +241,30 @@ def _cmd_design_new(args):
                 f"lat/lon may need manual override.",
                 file=sys.stderr,
             )
+    latlon_given = args.lat is not None or args.lon is not None
+    if latlon_given:
+        # CRITICAL-1 fix: preset_default/preset_609 hard-code site.city
+        # ("Shanghai") so the bundled offline weather file is used on first
+        # run.  fetch_weather() gives the city file priority over lat/lon, so
+        # leaving city in place silently simulates the preset's city for ANY
+        # user-supplied coordinates.  An explicit --lat/--lon must therefore
+        # clear city (and conflict with --city).
+        if args.city is not None:
+            print(
+                "[ERROR] --city cannot be combined with --lat/--lon; "
+                "use a single location source.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if preset.site.city is not None:
+            print(
+                f"[WARN] clearing preset city='{preset.site.city}'; "
+                "weather will follow the given lat/lon instead. "
+                "Remember tz_hours still uses the preset value "
+                f"({preset.site.tz_hours:+.1f} h) unless edited.",
+                file=sys.stderr,
+            )
+            preset.site.city = None
     if args.lat is not None:
         preset.site.lat = args.lat
     if args.lon is not None:
