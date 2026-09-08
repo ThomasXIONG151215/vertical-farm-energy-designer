@@ -22,3 +22,6 @@ node_modules/
 
 # Cached weather (regeneratable via fetch_weather)
 weather_cache/
+
+# UX persona test sandbox (user-gym)
+user-gym/
