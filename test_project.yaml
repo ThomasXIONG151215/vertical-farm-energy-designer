@@ -106,7 +106,7 @@ pv:
   beta_voc: -0.0025
   NOCT: 45.0
   eta_inv: 0.97
-  C_pv: 110.0
+  C_pv: 500.0  # legacy 回退单价（货币/kWp，市场锚定默认；本夹具 capital 全 0 不生效）
   degradation: 0.004
   capital:
     mode: direct  # 直接成本 0（测试夹具不计资本）

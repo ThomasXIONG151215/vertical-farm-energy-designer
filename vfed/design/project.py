@@ -23,6 +23,8 @@ import yaml
 
 __all__ = [
     "CapitalCostConfig",
+    "CAPITAL_MODES_BY_COMPONENT",
+    "validate_capital_config",
     "OpexConfig",
     "SiteConfig",
     "EnvelopeConfig",
@@ -68,17 +70,91 @@ HARDWARE_ALIASES = {
 class CapitalCostConfig:
     """Per-component capital cost and depreciation.
 
-    ``mode`` selects how the cost is computed:
-        * ``"direct"`` – use ``cost`` as-is (absolute, same units as project currency).
-        * ``"per_watt"`` – multiply ``rate_per_watt`` by the component's rated power
-          (W for LED/HVAC/DEH, Wp for PV; for battery the unit is kWh).
+    ``mode`` selects how the cost is computed; the pricing basis is part of
+    the mode name (P0-1 unit fix: the legacy ``per_watt`` silently multiplied
+    kWp for PV and kWh for battery, 1000x / unit-class off its name):
+        * ``"direct"``   -- use ``cost`` as-is (absolute, project currency).
+        * ``"per_watt"`` -- ``rate_per_watt`` x rated W    (LED / HVAC / DEH).
+        * ``"per_kwp"``  -- ``rate_per_kwp``  x rated kWp  (PV only).
+        * ``"per_kwh"``  -- ``rate_per_kwh``  x rated kWh  (battery only).
+    Valid modes are component-specific (``CAPITAL_MODES_BY_COMPONENT``) and
+    enforced at load time and at pricing time; ``per_watt`` on pv/battery is
+    rejected with a migration message instead of being silently re-interpreted.
     ``depreciation_years`` controls the CRF term in LCOE.
     """
 
     mode: str = "direct"
     cost: float = 0.0
-    rate_per_watt: float = 1.0
+    rate_per_watt: float = 1.0  # currency per rated W (LED/HVAC/DEH)
+    rate_per_kwp: Optional[float] = None  # currency per rated kWp (PV only)
+    rate_per_kwh: Optional[float] = None  # currency per rated kWh (battery only)
     depreciation_years: float = 15.0
+
+
+# P0-1: pricing basis is part of the mode name.  per_watt multiplies rated W
+# (LED/HVAC/DEH); per_kwp multiplies rated kWp (PV only); per_kwh multiplies
+# rated kWh (battery only).  A mode that does not match the component's
+# pricing basis is rejected (fail-fast) rather than silently mis-multiplied.
+CAPITAL_MODES_BY_COMPONENT = {
+    "led": {"direct", "per_watt"},
+    "hvac": {"direct", "per_watt"},
+    "deh": {"direct", "per_watt"},
+    "pv": {"direct", "per_kwp"},
+    "battery": {"direct", "per_kwh"},
+    "equipment": {"direct", "per_watt"},
+    "envelope": {"direct", "per_watt"},
+    "pump": {"direct", "per_watt"},
+}
+
+
+def validate_capital_config(cfg: CapitalCostConfig, component: str, yaml_path: str = None) -> None:
+    """P0-1: capital mode must match the component's pricing basis.
+
+    Raises ``ValueError`` with migration instructions for the legacy
+    pv/battery ``per_watt`` spelling (which the pre-P0-1 code silently
+    multiplied by kWp / kWh).  Called from ``DesignProject.from_dict`` at
+    load time and from ``sweep._resolve_capital`` at pricing time
+    (defense in depth for programmatic constructions).
+    """
+    where = f"{yaml_path}.capital" if yaml_path else f"{component}.capital"
+    allowed = CAPITAL_MODES_BY_COMPONENT.get(component)
+    if allowed is None:
+        raise ValueError(
+            f"Unknown capital component '{component}'. "
+            f"Known: {sorted(CAPITAL_MODES_BY_COMPONENT)}"
+        )
+    if cfg.mode not in allowed:
+        if component == "pv" and cfg.mode == "per_watt":
+            raise ValueError(
+                f"{where}: mode 'per_watt' is not valid for PV (P0-1). The "
+                f"pre-P0-1 code silently multiplied this rate by kWp -- 1000x "
+                f"off the field name (a 46.5 kWp array at 3.5/kWp priced as "
+                f"162 instead of 162,000). PV is priced per kWp: use "
+                f"mode: per_kwp with rate_per_kwp in currency/kWp "
+                f"(3.5 currency/W equals rate_per_kwp: 3500)."
+            )
+        if component == "battery" and cfg.mode == "per_watt":
+            raise ValueError(
+                f"{where}: mode 'per_watt' is not valid for battery (P0-1). "
+                f"Storage is priced per kWh, not per watt (the pre-P0-1 code "
+                f"silently multiplied this rate by kWh). Use mode: per_kwh "
+                f"with rate_per_kwh in currency/kWh -- the same number as "
+                f"before (rate_per_watt: 500 becomes rate_per_kwh: 500)."
+            )
+        raise ValueError(
+            f"{where}: mode '{cfg.mode}' is not valid for '{component}'. "
+            f"Allowed: {sorted(allowed)}. Pricing bases: per_watt = rated W "
+            f"(LED/HVAC/DEH), per_kwp = rated kWp (PV), per_kwh = rated kWh "
+            f"(battery)."
+        )
+    if cfg.mode == "per_kwp" and cfg.rate_per_kwp is None:
+        raise ValueError(
+            f"{where}: mode 'per_kwp' requires rate_per_kwp " f"(currency/kWp) to be set."
+        )
+    if cfg.mode == "per_kwh" and cfg.rate_per_kwh is None:
+        raise ValueError(
+            f"{where}: mode 'per_kwh' requires rate_per_kwh " f"(currency/kWh) to be set."
+        )
 
 
 @dataclass
@@ -314,7 +390,11 @@ class PVConfig:
     NOCT: float = 45.0  # 标称工作电池温度 (°C)
     eta_inv: float = 0.97  # 逆变器效率 (−)
     eta_system: float = 0.95  # 系统综合折减 (积灰/直流线损/失配, −); P6-7
-    C_pv: float = 110.0  # 光伏组件单价 (项目货币/kWp = 0.11 货币/Wp)——是单价不是容量!
+    C_pv: float = 500.0  # 光伏系统单价 (项目货币/kWp)——是单价不是容量!
+    #   P0-1: 旧默认 110 低于市场 4-8 倍, 已提到市场区间: 中国工商业分布式
+    #   2025 组件+安装 ≈ 3-3.5 RMB/W ≈ 3000-3500 RMB/kWp ≈ 420-490 USD/kWp
+    #   (按 7.2 汇率), 取整 500 (USD 锚定; 其他货币项目请显式覆盖)。
+    #   仅作 capital 块缺省时的 legacy 回退计价 (sweep._total_capital)。
     degradation: float = 0.004  # 年衰减率 (1/年, 0.4 %/年)
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
@@ -467,6 +547,13 @@ class DesignProject:
                     )
             return filtered
 
+        def _check_capital(cfg_dict, component):
+            """P0-1: validate a section's nested ``capital`` block against the
+            component's pricing basis (fail-fast at load time)."""
+            cap = cfg_dict.get("capital")
+            if cap is not None:
+                validate_capital_config(cap, component, yaml_path=component)
+
         def _tariff(d: dict) -> TariffConfig:
             # backward compat: old peak/normal/valley → hourly_prices
             if "hourly_prices" in d:
@@ -577,6 +664,7 @@ class DesignProject:
             yaml_path="deh",
             has_nested_capital=True,
         )
+        _check_capital(deh_cfg, "deh")  # P0-1
         sp_cfg = sub(SetpointConfig, d.get("setpoints", {}), yaml_path="setpoints")
         _require_number(
             ["T_light", "T_dark", "RH", "co2_ppm", "crop_cycle_days"], sp_cfg, "setpoints"
@@ -609,6 +697,7 @@ class DesignProject:
         # ~1.75x the datasheet-consistent relative value. Reject out-of-band
         # values at load time (fail-fast).
         pv_cfg = sub(PVConfig, d.get("pv", {}), yaml_path="pv", has_nested_capital=True)
+        _check_capital(pv_cfg, "pv")  # P0-1: reject per_watt on PV at load
         _pv_alpha = pv_cfg.get("alpha_sc")
         if _pv_alpha is not None and not (0.0 < _pv_alpha < 0.01):
             raise ValueError(f"pv.alpha_sc must be in (0, 0.01) /K (relative), got {_pv_alpha}")
@@ -627,6 +716,7 @@ class DesignProject:
             yaml_path="hvac",
             has_nested_capital=True,
         )
+        _check_capital(hvac_cfg, "hvac")  # P0-1
         _require_nonnegative(
             [
                 "cop_value",
@@ -771,6 +861,7 @@ class DesignProject:
 
         # ── LED guards (P5-6 / P5-7) ──
         led_cfg = sub(LEDConfig, d.get("led", {}), yaml_path="led", has_nested_capital=True)
+        _check_capital(led_cfg, "led")  # P0-1
         _require_number(
             [
                 "power_w",
@@ -882,6 +973,25 @@ class DesignProject:
         site_cfg = sub(SiteConfig, d.get("site", {}), yaml_path="site")
         _require_number(["lat", "lon", "tz_hours", "tilt", "azimuth", "year"], site_cfg, "site")
 
+        # P0-1: battery + top-level capital blocks -- validate the pricing
+        # basis before constructing the project (fail-fast, YAML paths).
+        battery_cfg = sub(
+            BatteryConfig, d.get("battery", {}), yaml_path="battery", has_nested_capital=True
+        )
+        _check_capital(battery_cfg, "battery")
+        _equipment_cap = CapitalCostConfig(
+            **sub(CapitalCostConfig, d.get("equipment_capital", {}), yaml_path="equipment_capital")
+        )
+        validate_capital_config(_equipment_cap, "equipment", yaml_path="equipment_capital")
+        _envelope_cap = CapitalCostConfig(
+            **sub(CapitalCostConfig, d.get("envelope_capital", {}), yaml_path="envelope_capital")
+        )
+        validate_capital_config(_envelope_cap, "envelope", yaml_path="envelope_capital")
+        _pump_cap = CapitalCostConfig(
+            **sub(CapitalCostConfig, d.get("pump_capital", {}), yaml_path="pump_capital")
+        )
+        validate_capital_config(_pump_cap, "pump", yaml_path="pump_capital")
+
         return cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**site_cfg),
@@ -895,30 +1005,13 @@ class DesignProject:
             setpoints=SetpointConfig(**sp_cfg),
             growth=VanHentenConfig(**sub(VanHentenConfig, d.get("growth", {}), yaml_path="growth")),
             pv=PVConfig(**pv_cfg),
-            battery=BatteryConfig(
-                **sub(
-                    BatteryConfig,
-                    d.get("battery", {}),
-                    yaml_path="battery",
-                    has_nested_capital=True,
-                )
-            ),
+            battery=BatteryConfig(**battery_cfg),
             tariff=_tariff(d.get("tariff", {})),
             space=DesignSpace(**space_cfg),
             equipment_power_w=d.get("equipment_power_w", 0.0),
-            equipment_capital=CapitalCostConfig(
-                **sub(
-                    CapitalCostConfig, d.get("equipment_capital", {}), yaml_path="equipment_capital"
-                )
-            ),
-            envelope_capital=CapitalCostConfig(
-                **sub(
-                    CapitalCostConfig, d.get("envelope_capital", {}), yaml_path="envelope_capital"
-                )
-            ),
-            pump_capital=CapitalCostConfig(
-                **sub(CapitalCostConfig, d.get("pump_capital", {}), yaml_path="pump_capital")
-            ),
+            equipment_capital=_equipment_cap,
+            envelope_capital=_envelope_cap,
+            pump_capital=_pump_cap,
             opex=OpexConfig(**sub(OpexConfig, d.get("opex", {}), yaml_path="opex")),
             interest_rate=d.get("interest_rate", 0.06),
             currency=d.get("currency", "USD"),

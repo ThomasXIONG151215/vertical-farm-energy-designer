@@ -39,7 +39,10 @@ class PVSystem:
     # module mismatch (~1-2 %).  Self-shading neglected (PFAL roof arrays are
     # laid flat).  Applied AFTER eta_inv: total derate = 0.97*0.95 = 0.9215.
     eta_system: float = 0.95
-    C_pv: float = 110.0  # $/kWp
+    # P0-1: market-anchored default (was 110, 4-8x below market).  China C&I
+    # distributed PV 2025 (module + install) ~= 3-3.5 RMB/W ~= 3000-3500
+    # RMB/kWp ~= 420-490 USD/kWp at 7.2; 500 = rounded mid-band, USD-anchored.
+    C_pv: float = 500.0  # currency/kWp (legacy fallback when pv.capital absent)
     degradation: float = 0.004  # per year
 
     def cell_temperature(self, G: np.ndarray, T_amb: np.ndarray) -> np.ndarray:

@@ -249,3 +249,55 @@ def test_validate_bad_key_e001(tmp_path, capsys):
     rc = main(["validate", str(bad)])
     assert rc == 1
     assert "E001" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# 7.6  Capital unit-price self-check output (P0-1)
+# ---------------------------------------------------------------------------
+def test_unit_price_line_format(capsys):
+    """The self-check line shows the raw division (capital / rating = unit
+    price) so the pricing basis can be verified by hand."""
+    from vfed.cli import _print_unit_price
+
+    _print_unit_price(
+        "  ", "PV unit cost", 162750.0, 46.5, "kWp", "RMB", extra=" (3.50 RMB/Wp)"
+    )
+    out = capsys.readouterr().out
+    assert "162750 RMB / 46.5 kWp" in out
+    assert "3500.00 RMB/kWp" in out
+    assert "(3.50 RMB/Wp)" in out
+
+
+def test_unit_price_line_skips_zero_capital(capsys):
+    from vfed.cli import _print_unit_price
+
+    _print_unit_price("  ", "PV unit cost", 0.0, 46.5, "kWp", "RMB")
+    assert capsys.readouterr().out == ""
+
+
+def test_unit_price_line_skips_zero_rating(capsys):
+    from vfed.cli import _print_unit_price
+
+    _print_unit_price("  ", "PV unit cost", 50000.0, 0.0, "kWp", "RMB")
+    assert capsys.readouterr().out == ""
+
+
+def test_capital_unit_check_prints_pv_and_battery_lines(capsys):
+    """A project priced per_kwp / per_kwh prints hand-checkable unit lines
+    (pure config arithmetic - no weather or engine run needed)."""
+    from vfed.cli import _print_capital_unit_check
+    from vfed.design.project import DesignProject
+
+    p = DesignProject.from_dict(
+        {
+            "pv": {"capital": {"mode": "per_kwp", "rate_per_kwp": 3500}},
+            "battery": {"capital": {"mode": "per_kwh", "rate_per_kwh": 500}},
+            "pv_area_m2": 200.0,  # 200 / 4.3 = 46.5 kWp
+            "battery_kwh": 40.0,
+        }
+    )
+    _print_capital_unit_check(p, "RMB")
+    out = capsys.readouterr().out
+    assert "3500.00 RMB/kWp" in out
+    assert "(3.50 RMB/Wp)" in out
+    assert "500.00 RMB/kWh" in out

@@ -42,6 +42,45 @@ def _write_results_csv(df, path: str) -> int:
     return 0
 
 
+def _print_unit_price(
+    indent: str,
+    label: str,
+    capital: float,
+    rating: float,
+    rating_unit: str,
+    currency: str,
+    extra: str = "",
+) -> None:
+    """P0-1 self-check line: 'unit cost = capital / rating' so the pricing
+    basis can be verified by hand.  Before the P0-1 fix a PV ``rate_per_watt``
+    of 3.5 silently meant 3.5/kWp - a 46.5 kWp array priced at 162 instead
+    of 162,000; this line makes such a mismatch visible at a glance.
+    Skipped silently when the component has no capital or no rating."""
+    if capital > 0 and rating > 0:
+        print(
+            f"{indent}{label:<16s} = {capital:.0f} {currency} / {rating:.1f} {rating_unit}"
+            f" = {capital / rating:.2f} {currency}/{rating_unit}{extra}"
+        )
+
+
+def _print_capital_unit_check(project, currency: str) -> None:
+    """P0-1: unit-price self-check for every capitalised component
+    (evaluate path - *project* has been through ``engine.run``, so the
+    auto-sized HVAC/DEH nameplates are current)."""
+    from .design.sweep import _derived_led_power, _total_capital
+
+    cap = _total_capital(project, float(project.pv_area_m2), float(project.battery_kwh))
+    pv_kwp = float(project.pv_area_m2) / project.pv.area_to_power
+    _pv_extra = f" ({cap['PV'] / pv_kwp / 1000:.2f} {currency}/Wp)" if pv_kwp > 0 else ""
+    _print_unit_price("  ", "PV unit cost", cap["PV"], pv_kwp, "kWp", currency, extra=_pv_extra)
+    _print_unit_price(
+        "  ", "Battery unit", cap["Battery"], float(project.battery_kwh), "kWh", currency
+    )
+    _print_unit_price("  ", "LED unit cost", cap["LED"], _derived_led_power(project), "W", currency)
+    _print_unit_price("  ", "HVAC unit cost", cap["HVAC"], project.hvac.P_rated_w, "W", currency)
+    _print_unit_price("  ", "DEH unit cost", cap["DEH"], project.deh.P_ref_w, "W", currency)
+
+
 # F3: per-section annotations for the generated project YAML.  The data itself
 # is always the canonical ``DesignProject.to_dict()`` (schema cannot drift);
 # these comments only annotate sections with units / guidance for prosumers.
@@ -131,13 +170,17 @@ _YAML_SECTION_COMMENTS = {
         "# pv: solar array\n"
         "#   area_to_power - m2 per kWp (typical 4.3)\n"
         "#   eta_pv / degradation - panel efficiency / annual loss (fraction)\n"
-        "#   C_pv - legacy unit price ($/kWp)\n"
+        "#   C_pv - legacy fallback unit price (currency/kWp, default 500,\n"
+        "#          market-anchored; used when no pv.capital block is given)\n"
+        "#   capital - use mode 'per_kwp' with rate_per_kwp (currency/kWp):\n"
+        "#     e.g. rate_per_kwp: 3500 (RMB) = 3.5 RMB/W (China C&I 2025)\n"
         "# ------------------------------------------------------------------\n"
     ),
     "battery": (
         "# ------------------------------------------------------------------\n"
         "# battery: storage\n"
         "#   c_energy - legacy unit price (currency/kWh)\n"
+        "#   capital - use mode 'per_kwh' with rate_per_kwh (currency/kWh)\n"
         "#   c_rate, eta_ch/eta_dis, soc_min/soc_max, cycle_life\n"
         "# ------------------------------------------------------------------\n"
     ),
@@ -163,8 +206,11 @@ _YAML_SECTION_COMMENTS = {
     ),
     "equipment_capital": (
         "# ------------------------------------------------------------------\n"
-        "# capital costs (mode: direct = total cost; per_watt = rate x rated W;\n"
-        "# cost, rate_per_watt, depreciation_years)\n"
+        "# capital costs.  mode: direct = total cost;\n"
+        "#   per_watt = rate_per_watt x rated W (LED/HVAC/DEH);\n"
+        "#   per_kwp  = rate_per_kwp  x rated kWp (PV only);\n"
+        "#   per_kwh  = rate_per_kwh  x rated kWh (battery only);\n"
+        "# plus cost / depreciation_years as applicable.\n"
         "# NOTE: if ALL capital costs are 0, LCOE covers OPEX only.\n"
         "# ------------------------------------------------------------------\n"
     ),
@@ -408,10 +454,14 @@ def _cmd_evaluate(args):
         print(f"  Capital total    = {capital_total:.0f} {getattr(project, 'currency', 'USD')}")
         if capital_total <= 0:
             print(
-                "  [WARNING] all capital costs are zero — the LCOE above covers "
-                "OPEX only, not the full facility cost. Set capital.cost / "
-                "capital.rate_per_watt on each component for a meaningful LCOE."
+                "  [WARNING] all capital costs are zero - the LCOE above covers "
+                "OPEX only, not the full facility cost. Set capital costs per "
+                "component (mode per_watt x rated W for LED/HVAC/DEH, per_kwp x "
+                "kWp for PV, per_kwh x kWh for battery) for a meaningful LCOE."
             )
+        else:
+            # P0-1: unit-price self-check lines (capital / rating per component)
+            _print_capital_unit_check(project, getattr(project, "currency", "USD"))
     if project.pv_area_m2 <= 0 and project.battery_kwh <= 0:
         print("  Energy system    = disabled (pv_area_m2=0, battery_kwh=0)")
     pv_gen = summary.get("pv_generation_kwh", 0)
@@ -468,6 +518,21 @@ def _cmd_sweep(args):
         print(f"  kWh/kg (fresh, {dm * 100:.0f}% DM) = {best.get('kwh_per_kg_fresh', 0):.1f}")
         print(f"  Annual load             = {best.get('annual_load_kwh', 0):.0f} kWh/yr")
         print(f"  Biomass (dry)           = {best.get('biomass_kg', 0):.1f} kg")
+        # P0-1: PV / battery unit-price self-check.  PV area and battery kWh
+        # are config-fixed (not swept here), so a re-loaded project gives the
+        # same ratings the sweep priced against.
+        _sp = DesignProject.load(args.project)
+        from .design.sweep import _total_capital as _tc
+
+        _sp_cap = _tc(_sp, float(_sp.pv_area_m2), float(_sp.battery_kwh))
+        _sp_kwp = float(_sp.pv_area_m2) / _sp.pv.area_to_power
+        _sp_extra = f" ({_sp_cap['PV'] / _sp_kwp / 1000:.2f} {currency}/Wp)" if _sp_kwp > 0 else ""
+        _print_unit_price(
+            "  ", "PV unit cost", _sp_cap["PV"], _sp_kwp, "kWp", currency, extra=_sp_extra
+        )
+        _print_unit_price(
+            "  ", "Battery unit", _sp_cap["Battery"], float(_sp.battery_kwh), "kWh", currency
+        )
         if args.out:
             import pandas as pd
 
@@ -496,6 +561,24 @@ def _cmd_sweep(args):
     ct = best.get("capital_total", 0)
     if ct > 0:
         print(f"    Total capital           = {ct:.0f} {currency}")
+        # P0-1: PV / battery unit-price self-check for the best design.  The
+        # row carries capital_pv / pv_area / capital_battery / battery_kwh;
+        # area_to_power comes from the project config (not a sweepable param).
+        _bp = DesignProject.load(args.project)
+        _bp_kwp = float(best.get("pv_area", 0.0)) / _bp.pv.area_to_power
+        _bp_cap_pv = float(best.get("capital_pv", 0.0))
+        _bp_extra = f" ({_bp_cap_pv / _bp_kwp / 1000:.2f} {currency}/Wp)" if _bp_kwp > 0 else ""
+        _print_unit_price(
+            "    ", "PV unit cost", _bp_cap_pv, _bp_kwp, "kWp", currency, extra=_bp_extra
+        )
+        _print_unit_price(
+            "    ",
+            "Battery unit",
+            float(best.get("capital_battery", 0.0)),
+            float(best.get("battery_kwh", 0.0)),
+            "kWh",
+            currency,
+        )
 
     # swept parameter values
     for key, val in best.items():

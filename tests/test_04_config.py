@@ -308,3 +308,137 @@ def test_unknown_objective_raises(project_609):
     p.space.objective = "maximize_happiness"
     with pytest.raises(ValueError, match="Unknown objective"):
         sweep_design(p)
+
+
+# ---------------------------------------------------------------------------
+# 4.4  Capital pricing-basis modes (P0-1: rate_per_watt unit trap)
+# ---------------------------------------------------------------------------
+class TestCapitalUnitModes:
+    """P0-1: the capital mode names the pricing basis -- per_watt x rated W
+    (LED/HVAC/DEH), per_kwp x rated kWp (PV), per_kwh x rated kWh (battery).
+    The legacy pv/battery 'per_watt' spelling silently multiplied kWp/kWh
+    (1000x / unit class off the field name: 46.5 kWp at "3.5/W" priced as
+    162 instead of 162,000) and must fail fast with migration hints."""
+
+    def test_pv_per_watt_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match="not valid for PV"):
+            DesignProject.from_dict(
+                {"pv": {"capital": {"mode": "per_watt", "rate_per_watt": 3.5}}}
+            )
+
+    def test_pv_per_watt_error_teaches_the_conversion(self):
+        with pytest.raises(ValueError, match="rate_per_kwp: 3500"):
+            DesignProject.from_dict(
+                {"pv": {"capital": {"mode": "per_watt", "rate_per_watt": 3.5}}}
+            )
+
+    def test_battery_per_watt_rejected_with_migration_hint(self):
+        with pytest.raises(ValueError, match="not valid for battery"):
+            DesignProject.from_dict(
+                {"battery": {"capital": {"mode": "per_watt", "rate_per_watt": 500}}}
+            )
+
+    def test_battery_migration_keeps_same_number(self):
+        """Battery was priced per kWh all along, so the migration keeps the
+        number: rate_per_watt 500 -> rate_per_kwh 500."""
+        with pytest.raises(ValueError, match="rate_per_kwh: 500"):
+            DesignProject.from_dict(
+                {"battery": {"capital": {"mode": "per_watt", "rate_per_watt": 500}}}
+            )
+
+    def test_pv_per_kwp_without_rate_rejected(self):
+        with pytest.raises(ValueError, match="requires rate_per_kwp"):
+            DesignProject.from_dict({"pv": {"capital": {"mode": "per_kwp"}}})
+
+    def test_battery_per_kwh_without_rate_rejected(self):
+        with pytest.raises(ValueError, match="requires rate_per_kwh"):
+            DesignProject.from_dict({"battery": {"capital": {"mode": "per_kwh"}}})
+
+    def test_led_per_kwp_rejected(self):
+        with pytest.raises(ValueError, match="not valid for 'led'"):
+            DesignProject.from_dict(
+                {"led": {"capital": {"mode": "per_kwp", "rate_per_kwp": 3500}}}
+            )
+
+    def test_equipment_capital_per_kwh_rejected(self):
+        with pytest.raises(ValueError, match="not valid for 'equipment'"):
+            DesignProject.from_dict(
+                {"equipment_capital": {"mode": "per_kwh", "rate_per_kwh": 500}}
+            )
+
+    def test_runtime_guard_catches_programmatic_per_watt_pv(self):
+        """Defense in depth: a programmatically built project (bypassing
+        from_dict) with the stale pv per_watt spelling fails at pricing
+        time, never silently."""
+        from vfed.design.project import CapitalCostConfig
+        from vfed.design.sweep import _resolve_capital
+
+        with pytest.raises(ValueError, match="not valid for PV"):
+            _resolve_capital(
+                CapitalCostConfig(mode="per_watt", rate_per_watt=3.5), 46.5, component="pv"
+            )
+
+
+# ---------------------------------------------------------------------------
+# 4.5  Capital pricing arithmetic (P0-1)
+# ---------------------------------------------------------------------------
+class TestCapitalUnitArithmetic:
+    def test_pv_per_kwp_prices_kwp(self):
+        from vfed.design.sweep import _total_capital
+
+        p = DesignProject.from_dict({"pv": {"capital": {"mode": "per_kwp", "rate_per_kwp": 3500}}})
+        cap = _total_capital(p, 200.0, 0.0)  # 200 m2 / 4.3 m2-per-kWp = 46.5 kWp
+        assert cap["PV"] == pytest.approx(3500.0 * 200.0 / 4.3)
+
+    def test_battery_per_kwh_prices_kwh(self):
+        from vfed.design.sweep import _total_capital
+
+        p = DesignProject.from_dict(
+            {"battery": {"capital": {"mode": "per_kwh", "rate_per_kwh": 500}}}
+        )
+        cap = _total_capital(p, 0.0, 40.0)
+        assert cap["Battery"] == pytest.approx(500.0 * 40.0)
+
+    def test_led_per_watt_unchanged(self):
+        """per_watt keeps its original x-rated-W semantics for LED."""
+        from vfed.design.sweep import _derived_led_power, _total_capital
+
+        p = DesignProject.from_dict(
+            {
+                "led": {
+                    "auto_deduce": True,
+                    "ppfd_target": 400.0,
+                    "covered_area": 45.0,
+                    "efficacy": 2.5,
+                    "capital": {"mode": "per_watt", "rate_per_watt": 2.0},
+                }
+            }
+        )
+        led_w = _derived_led_power(p)  # 400 * 45 / 2.5 = 7200 W
+        cap = _total_capital(p, 0.0, 0.0)
+        assert cap["LED"] == pytest.approx(2.0 * led_w)
+        assert cap["LED"] == pytest.approx(14400.0)
+
+    def test_legacy_pv_fallback_uses_market_c_pv(self):
+        """No pv.capital block -> C_pv x kWp with the market-anchored default
+        (500 currency/kWp; the pre-P0-1 default of 110 was 4-8x below
+        market)."""
+        from vfed.design.sweep import _total_capital
+
+        p = DesignProject()  # all defaults
+        assert p.pv.C_pv == pytest.approx(500.0)
+        cap = _total_capital(p, 43.0, 0.0)  # 43 m2 / 4.3 = 10 kWp
+        assert cap["PV"] == pytest.approx(500.0 * 10.0)
+
+    def test_example_lcoe_full_capital_blocks_use_explicit_units(self):
+        """The official example must price PV per kWp (3500 RMB/kWp = 3.5
+        RMB/W, China C&I 2025) and battery per kWh (500 RMB/kWh)."""
+        import yaml
+
+        root = Path(__file__).resolve().parents[1]
+        with open(root / "example_lcoe_full.yaml", encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh)
+        assert cfg["pv"]["capital"]["mode"] == "per_kwp"
+        assert cfg["pv"]["capital"]["rate_per_kwp"] == pytest.approx(3500.0)
+        assert cfg["battery"]["capital"]["mode"] == "per_kwh"
+        assert cfg["battery"]["capital"]["rate_per_kwh"] == pytest.approx(500.0)

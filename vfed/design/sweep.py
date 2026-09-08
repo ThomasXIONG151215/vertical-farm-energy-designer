@@ -17,7 +17,12 @@ from ..pvbes.pv import PVSystem
 from ..pvbes.battery import BatterySystem
 from ..pvbes.grid import Tariff
 from ..pvbes.energy_system import EnergySystem
-from .project import CapitalCostConfig, DesignProject
+from .project import (
+    CAPITAL_MODES_BY_COMPONENT,
+    CapitalCostConfig,
+    DesignProject,
+    validate_capital_config,
+)
 from .engine import DesignEngine
 
 __all__ = ["sweep_design"]
@@ -68,8 +73,12 @@ _RANGE_ALIASES = {
 # valid values for DesignSpace.objective
 _VALID_OBJECTIVES = {"lcoe", "kwh_per_kg_fresh", "cost_per_kg_fresh"}
 
-# valid values for CapitalCostConfig.mode (P5-11)
-_VALID_CAPITAL_MODES = {"direct", "per_watt"}
+# valid values for CapitalCostConfig.mode, per component (P0-1 / P5-11).
+# The mode name carries the pricing basis: per_watt = rated W (LED/HVAC/DEH),
+# per_kwp = rated kWp (PV), per_kwh = rated kWh (battery).  The pre-P0-1
+# 'per_watt' silently multiplied kWp for PV and kWh for battery (1000x /
+# unit-class off the field name) -- those spellings now fail fast.
+_VALID_CAPITAL_MODES = set().union(*CAPITAL_MODES_BY_COMPONENT.values())
 
 
 # ---------------------------------------------------------------------------
@@ -83,50 +92,75 @@ def _derived_led_power(project: DesignProject) -> float:
 
 
 def _resolve_capital(
-    cfg: CapitalCostConfig, rated_value: float, legacy_fallback: float = 0.0
+    cfg: CapitalCostConfig,
+    rated_value: float,
+    legacy_fallback: float = 0.0,
+    component: str = "equipment",
 ) -> float:
     """Resolve a single component's capital cost.
 
     Args:
         cfg: CapitalCostConfig from the project.
-        rated_value: rated value (W for LED/HVAC/DEH; Wp for PV; kWh for battery).
-        legacy_fallback: cost from old config field (C_pv, c_energy) if capital is default.
+        rated_value: rated value in the component's pricing basis
+            (W for LED/HVAC/DEH; kWp for PV; kWh for battery).
+        legacy_fallback: cost from old config field (C_pv, c_energy) if capital
+            resolves to nothing (mode 'direct' with cost <= 0).
+        component: component key (led/hvac/deh/pv/battery/equipment/envelope/
+            pump).  The mode must match the component's pricing basis
+            (``CAPITAL_MODES_BY_COMPONENT``, P0-1) -- 'per_watt' on pv/battery
+            is rejected with a migration message instead of being silently
+            multiplied by kWp / kWh as before.
 
     Returns:
         capital cost in project currency.
     """
-    if cfg.mode not in _VALID_CAPITAL_MODES:
-        raise ValueError(
-            f"Unknown capital.mode '{cfg.mode}'. " f"Valid: {sorted(_VALID_CAPITAL_MODES)}"
-        )
+    # P0-1: defense in depth -- from_dict validates at load time; this catches
+    # programmatically constructed DesignProjects with a stale spelling.
+    validate_capital_config(cfg, component)
     if cfg.mode == "per_watt":
         return cfg.rate_per_watt * rated_value
-    if cfg.mode == "direct" and cfg.cost > 0:
+    if cfg.mode == "per_kwp":
+        return cfg.rate_per_kwp * rated_value
+    if cfg.mode == "per_kwh":
+        return cfg.rate_per_kwh * rated_value
+    # mode == "direct"
+    if cfg.cost > 0:
         return cfg.cost
     return legacy_fallback
 
 
 def _total_capital(project: DesignProject, pv_area: float, battery_kwh: float) -> Dict[str, float]:
-    """Compute per-component capital breakdown, including legacy fallbacks."""
+    """Compute per-component capital breakdown, including legacy fallbacks.
+
+    P0-1: PV is priced per kWp (``pv.capital`` mode ``per_kwp`` or the legacy
+    ``C_pv`` fallback), battery per kWh (mode ``per_kwh`` or ``c_energy``
+    fallback), electrical equipment per rated W (mode ``per_watt``).
+    """
     led_w = _derived_led_power(project)
     # PV peak kWp = pv_area (m²) / area_to_power (m²/kWp)
     pv_kwp = pv_area / project.pv.area_to_power
 
     breakdown = {
-        "LED": _resolve_capital(project.led.capital, led_w),
-        "HVAC": _resolve_capital(project.hvac.capital, project.hvac.P_rated_w),
-        "DEH": _resolve_capital(project.deh.capital, project.deh.P_ref_w),
+        "LED": _resolve_capital(project.led.capital, led_w, component="led"),
+        "HVAC": _resolve_capital(project.hvac.capital, project.hvac.P_rated_w, component="hvac"),
+        "DEH": _resolve_capital(project.deh.capital, project.deh.P_ref_w, component="deh"),
         "PV": _resolve_capital(
-            project.pv.capital, pv_kwp, legacy_fallback=project.pv.C_pv * pv_kwp
+            project.pv.capital,
+            pv_kwp,
+            legacy_fallback=project.pv.C_pv * pv_kwp,
+            component="pv",
         ),
         "Battery": _resolve_capital(
             project.battery.capital,
             battery_kwh,
             legacy_fallback=project.battery.c_energy * battery_kwh,
+            component="battery",
         ),
-        "Equipment": _resolve_capital(project.equipment_capital, 0),
-        "Envelope": _resolve_capital(project.envelope_capital, 0),
-        "Pump": _resolve_capital(project.pump_capital, 0),  # P5-1: pump capital was never counted
+        "Equipment": _resolve_capital(project.equipment_capital, 0, component="equipment"),
+        "Envelope": _resolve_capital(project.envelope_capital, 0, component="envelope"),
+        "Pump": _resolve_capital(
+            project.pump_capital, 0, component="pump"
+        ),  # P5-1: pump capital was never counted
     }
     breakdown["total"] = sum(breakdown.values())
     return breakdown

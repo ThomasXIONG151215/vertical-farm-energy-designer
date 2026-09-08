@@ -92,10 +92,14 @@ pv:
   beta_voc: -0.0025
   NOCT: 45.0
   eta_inv: 0.97
-  C_pv: 110.0
+  # 本示例无 pv.capital 块 → 走 legacy 回退计价 C_pv × kWp（500 货币/kWp ≈ 市场中值；
+  # 如需显式控制请加 capital: {mode: per_kwp, rate_per_kwp: <currency/kWp>}）
+  C_pv: 500.0
   degradation: 0.004
 # 电池系统（c_energy 单位成本 元/kWh；cycle_life 全循环寿命）
 battery:
+  # 同理无 battery.capital 块 → 回退 c_energy × kWh（220 货币/kWh）；
+  # 显式控制请加 capital: {mode: per_kwh, rate_per_kwh: <currency/kWh>}
   c_energy: 220.0
   c_rate: 1.0
   eta_ch: 0.91

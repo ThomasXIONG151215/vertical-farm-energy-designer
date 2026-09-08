@@ -37,6 +37,7 @@ hvac:
   shr_BF: 0.15
   tau_q: 90.0
   tau_m: 60.0
+  # HVAC 按额定电功率 W 计价（per_watt × W，1.5 货币/W）
   capital:
     mode: per_watt
     cost: 0.0
@@ -78,6 +79,7 @@ led:
   efficacy: 2.5
   ppfd_target: 400.0
   covered_area: 45.0
+  # LED 按额定电功率 W 计价（per_watt × W，2.0 货币/W）
   capital:
     mode: per_watt
     cost: 0.0
@@ -107,12 +109,15 @@ pv:
   beta_voc: -0.0025
   NOCT: 45.0
   eta_inv: 0.97
-  C_pv: 110.0
+  # C_pv 为 capital 块缺省时的 legacy 回退单价（项目货币/kWp；500 ≈ 市场中值）
+  C_pv: 500.0
   degradation: 0.004
+  # 光伏按 kWp 计价（P0-1）：rate_per_kwp 3500 RMB/kWp = 3.5 RMB/W
+  # （中国市场 2025 工商业分布式组件+安装约 3-3.5 元/W）
   capital:
-    mode: per_watt
+    mode: per_kwp
     cost: 0.0
-    rate_per_watt: 3.5
+    rate_per_kwp: 3500
     depreciation_years: 25
 # 电池系统（c_energy 单位成本 元/kWh；cycle_life 全循环寿命）
 battery:
@@ -123,10 +128,11 @@ battery:
   soc_min: 0.1
   soc_max: 0.9
   cycle_life: 4000
+  # 电池按 kWh 计价（P0-1）：500 RMB/kWh ≈ 2025 LFP 工商业储能系统中值
   capital:
-    mode: per_watt
+    mode: per_kwh
     cost: 0.0
-    rate_per_watt: 500
+    rate_per_kwh: 500
     depreciation_years: 10
 # 固定装机规模：`vfed evaluate` 按此运行 PV-电池-电网系统（0 则跳过）
 pv_area_m2: 80.0
