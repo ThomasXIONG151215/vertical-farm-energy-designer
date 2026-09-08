@@ -950,10 +950,25 @@ class DesignEngine:
                 logging.warning(f"Energy system simulation failed: {e}")
                 raise RuntimeError(f"Energy system evaluation failed: {e}") from e
         else:
-            # P4-2 (MAJOR): grid-only economics (no PV, no battery) — aligned
-            # with sweep.py's grid-only row (LCOE = annualized capital + OPEX
-            # over the annual building load).
+            # P0-2 (MAJOR): grid-only economics (no PV, no battery) — the full
+            # building load is served from the grid, so it is priced at the
+            # project tariff exactly like sweep.py's [0, 0] row (EnergySystem
+            # with zero PV/battery yields grid_import == load, grid_export == 0).
+            # Previously this path silently recorded annual_grid_cost_net = 0
+            # while grid_import_kwh still reported the full load, and LCOE
+            # excluded electricity cost entirely — inconsistent with both the
+            # enabled path and sweep.
+            from ..pvbes.grid import Tariff
             from .sweep import _total_capital, _annualized_capital, _compute_lcoe
+
+            tariff = Tariff(
+                hourly_prices=p.tariff.hourly_prices,
+                export_price=p.tariff.export_price,
+            )
+            annual_load = float(np.sum(load_kw))
+            # grid_import == load, grid_export == 0 (no PV, no battery)
+            tcost = tariff.annual_cost(load_kw, np.zeros_like(load_kw), hours)
+            net_grid_cost = tcost["net_grid_cost"]
 
             cap = _total_capital(p, 0.0, 0.0)
             annual_cap = _annualized_capital(p, cap)
@@ -963,18 +978,18 @@ class DesignEngine:
                 + p.opex.labor_cost_per_year
                 + p.opex.misc_opex_per_year
             )
-            lcoe = _compute_lcoe(annual_cap, annual_om, 0.0, float(np.sum(load_kw)))
-            summary["total_electricity_cost"] = 0.0
+            lcoe = _compute_lcoe(annual_cap, annual_om, net_grid_cost, annual_load)
+            summary["total_electricity_cost"] = round(float(net_grid_cost), 2)
             summary["lcoe"] = round(float(lcoe), 4)
             summary["specific_cost_per_kg"] = round(
-                (annual_cap + annual_om) / max(annual_harvest_fw_kg, 1e-6),
+                (annual_cap + annual_om + net_grid_cost) / max(annual_harvest_fw_kg, 1e-6),
                 4,
             )
             summary["capital_total"] = round(float(cap["total"]), 2)
             summary["annual_om"] = round(float(annual_om), 2)
-            summary["annual_grid_cost_net"] = 0.0
+            summary["annual_grid_cost_net"] = round(float(net_grid_cost), 2)
             summary["pv_generation_kwh"] = 0.0
-            summary["grid_import_kwh"] = round(float(np.sum(load_kw)), 2)
+            summary["grid_import_kwh"] = round(annual_load, 2)
             summary["grid_export_kwh"] = 0.0
             summary["battery_cycles"] = 0.0
             summary["pv_self_consumed_kwh"] = 0.0

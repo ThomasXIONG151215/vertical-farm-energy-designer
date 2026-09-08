@@ -234,3 +234,87 @@ class TestSweepRegression:
         for i in range(len(lcoe_values) - 1):
             assert lcoe_values[i] <= lcoe_values[i + 1], \
                 f"not sorted at index {i}: {lcoe_values[i]} > {lcoe_values[i + 1]}"
+
+
+class TestGridOnlyEconomics:
+    """P0-2: with the energy system disabled (pv=0, bat=0) electricity must
+    still be priced as grid_import_kwh x tariff — never silently zeroed —
+    and the LCOE definition must agree between evaluate and sweep."""
+
+    def test_evaluate_no_pv_grid_cost_priced(self, project_609, sim_609):
+        """preset_609 (pv=0, bat=0): annual_grid_cost_net == sum(load x hourly price)."""
+        s = sim_609.summary
+        assert s["grid_import_kwh"] > 0
+        assert s["annual_grid_cost_net"] > 0, \
+            "grid cost silently zeroed despite non-zero grid_import_kwh"
+        assert s["total_electricity_cost"] == s["annual_grid_cost_net"]
+
+        ts = sim_609["timeseries"]
+        load = ts["load_kw"].to_numpy()
+        hours = ts["hour_of_day"].to_numpy().astype(int)
+        prices = np.asarray(project_609.tariff.hourly_prices)
+        expected = float(np.sum(load * prices[hours]))
+        assert abs(s["annual_grid_cost_net"] - expected) < 0.05
+
+    def test_evaluate_no_pv_lcoe_includes_grid_cost(self, project_609, sim_609):
+        """LCOE without PV must include electricity cost (same formula as sweep)."""
+        from vfed.design.sweep import _annualized_capital, _compute_lcoe, _total_capital
+
+        s = sim_609.summary
+        p = project_609
+        ts = sim_609["timeseries"]
+        prices = np.asarray(p.tariff.hourly_prices)
+        grid_cost = float(np.sum(
+            ts["load_kw"].to_numpy() * prices[ts["hour_of_day"].to_numpy().astype(int)]
+        ))
+
+        cap = _total_capital(p, 0.0, 0.0)
+        annual_cap = _annualized_capital(p, cap)
+        annual_om = (
+            p.opex.maintenance_pct * cap["total"]
+            + p.opex.water_cost_per_m3 * s.get("annual_water_m3", 0.0)
+            + p.opex.labor_cost_per_year
+            + p.opex.misc_opex_per_year
+        )
+        expected = _compute_lcoe(annual_cap, annual_om, grid_cost, s["annual_energy_kwh"])
+        assert abs(s["lcoe"] - expected) < 5e-4
+        # electricity cost is a visible share: LCOE strictly above the
+        # electricity-free floor (annualised capital + OPEX only)
+        assert s["lcoe"] > (annual_cap + annual_om) / s["annual_energy_kwh"] + 1e-9
+
+    def test_evaluate_and_sweep_zero_row_lcoe_agree(self, project_609):
+        """evaluate (no PV) and the sweep (0,0) row must share one LCOE definition."""
+        from vfed.design.engine import DesignEngine
+        from vfed.design.sweep import sweep_design
+
+        p = project_609
+        p.space.parameter_ranges = {
+            "pv_area": [0, 100, 100],
+            "battery": [0, 100, 100],
+        }
+        result = sweep_design(p)
+        df = result["results"]
+        zero_row = df[(df["pv_area"] == 0) & (df["battery_kwh"] == 0)].iloc[0]
+
+        sim = DesignEngine(cache_dir="weather_cache").run(p)
+        s = sim.summary
+        assert abs(zero_row["annual_grid_cost"] - s["annual_grid_cost_net"]) < 0.05
+        assert abs(zero_row["lcoe"] - s["lcoe"]) < 1e-3
+        assert abs(zero_row["cost_per_kg_fresh"] - s["specific_cost_per_kg"]) < 1e-2
+
+    def test_single_point_sweep_no_pv_grid_cost_priced(self, project_609):
+        """Single-point sweep (empty ranges) of a no-PV project prices grid cost too,
+        and agrees with a same-state evaluate run (P0-2 cross-path consistency)."""
+        from vfed.design.engine import DesignEngine
+        from vfed.design.sweep import sweep_design
+
+        p = project_609
+        p.space.parameter_ranges = {}
+        row = sweep_design(p)["best"]
+        assert row["annual_grid_cost"] > 0
+
+        sim = DesignEngine(cache_dir="weather_cache").run(p)
+        s = sim.summary
+        assert s["annual_grid_cost_net"] > 0
+        assert abs(row["annual_grid_cost"] - s["annual_grid_cost_net"]) < 0.05
+        assert abs(row["lcoe"] - s["lcoe"]) < 1e-3

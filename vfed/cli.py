@@ -464,6 +464,15 @@ def _cmd_evaluate(args):
             _print_capital_unit_check(project, getattr(project, "currency", "USD"))
     if project.pv_area_m2 <= 0 and project.battery_kwh <= 0:
         print("  Energy system    = disabled (pv_area_m2=0, battery_kwh=0)")
+        # P0-2: self-evidence that electricity IS priced when the energy
+        # system is disabled (full load = grid import, cost = load x tariff).
+        grid_cost = summary.get("annual_grid_cost_net")
+        if grid_cost is not None:
+            currency = getattr(project, "currency", "USD")
+            print(
+                f"  Grid cost (no PV/battery) = {grid_cost:.2f} {currency}/yr "
+                f"@ tariff (grid_import_kwh x hourly_prices)"
+            )
     pv_gen = summary.get("pv_generation_kwh", 0)
     if pv_gen > 0:
         print(f"  PV generation    = {pv_gen:.0f} kWh/yr")

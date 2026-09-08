@@ -222,7 +222,7 @@ vertical-farm-energy-designer/
 | 免费能源 | `free_energy_kwh` | kWh/年 | PV 自用 + 电池放电 |
 | 电网独立率 | `grid_independence_pct` | % | （1 − 电网购入 ÷ 负荷）× 100；**电网依赖率 = 100 − 该值** |
 
-其余附带输出：`energy_breakdown`（`hvac_pct`/`led_pct`/`deh_pct`/`misc_pct`，分数形式如 0.30=30%）、`monthly`（12 个月聚合）、`timeseries`（逐时列：`load_kw`/`T_z`/`RH_z`/`E_*_Wh` 等）、`typical_daily`（12×24 典型日负荷）、`sizing`（自动选型铭牌值）。仅当项目配置了 `pv`/`battery` 时 `evaluate` 才打印光伏/电网行；否则能系统禁用、`grid_import_kwh=年负荷`、其余为 0。
+其余附带输出：`energy_breakdown`（`hvac_pct`/`led_pct`/`deh_pct`/`misc_pct`，分数形式如 0.30=30%）、`monthly`（12 个月聚合）、`timeseries`（逐时列：`load_kw`/`T_z`/`RH_z`/`E_*_Wh` 等）、`typical_daily`（12×24 典型日负荷）、`sizing`（自动选型铭牌值）。仅当项目配置了 `pv`/`battery` 时 `evaluate` 才打印光伏/电网行。若能源系统禁用（`pv_area_m2=0` 且 `battery_kwh=0`），`grid_import_kwh=年负荷`，电费仍按 `grid_import_kwh × tariff` 计价——计入 `annual_grid_cost_net`、`total_electricity_cost`、`lcoe` 与 `specific_cost_per_kg`，与 sweep 路径的 `(0, 0)` 行口径一致——而光伏/电池相关列（`pv_generation_kwh`、`grid_export_kwh`、`battery_*`、`grid_independence_pct` 等）为 0。
 
 ### sweep 输出（results.csv 列清单）
 

@@ -483,9 +483,10 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
             # pv_area_m2 / battery_kwh instead of silently assuming grid-only
             # (was _total_capital(p, 0, 0) + net_grid=0.0).  Aligns the
             # multi-point row with the single-point engine path (which runs
-            # the energy system at the fixed sizes).  When no PV/battery is
-            # configured, net_grid stays 0.0 to match engine's grid-only
-            # economics (P4-2).
+            # the energy system at the fixed sizes).  P0-2: when no PV/battery
+            # is configured, the full load is still grid import and is priced
+            # at the project tariff — identical to the pvb-path's [0, 0] row
+            # and to engine's grid-only economics.
             A_pv = float(p.pv_area_m2)
             E_bat = float(p.battery_kwh)
             if A_pv > 0.0 or E_bat > 0.0:
@@ -500,7 +501,15 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
                 net_grid = m["annual_grid_cost"]
             else:
                 m = None
-                net_grid = 0.0
+                tariff = Tariff(
+                    hourly_prices=list(project.tariff.hourly_prices),
+                    export_price=project.tariff.export_price,
+                )
+                net_grid = tariff.annual_cost(
+                    sim["load"],
+                    np.zeros_like(sim["load"]),
+                    np.asarray(sim["weather"]["hour"], dtype=int),
+                )["net_grid_cost"]
             cap = _total_capital(p, A_pv, E_bat)
             annual_cap = _annualized_capital(p, cap, (m or {}).get("battery_life_years"))
             annual_water_m3 = float(sim.summary.get("annual_water_m3", 0.0))
