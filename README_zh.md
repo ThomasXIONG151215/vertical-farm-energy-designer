@@ -181,7 +181,7 @@ vertical-farm-energy-designer/
 - **deh** — 除湿机额定容量、相对湿度设定点、效率模型
 - **led** — PPFD、光效、光周期计划
 - **transpiration** — 方法（van_henten / daily / per_plant / daily_per_period / per_plant_per_period）
-- **growth** — Van Henten 生长模型参数
+- **growth** — Van Henten 生长模型参数（**番茄**文献系数，未按生菜标定；见"输出结果解读"的产量警示）
 - **pv** — 面板效率、NOCT、倾角、方位角
 - **battery** — 容量、C-rate、往返效率、SOC 限制
 - **tariff** — 电价：
@@ -195,6 +195,8 @@ vertical-farm-energy-designer/
 ## 输出结果解读
 
 `vfed evaluate` 与 `vfed sweep` 输出同一套经济/能耗 KPI。所有货币值均以项目配置的 `currency`（默认 USD）报告；`exchange_rate` 仅用于显示标注（如 "1 USD = 7.2 CNY"），**不改变数值**。
+
+> **产量模型警示 — 引用 KPI 前必读**：Van Henten 生长模型仍使用未按生菜标定的**番茄**文献系数 `c_rad_phot`（Van Henten 2003）。模型年产约为商业 PFAL 生菜文献值（30-60 kg 鲜重/m²/年）的 **2-4 倍**，因此 `kwh_per_kg_fresh`（及 `cost_per_kg_fresh`）**偏乐观约一半**。这些 KPI 适合在 VFED 设计变体之间横向比较；与外部设施数据对比前须先重新标定 `c_rad_phot`。标定说明见 `vfed/plants/van_henten.py`。
 
 ### evaluate 输出（核心 KPI）
 

@@ -163,6 +163,12 @@ _YAML_SECTION_COMMENTS = {
     "growth": (
         "# ------------------------------------------------------------------\n"
         "# growth: Van Henten crop-growth parameters (keep defaults)\n"
+        "# WARNING: c_rad_phot is the Van Henten 2003 TOMATO literature\n"
+        "#   value, not calibrated for lettuce. Modelled annual yield is\n"
+        "#   roughly 2-4x commercial PFAL lettuce (30-60 kg fresh/m2/yr),\n"
+        "#   so kwh_per_kg_fresh (and cost_per_kg_fresh) are optimistic by\n"
+        "#   about half. Recalibrate c_rad_phot before comparing these KPIs\n"
+        "#   with external facility data. See vfed/plants/van_henten.py.\n"
         "# ------------------------------------------------------------------\n"
     ),
     "pv": (
