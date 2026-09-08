@@ -6,7 +6,15 @@ so the new simulator can be validated against the archived digital twin. Other
 presets provide convenient starting points.
 """
 
-from .project import DEHConfig, DesignProject, EnvelopeConfig, HVACConfig, LEDConfig, SiteConfig
+from .project import (
+    DEHConfig,
+    DesignProject,
+    EnvelopeConfig,
+    HVACConfig,
+    LEDConfig,
+    SetpointConfig,
+    SiteConfig,
+)
 
 __all__ = ["preset_default", "preset_609", "PRESETS"]
 
@@ -53,6 +61,26 @@ def preset_609() -> DesignProject:
     100-300 kWh/K band and lets cold-season nights drop below
     T_heat_setpoint so heat-pump mode engages at the P2-3 COP.  Re-verify
     with a cold-climate sensitivity before any re-calibration.
+
+    P0-4 (MAJOR): setpoints.T_dark is pinned to 21.0 C explicitly (the
+    SetpointConfig class default of 18.0 C stays untouched for other
+    presets).  With C_z = 200 kWh/K the LED-off room floats at ~21.7-23.4 C
+    at night (envelope gains plus DEH condenser heat), so T_dark = 18 C was
+    physically unreachable: holding 18 C against a ~22 C night balance needs
+    ~800 kWh of net heat removal (4 K x 200 kWh/K) while the 3 kW unit at
+    COP ~4 extracts ~96 kWh over an 8-h night — the result was 2,920/2,920
+    dark hours pinned at full 3,070 W (8,964 kWh/yr of pure saturation,
+    HVAC 74.5%) chasing a setpoint the room cannot reach, with dark T_z
+    never dropping below 20.6 C.  21 C sits inside the common lettuce
+    dark-period band (18-22 C; a slightly warm dark period is standard PFAL
+    practice to avoid pointless night conditioning) and near the room's
+    natural night balance, so the VFD modulates instead of saturating:
+    dark full-speed hours drop 2,920 -> 195 (6.7% of dark hours) and the
+    dark-period mean T_z lands within 1.5 K of the setpoint, verified by
+    simulation.  T_dark is also the heating setpoint (T_heat_setpoint), so
+    it must NOT float above the night balance temperature: at 22 C the
+    heat pump would engage ~93 h/yr at night to hold a setpoint above the
+    natural float, swapping cooling waste for heating waste.
     """
     return DesignProject(
         name="fengxian_lettuce_609",
@@ -67,6 +95,9 @@ def preset_609() -> DesignProject:
             C_z=200000.0,  # Wh/K (200 kWh/K) — see P4-5: ~3x room-air capacity
         ),
         led=LEDConfig(light_start_hour=6, photoperiod_hours=16, heat_fraction=1.0),
+        # P0-4: explicit dark-period setpoint (see docstring) — the 18 C class
+        # default is unreachable against this room's night balance.
+        setpoints=SetpointConfig(T_dark=21.0),
     )
 
 

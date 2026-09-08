@@ -20,21 +20,27 @@ class TestEngineRegression:
         """Annual load should be in 45-75 MWh range for preset_609
         (after LED power bugfix: 1575W→7200W, cooling load increased)."""
         e = sim_609["annual_load_kwh"]
-        assert 45000 < e < 75000, \
-            f"annual_load_kwh = {e:.0f} outside expected range"
+        assert 45000 < e < 75000, f"annual_load_kwh = {e:.0f} outside expected range"
 
     def test_biomass_stable(self, sim_609):
         """Biomass should be 180-350 kg dry/yr for preset_609
         (after light_wm2 bugfix: PAR correctly calculated from PPFD)."""
         b = sim_609["biomass_kg"]
-        assert 180.0 < b < 350.0, \
-            f"biomass_kg = {b:.1f} outside expected range"
+        assert 180.0 < b < 350.0, f"biomass_kg = {b:.1f} outside expected range"
 
     def test_timeseries_has_all_columns(self, sim_609):
         """Timeseries dataframe must contain core columns."""
         ts = sim_609["timeseries"]
-        required = {"hour_of_year", "hour_of_day", "T_z", "RH_z",
-                     "load_kw", "E_hvac_Wh", "E_deh_Wh", "E_led_Wh"}
+        required = {
+            "hour_of_year",
+            "hour_of_day",
+            "T_z",
+            "RH_z",
+            "load_kw",
+            "E_hvac_Wh",
+            "E_deh_Wh",
+            "E_led_Wh",
+        }
         missing = required - set(ts.columns)
         assert not missing, f"missing columns: {missing}"
 
@@ -46,14 +52,12 @@ class TestEngineRegression:
         if on_mask.any():
             avg_on = led[on_mask].mean()
             # PPFD=400, area=45, efficacy=2.5 → 400×45/2.5 = 7200 W
-            assert 6000 < avg_on < 8000, \
-                f"avg LED power when on: {avg_on:.0f} W"
+            assert 6000 < avg_on < 8000, f"avg LED power when on: {avg_on:.0f} W"
 
     def test_weather_dict_has_keys(self, sim_609):
         """Weather dict must contain required fields."""
         weather = sim_609["weather"]
-        required = {"direct_radiation", "diffuse_radiation",
-                     "temperature_2m", "hour"}
+        required = {"direct_radiation", "diffuse_radiation", "temperature_2m", "hour"}
         missing = required - set(weather.keys())
         assert not missing, f"missing weather fields: {missing}"
 
@@ -134,15 +138,17 @@ class TestEngineRegression:
 
         p = project_609
         p.hvac.auto_size = True
-        p.hvac.P_rated_w = 3000.0   # stale default
+        p.hvac.P_rated_w = 3000.0  # stale default
         p.deh.auto_size = True
-        p.deh.P_ref_w = 2233.0      # stale default
+        p.deh.P_ref_w = 2233.0  # stale default
         DesignEngine().run(p)
         # HVAC design load now includes the DEH net sensible heat (P_comp+fan)
-        assert p.hvac.P_rated_w > 3000.0, \
-            f"HVAC auto-size did not write back: P_rated_w={p.hvac.P_rated_w:.1f}"
-        assert p.deh.P_ref_w != 2233.0, \
-            f"DEH auto-size did not write back: P_ref_w={p.deh.P_ref_w:.1f}"
+        assert (
+            p.hvac.P_rated_w > 3000.0
+        ), f"HVAC auto-size did not write back: P_rated_w={p.hvac.P_rated_w:.1f}"
+        assert (
+            p.deh.P_ref_w != 2233.0
+        ), f"DEH auto-size did not write back: P_ref_w={p.deh.P_ref_w:.1f}"
 
     def test_water_balance_closure(self, sim_609):
         """Water balance must stay in a healthy envelope (C-fix, 2026-08-16,
@@ -161,11 +167,9 @@ class TestEngineRegression:
         water_m3 = s["annual_water_m3"]
         harvest_fw = s["annual_harvest_fw_kg"]
         assert np.isfinite(water_m3), f"annual water non-finite: {water_m3}"
-        assert harvest_fw > 1000.0, \
-            f"harvest collapsed: {harvest_fw:.1f} kg fresh/yr"
+        assert harvest_fw > 1000.0, f"harvest collapsed: {harvest_fw:.1f} kg fresh/yr"
         wf = water_m3 * 1000.0 / harvest_fw
-        assert 3.0 <= wf <= 12.0, \
-            f"water/fresh = {wf:.2f} L/kg outside healthy band [3, 12]"
+        assert 3.0 <= wf <= 12.0, f"water/fresh = {wf:.2f} L/kg outside healthy band [3, 12]"
 
     def test_growth_energy_use_efficiency_band(self, sim_609):
         """RUE must stay in a physically plausible band (C-fix, 2026-08-16).
@@ -176,13 +180,132 @@ class TestEngineRegression:
         would break the energy basis declared in GrowthConfig.c_rad_phot.
         """
         s = sim_609.summary
-        harvest_dry = s["annual_harvest_kg"]           # kg dry / yr
+        harvest_dry = s["annual_harvest_kg"]  # kg dry / yr
         # Intercepted PAR: 87.5 W/m² · 45 m² · 16 h/day = 63 kWh/day
         # → ×365 = 22,995 kWh/yr = 22,995 × 3.6 = 82,782 MJ/yr.
         par_energy_MJ = 22995.0 * 3.6
-        rue = harvest_dry * 1000.0 / par_energy_MJ     # g dry / MJ
-        assert 1.5 <= rue <= 4.0, \
-            f"RUE = {rue:.2f} g/MJ outside C3 band [1.5, 4]"
+        rue = harvest_dry * 1000.0 / par_energy_MJ  # g dry / MJ
+        assert 1.5 <= rue <= 4.0, f"RUE = {rue:.2f} g/MJ outside C3 band [1.5, 4]"
+
+
+class TestFullLoadDiagnostics:
+    """P0-4: rated-capacity (full-load) diagnostics + preset_609 T_dark fix.
+
+    Pre-fix pathology: T_dark = 18 C was unreachable against the 609 room's
+    ~22 C night balance, so the HVAC pinned at full 3,070 W for all 2,920
+    dark hours (33% of the year) chasing a setpoint it could never close.
+    The fix pins preset_609 to T_dark = 21 C; the diagnostics block plus
+    full_load_warnings() make any future saturation visible.
+    """
+
+    def test_preset_609_dark_setpoint_pinned(self, project_609):
+        """preset_609 carries the explicit reachable T_dark (class default
+        of SetpointConfig stays 18.0)."""
+        from vfed.design.project import SetpointConfig
+
+        assert project_609.setpoints.T_dark == pytest.approx(21.0)
+        assert SetpointConfig().T_dark == pytest.approx(18.0)
+
+    def test_summary_reports_full_load_diagnostics(self, sim_609):
+        d = sim_609.summary["full_load_diagnostics"]
+        for dev in ("hvac_cool", "hvac_heat", "deh"):
+            assert set(("hours", "pct", "max_streak_h")) <= set(d[dev])
+        assert "criteria" in d
+
+    def test_609_dark_full_speed_below_target(self, sim_609):
+        """P0-4 acceptance: dark-night saturation collapsed from 2,920 h
+        (every dark hour) to well under half the dark hours, and no
+        24 h+ saturation streaks remain."""
+        d = sim_609.summary["full_load_diagnostics"]["hvac_cool"]
+        assert d["hours"] < 1460, f"hvac cool full hours = {d['hours']} (target < 1460)"
+        assert d["max_streak_h"] < 24, f"max full streak = {d['max_streak_h']} h (target < 24)"
+
+    def test_609_no_heating_or_deh_saturation_warning(self, sim_609):
+        d = sim_609.summary["full_load_diagnostics"]
+        assert d["hvac_heat"]["hours"] == 0
+        assert d["deh"]["pct"] < 60.0
+
+    def test_max_true_run(self):
+        from vfed.design.engine import _full_load_stats
+
+        assert _full_load_stats(np.array([True, True, False, True]))["max_streak_h"] == 2
+        assert _full_load_stats(np.zeros(5, dtype=bool))["max_streak_h"] == 0
+        assert _full_load_stats(np.ones(7, dtype=bool))["max_streak_h"] == 7
+        empty = _full_load_stats(np.zeros(0, dtype=bool))
+        assert empty == {"hours": 0, "pct": 0.0, "max_streak_h": 0}
+
+    def _diag(self, **overrides):
+        base = {
+            "hours": 0,
+            "pct": 0.0,
+            "max_streak_h": 0,
+        }
+        base.update(overrides)
+        return base
+
+    def test_warnings_fire_on_nightly_saturation(self):
+        """The 609 pre-fix pattern: 8 h full every night = 2,920 h/yr
+        (33.3%).  Must fire via the annual-share rule — a pure
+        ">= 24 h continuous" rule would miss it by design."""
+        from vfed.design.engine import full_load_warnings
+
+        summary = {
+            "full_load_diagnostics": {
+                "hvac_cool": self._diag(hours=2920, pct=33.33, max_streak_h=8),
+                "hvac_heat": self._diag(),
+                "deh": self._diag(),
+            }
+        }
+        msgs = full_load_warnings(summary)
+        assert len(msgs) == 1
+        assert "HVAC cooling" in msgs[0]
+        assert "rated capacity" in msgs[0]
+        assert "2,920" not in msgs[0]  # plain number, no thousands separator
+        assert "2920 h" in msgs[0]
+
+    def test_warnings_fire_on_sustained_streak(self):
+        """A heatwave-grade undersize: low annual share but one >= 24 h
+        continuous full-speed stretch must still fire."""
+        from vfed.design.engine import full_load_warnings
+
+        summary = {
+            "full_load_diagnostics": {
+                "hvac_cool": self._diag(hours=30, pct=0.34, max_streak_h=30),
+                "hvac_heat": self._diag(),
+                "deh": self._diag(),
+            }
+        }
+        msgs = full_load_warnings(summary)
+        assert len(msgs) == 1
+        assert "HVAC cooling" in msgs[0]
+
+    def test_warnings_fire_on_heating_and_deh_saturation(self):
+        """Bidirectional coverage: heating saturation and a never-cycling
+        DEH both report (with direction-specific hints)."""
+        from vfed.design.engine import full_load_warnings
+
+        summary = {
+            "full_load_diagnostics": {
+                "hvac_cool": self._diag(),
+                "hvac_heat": self._diag(hours=1500, pct=17.1, max_streak_h=10),
+                "deh": self._diag(hours=8400, pct=95.9, max_streak_h=120),
+            }
+        }
+        msgs = full_load_warnings(summary)
+        assert len(msgs) == 2
+        assert any("HVAC heating" in m and "P_rated_heat_w" in m for m in msgs)
+        assert any("DEH" in m and "setpoints.RH" in m for m in msgs)
+
+    def test_warnings_silent_on_healthy_runs(self, sim_609):
+        from vfed.design.engine import full_load_warnings
+
+        assert full_load_warnings(sim_609.summary) == []
+
+    def test_warnings_tolerate_missing_block(self):
+        from vfed.design.engine import full_load_warnings
+
+        assert full_load_warnings({}) == []
+        assert full_load_warnings({"full_load_diagnostics": {}}) == []
 
 
 class TestSweepRegression:
@@ -232,8 +355,9 @@ class TestSweepRegression:
         df = result["results"]
         lcoe_values = df["lcoe"].values
         for i in range(len(lcoe_values) - 1):
-            assert lcoe_values[i] <= lcoe_values[i + 1], \
-                f"not sorted at index {i}: {lcoe_values[i]} > {lcoe_values[i + 1]}"
+            assert (
+                lcoe_values[i] <= lcoe_values[i + 1]
+            ), f"not sorted at index {i}: {lcoe_values[i]} > {lcoe_values[i + 1]}"
 
 
 class TestGridOnlyEconomics:
@@ -245,8 +369,9 @@ class TestGridOnlyEconomics:
         """preset_609 (pv=0, bat=0): annual_grid_cost_net == sum(load x hourly price)."""
         s = sim_609.summary
         assert s["grid_import_kwh"] > 0
-        assert s["annual_grid_cost_net"] > 0, \
-            "grid cost silently zeroed despite non-zero grid_import_kwh"
+        assert (
+            s["annual_grid_cost_net"] > 0
+        ), "grid cost silently zeroed despite non-zero grid_import_kwh"
         assert s["total_electricity_cost"] == s["annual_grid_cost_net"]
 
         ts = sim_609["timeseries"]
@@ -264,9 +389,9 @@ class TestGridOnlyEconomics:
         p = project_609
         ts = sim_609["timeseries"]
         prices = np.asarray(p.tariff.hourly_prices)
-        grid_cost = float(np.sum(
-            ts["load_kw"].to_numpy() * prices[ts["hour_of_day"].to_numpy().astype(int)]
-        ))
+        grid_cost = float(
+            np.sum(ts["load_kw"].to_numpy() * prices[ts["hour_of_day"].to_numpy().astype(int)])
+        )
 
         cap = _total_capital(p, 0.0, 0.0)
         annual_cap = _annualized_capital(p, cap)

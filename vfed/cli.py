@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .design.project import DesignProject, TariffConfig
 from .design.presets import preset_default, preset_609
-from .design.engine import DesignEngine
+from .design.engine import DesignEngine, full_load_warnings
 from .agent.evaluator import agent_evaluate
 from .weather.city_db import lookup_city, city_coords, list_cities
 from .pvbes.tariff_db import list_regions, lookup_tariff
@@ -451,6 +451,11 @@ def _cmd_evaluate(args):
             f"  Dehumidified     = {dh.get('deh_actual_dehum_kg', 0):.1f} kg (DEH) + "
             f"{dh.get('hvac_actual_dehum_kg', 0):.1f} kg (HVAC coil) per yr"
         )
+    # P0-4: full-load diagnostics — a device pinned at rated output hour
+    # after hour usually means a setpoint the room cannot physically reach
+    # (same reporting style as the capital = 0 warning below).
+    for _warn in full_load_warnings(summary):
+        print(f"  [WARNING] {_warn}")
     if summary.get("lcoe") is not None:
         print(
             f"  LCOE             = {summary['lcoe']:.4f} {getattr(project, 'currency', 'USD')}/kWh"

@@ -54,8 +54,9 @@ def test_design_new_default_out(tmp_path, monkeypatch):
 
 def test_design_new_explicit_out(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    rc = main(["design", "new", "myfarm", "--preset", "609",
-               "--out", str(tmp_path / "custom.yaml")])
+    rc = main(
+        ["design", "new", "myfarm", "--preset", "609", "--out", str(tmp_path / "custom.yaml")]
+    )
     assert (tmp_path / "custom.yaml").is_file()
 
 
@@ -84,8 +85,21 @@ def test_design_new_latlon_clears_preset_city(tmp_path, monkeypatch, capsys):
     from vfed.design.project import DesignProject
 
     monkeypatch.chdir(tmp_path)
-    rc = main(["design", "new", "nyc", "--preset", "609",
-               "--lat", "40.71", "--lon", "-74.01", "--year", "2025"])
+    rc = main(
+        [
+            "design",
+            "new",
+            "nyc",
+            "--preset",
+            "609",
+            "--lat",
+            "40.71",
+            "--lon",
+            "-74.01",
+            "--year",
+            "2025",
+        ]
+    )
     assert rc == 0
     p = DesignProject.load(tmp_path / "nyc.yaml")
     assert p.site.city is None
@@ -98,8 +112,7 @@ def test_design_new_latlon_conflicts_city(tmp_path, monkeypatch, capsys):
     """CRITICAL-1: --city combined with --lat/--lon is ambiguous -> fail fast."""
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit) as exc:
-        main(["design", "new", "x", "--preset", "609",
-              "--city", "Shanghai", "--lat", "40.71"])
+        main(["design", "new", "x", "--preset", "609", "--city", "Shanghai", "--lat", "40.71"])
     assert exc.value.code == 1
     assert "cannot be combined" in capsys.readouterr().err
 
@@ -118,6 +131,26 @@ def test_evaluate_ok(cli_project_yaml, capsys):
     out = capsys.readouterr()
     assert rc == 0
     assert "Annual load" in out.out
+    # P0-4: the fixed preset must NOT trigger the full-load warning.
+    assert "at rated capacity" not in out.out
+
+
+def test_evaluate_full_load_warning_printed(cli_project_yaml, tmp_path, capsys):
+    """P0-4: an unreachable dark setpoint (the pre-fix T_dark = 18 C, whose
+    nights saturate the HVAC 2,920 h/yr) prints the rated-capacity WARNING
+    in the same style as the capital = 0 warning."""
+    from vfed.design.project import DesignProject
+
+    p = DesignProject.load(cli_project_yaml)
+    p.setpoints.T_dark = 18.0
+    bad = tmp_path / "unreachable_dark.yaml"
+    p.save(bad)
+    rc = main(["evaluate", str(bad), "--cache", "weather_cache"])
+    out = capsys.readouterr()
+    assert rc == 0
+    assert "[WARNING]" in out.out
+    assert "HVAC cooling at rated capacity" in out.out
+    assert "setpoint may be unreachable" in out.out
 
 
 # ---------------------------------------------------------------------------
@@ -125,8 +158,7 @@ def test_evaluate_ok(cli_project_yaml, capsys):
 # ---------------------------------------------------------------------------
 def test_sweep_single_point_out_csv(cli_project_yaml, tmp_path):
     out_csv = tmp_path / "sweep.csv"
-    rc = main(["sweep", str(cli_project_yaml), "--cache", "weather_cache",
-               "--out", str(out_csv)])
+    rc = main(["sweep", str(cli_project_yaml), "--cache", "weather_cache", "--out", str(out_csv)])
     assert rc == 0
     assert out_csv.is_file()
     assert "kwh_per_kg_fresh" in out_csv.read_text()
@@ -134,8 +166,7 @@ def test_sweep_single_point_out_csv(cli_project_yaml, tmp_path):
 
 def test_sweep_out_missing_dir(cli_project_yaml, tmp_path, capsys):
     missing = tmp_path / "no_such_dir" / "out.csv"
-    rc = main(["sweep", str(cli_project_yaml), "--cache", "weather_cache",
-               "--out", str(missing)])
+    rc = main(["sweep", str(cli_project_yaml), "--cache", "weather_cache", "--out", str(missing)])
     assert rc == 1
     assert "cannot write" in capsys.readouterr().err
 
@@ -192,18 +223,16 @@ def test_agent_simulate_zero_load_e103(monkeypatch):
 
     class ZeroLoadResult:
         def __getitem__(self, key):
-            return {"load": np.zeros(24),
-                    "weather": {},
-                    "timeseries": {},
-                    "annual_load_kwh": 0.0}[key]
+            return {"load": np.zeros(24), "weather": {}, "timeseries": {}, "annual_load_kwh": 0.0}[
+                key
+            ]
 
         def get(self, key, default=None):
             if key in ("load", "weather", "timeseries", "annual_load_kwh"):
                 return self[key]
             return default
 
-    monkeypatch.setattr(evaluator.DesignEngine, "run",
-                        lambda self, project: ZeroLoadResult())
+    monkeypatch.setattr(evaluator.DesignEngine, "run", lambda self, project: ZeroLoadResult())
     res = evaluator.agent_simulate(preset_609())
     assert res["success"] is False
     assert res["error_code"] == "E103"
@@ -259,9 +288,7 @@ def test_unit_price_line_format(capsys):
     price) so the pricing basis can be verified by hand."""
     from vfed.cli import _print_unit_price
 
-    _print_unit_price(
-        "  ", "PV unit cost", 162750.0, 46.5, "kWp", "RMB", extra=" (3.50 RMB/Wp)"
-    )
+    _print_unit_price("  ", "PV unit cost", 162750.0, 46.5, "kWp", "RMB", extra=" (3.50 RMB/Wp)")
     out = capsys.readouterr().out
     assert "162750 RMB / 46.5 kWp" in out
     assert "3500.00 RMB/kWp" in out

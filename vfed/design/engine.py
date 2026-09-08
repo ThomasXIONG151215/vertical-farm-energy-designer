@@ -8,7 +8,7 @@ aggregated to hourly load (kW) consumed by the PVBES layer. Device state
 """
 
 import logging
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -29,7 +29,7 @@ from ..plants.van_henten import VanHenten
 from ..weather.weather_bridge import fetch_weather
 from .result import SimulationResult
 
-__all__ = ["DesignEngine", "run_project"]
+__all__ = ["DesignEngine", "run_project", "full_load_warnings"]
 
 
 def _limit_removal_by_inventory(
@@ -92,6 +92,108 @@ def _limit_removal_by_inventory(
         return M_deh_kgs, M_hvac_kgs, 1.0
     scale = available / removal_nom
     return M_deh_kgs * scale, M_hvac_kgs * scale, scale
+
+
+# ── P0-4: full-load (saturation) diagnostics ───────────────────────────
+# Reporting layer only — no ODE / device behaviour is affected.  A setpoint
+# the room cannot physically reach (e.g. a dark-period T_dark below the
+# natural night balance temperature) shows up as the device riding ~99% of
+# rated output hour after hour without ever closing the gap, so counting
+# rated-capacity hours turns silent saturation into a visible warning.
+_FULL_LOAD_HOURLY_FRAC = 0.99  # substep share of an hour counted as "at rated"
+# HVAC: chronic saturation (share of year) or one sustained stretch indicates
+# a capacity/setpoint mismatch.  Occasional full-speed hours at design-peak
+# weather (a few % of the year, streaks bounded by the diurnal cycle) are
+# normal and stay silent.
+_FULL_LOAD_HVAC_PCT_WARN = 10.0  # % of year at rated capacity
+_FULL_LOAD_HVAC_STREAK_WARN_H = 24.0  # continuous hours at rated capacity
+# DEH: the VFD dehumidifier pins at m = 1 during ordinary humid periods (the
+# RH proportional band keeps demand positive), so ~20-50% of the year at full
+# modulation is normal operation.  Only near-continuous saturation (an
+# undersized unit that can never close the RH gap) is diagnostic.
+_FULL_LOAD_DEH_PCT_WARN = 60.0  # % of year at rated capacity
+
+
+def _full_load_stats(full_hours) -> dict:
+    """Summarise a boolean hourly "at rated capacity" mask.
+
+    Returns ``{"hours": int, "pct": float, "max_streak_h": int}`` — the rated
+    hour count, its share of the simulated year (%), and the longest
+    consecutive run (h).
+    """
+    n = len(full_hours)
+    hours = int(np.sum(full_hours))
+    streak = best = 0
+    for flag in full_hours:
+        streak = streak + 1 if flag else 0
+        if streak > best:
+            best = streak
+    return {
+        "hours": hours,
+        "pct": round(100.0 * hours / n, 2) if n else 0.0,
+        "max_streak_h": int(best),
+    }
+
+
+def full_load_warnings(summary: dict) -> List[str]:
+    """P0-4: setpoint-reachability warnings from ``full_load_diagnostics``.
+
+    Pure reporting helper over the summary block produced by
+    :meth:`DesignEngine.run` — returns one human-readable message per device
+    whose rated-capacity statistics breach the warning criteria:
+
+    * HVAC cooling/heating: >= 10% of the year at rated output, or one
+      continuous stretch >= 24 h (a setpoint the room cannot reach saturates
+      the unit every control period — the 609 T_dark=18 C failure ran 2,920
+      dark hours = 33% of the year at full 3,070 W in 8 h nightly stretches,
+      which only the share rule catches).
+    * DEH: >= 60% of the year at rated modulation (its VFD pins at full speed
+      during ordinary humid periods, so only near-continuous saturation is
+      diagnostic).
+
+    Warnings are double-sided for the HVAC (cooling saturation = room too
+    warm, heating saturation = room too cold) — the reporting layer never
+    changes any physics.
+    """
+    diag = summary.get("full_load_diagnostics") or {}
+    criteria = (
+        (
+            "hvac_cool",
+            "HVAC cooling",
+            _FULL_LOAD_HVAC_PCT_WARN,
+            _FULL_LOAD_HVAC_STREAK_WARN_H,
+            "check T_light/T_dark vs C_z and hvac.P_rated_w",
+        ),
+        (
+            "hvac_heat",
+            "HVAC heating",
+            _FULL_LOAD_HVAC_PCT_WARN,
+            _FULL_LOAD_HVAC_STREAK_WARN_H,
+            "check T_dark vs C_z and hvac.P_rated_heat_w",
+        ),
+        (
+            "deh",
+            "DEH",
+            _FULL_LOAD_DEH_PCT_WARN,
+            None,
+            "check setpoints.RH vs deh sizing (M_deh_nom/P_ref_w) and C_z",
+        ),
+    )
+    msgs: List[str] = []
+    for key, label, pct_warn, streak_warn, hint in criteria:
+        d = diag.get(key)
+        if not d:
+            continue
+        fires = d.get("pct", 0.0) >= pct_warn or (
+            streak_warn is not None and d.get("max_streak_h", 0) >= streak_warn
+        )
+        if fires:
+            msgs.append(
+                f"{label} at rated capacity for {d.get('hours', 0)} h "
+                f"({d.get('pct', 0.0):.1f}% of year, longest run "
+                f"{d.get('max_streak_h', 0)} h) — setpoint may be unreachable, {hint}"
+            )
+    return msgs
 
 
 def _build_devices(p, P_atm: float = 101.325):
@@ -412,6 +514,15 @@ class DesignEngine:
 
         env, hvac, deh, led, transp, ode = _build_devices(p, P_atm=P_atm)
 
+        # P0-4 full-load observation thresholds (reporting only): the HVAC
+        # draws its rated electrical input when the VFD sits at m = 1
+        # (cap(1) = eir(1) = 1.0), so a substep is "at rated capacity" when
+        # P_elec >= 99% of rated + fan.  The DEH draw varies with T/W
+        # conditions, so its modulation coefficient (m >= 0.999) is the
+        # full-speed signal instead.
+        hvac_cool_full_w = 0.99 * (hvac.P_rated + hvac.comp.fan_power_w)
+        hvac_heat_full_w = 0.99 * (hvac.P_rated_heat + hvac.comp.fan_power_w)
+
         # ── plant growth model ─────────────────────────────────────────────
         grow = VanHenten(
             co2_ppm=p.setpoints.co2_ppm,
@@ -447,6 +558,10 @@ class DesignEngine:
         P_led = np.zeros(n)
         P_misc = np.zeros(n)
         X_d_arr = np.zeros(n)
+        # P0-4: hourly "device at rated capacity" flags (reporting layer).
+        hvac_cool_full_h = np.zeros(n, dtype=bool)
+        hvac_heat_full_h = np.zeros(n, dtype=bool)
+        deh_full_h = np.zeros(n, dtype=bool)
 
         # ── monthly accumulators (12 months) ───────────────────────────────
         monthly_energy = np.zeros((12, 5))  # cols: total,hvac,deh,led,misc
@@ -494,6 +609,9 @@ class DesignEngine:
             deh_wh = 0.0
             led_wh = 0.0
             t_sum, rh_sum = 0.0, 0.0
+            # P0-4 full-load observation counters (reporting only, no
+            # effect on the ODE or device models below).
+            cool_full_s = heat_full_s = deh_full_s = 0
             hour_of_day = int(hours[h])
             month_idx = months[h] - 1  # 0-based
             # P4-10: drive lighting with the fractional hour so
@@ -506,6 +624,13 @@ class DesignEngine:
                     T_z, RH_z, T_ext[h], dt, T_setpoint=T_sp, T_heat_setpoint=p.setpoints.T_dark
                 )
                 dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH)
+                # P0-4 full-load observation (read-only on device outputs).
+                if hv["mode"] == "cool" and hv["P_elec_W"] >= hvac_cool_full_w:
+                    cool_full_s += 1
+                elif hv["mode"] == "heat" and hv["P_elec_W"] >= hvac_heat_full_w:
+                    heat_full_s += 1
+                if dh["mod"] >= 0.999:
+                    deh_full_s += 1
                 # P4-11: runtime PAR from the LED power state (matches the
                 # DEH-sizing light_wm2 above).
                 light_wm2 = led.par_wm2 if is_light_h else 0.0
@@ -628,6 +753,12 @@ class DesignEngine:
                     raise RuntimeError(
                         f"NaN/inf state at hour {h}, sub-step {s}: " f"T_z={T_z}, W_z={W_z}"
                     )
+            # An hour counts as "at rated capacity" when >= 99% of its
+            # substeps ran at full output (a full hour at rated = rated W
+            # + fan, matching the E_hvac >= 0.99x(P_rated+fan) audit).
+            hvac_cool_full_h[h] = cool_full_s >= sub * _FULL_LOAD_HOURLY_FRAC
+            hvac_heat_full_h[h] = heat_full_s >= sub * _FULL_LOAD_HOURLY_FRAC
+            deh_full_h[h] = deh_full_s >= sub * _FULL_LOAD_HOURLY_FRAC
             load_kw[h] = energy_wh / 1000.0
             T_z_out[h] = t_sum / sub
             RH_z_out[h] = rh_sum / sub
@@ -757,6 +888,22 @@ class DesignEngine:
                 "deh_utilization": round(deh_perf["deh_actual_kg"] / deh_perf["deh_nominal_kg"], 4)
                 if deh_perf["deh_nominal_kg"] > 0
                 else 1.0,
+            },
+        }
+
+        # P0-4: rated-capacity (full-load) diagnostics — how often each
+        # device saturated.  A setpoint the room cannot reach keeps the
+        # device pinned at rated output without ever closing the gap; the
+        # CLI surfaces breaches via full_load_warnings().  Reporting only.
+        summary["full_load_diagnostics"] = {
+            "hvac_cool": _full_load_stats(hvac_cool_full_h),
+            "hvac_heat": _full_load_stats(hvac_heat_full_h),
+            "deh": _full_load_stats(deh_full_h),
+            "criteria": {
+                "hvac_pct_warn": _FULL_LOAD_HVAC_PCT_WARN,
+                "hvac_streak_warn_h": _FULL_LOAD_HVAC_STREAK_WARN_H,
+                "deh_pct_warn": _FULL_LOAD_DEH_PCT_WARN,
+                "hourly_substep_frac": _FULL_LOAD_HOURLY_FRAC,
             },
         }
 
