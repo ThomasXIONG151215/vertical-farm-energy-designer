@@ -235,3 +235,94 @@ def test_size_deh_low_smer():
 def test_size_deh_zero_load():
     p = size_deh(0.0, smer=2.0, safety_factor=1.2)
     assert p == 0.0
+
+
+# ── DEHDevice control modes (P1-1) ───────────────────────────────────
+
+from vfed.devices.dehumidifier import DEHDevice
+from vfed.physics.psychrometrics import latent_heat_vaporization
+
+
+def test_deh_default_control_is_vfd():
+    """Default control must stay VFD so existing projects are unchanged."""
+    deh = DEHDevice()
+    assert deh.control == "vfd"
+    # VFD keeps the proportional-band modulation (the baseline code path)
+    assert deh.comp.proportional_band == deh.mod_band_rh
+
+
+def test_deh_invalid_control_rejected():
+    """Unknown control mode fails fast — no silent VFD fallback."""
+    with pytest.raises(ValueError, match="control"):
+        DEHDevice(control="turbo")
+
+
+def test_deh_on_off_runs_full_speed_at_rated_smer():
+    """on_off: hysteresis ON -> m = 1 exactly, so the DOE speed modifier is
+    1.0 and moisture is extracted at the RATED SMER (no part-load penalty)."""
+    deh = DEHDevice(control="on_off", P_ref_w=2000.0, smer=2.0)
+    out = deh.step(T_z=22.0, RH_z=68.0, W_z=0.012, dt=600.0, deh_setpoint=60.0)
+    # Demand strongly positive -> ON at full modulation (bang-bang)
+    assert out["is_on"] is True
+    assert out["mod"] == pytest.approx(1.0)
+    assert out["S_DH"] == pytest.approx(1.0)
+    # Rated-SMER operation: latent_cop = SMER * L_v(T) / 3.6e6 (compressor
+    # input basis, fan excluded) — only true when smer_speed_mod(m) == 1.
+    assert out["latent_cop"] == pytest.approx(
+        2.0 * latent_heat_vaporization(22.0) * 1000.0 / 3.6e6, rel=1e-9
+    )
+    # Compressor draws full poly power + fan
+    assert out["P_elec_W"] == pytest.approx(
+        deh._poly_power(22.0, 0.012) + deh.fan_power_w
+    )
+
+
+def test_deh_on_off_steady_state_moisture_at_rated():
+    """After the transient lag settles, M_deh_kgs converges to the rated
+    extraction rate SMER * P_comp / 3.6e6 (no DOE part-load discount)."""
+    deh = DEHDevice(control="on_off", P_ref_w=2000.0, smer=2.0)
+    for _ in range(60):  # 3600 s >> tau_m=120 s: lag fully settled
+        out = deh.step(T_z=22.0, RH_z=68.0, W_z=0.012, dt=60.0, deh_setpoint=60.0)
+    p_comp = out["P_elec_W"] - deh.fan_power_w
+    assert out["M_deh_kgs"] == pytest.approx(2.0 * p_comp / 3.6e6, rel=1e-6)
+
+
+def test_deh_on_off_off_state_zero_power():
+    """Dry air (demand deeply negative) -> the machine never starts: zero
+    electrical power and zero modulation."""
+    deh = DEHDevice(control="on_off", P_ref_w=2000.0, smer=2.0)
+    out = deh.step(T_z=22.0, RH_z=40.0, W_z=0.006, dt=600.0, deh_setpoint=60.0)
+    assert out["is_on"] is False
+    assert out["P_elec_W"] == 0.0
+    assert out["S_DH"] == 0.0
+
+
+def test_deh_on_off_hysteresis_anti_short_cycling():
+    """Classic thermostat cycling with the CompressorState locks intact:
+    min_off holds it off, min_on holds it on, deadband arms the transitions.
+    Small dt (60 s) so the 180 s locks are observable."""
+    deh = DEHDevice(
+        control="on_off",
+        P_ref_w=2000.0,
+        smer=2.0,
+        deadband_rh=2.0,
+        min_on_s=180.0,
+        min_off_s=180.0,
+    )
+    # t=60/120: demand positive but the min_off lock holds the machine OFF
+    assert deh.step(22.0, 65.0, 0.012, dt=60.0, deh_setpoint=63.0)["is_on"] is False
+    assert deh.step(22.0, 65.0, 0.012, dt=60.0, deh_setpoint=63.0)["is_on"] is False
+    # t=180: lock expired -> ON at full speed
+    out = deh.step(22.0, 65.0, 0.012, dt=60.0, deh_setpoint=63.0)
+    assert out["is_on"] is True
+    assert out["mod"] == pytest.approx(1.0)
+    # RH collapses below the stop point while the min_on lock (180 s) is not
+    # yet served -> state stays ON but output is held at zero (no power)
+    for _ in range(2):  # t=240, 300 (60 s, 120 s in state)
+        out = deh.step(22.0, 50.0, 0.010, dt=60.0, deh_setpoint=63.0)
+        assert deh.comp.is_on is True
+        assert out["P_elec_W"] == 0.0
+    # t=360: min_on served -> OFF
+    out = deh.step(22.0, 50.0, 0.010, dt=60.0, deh_setpoint=63.0)
+    assert out["is_on"] is False
+    assert out["P_elec_W"] == 0.0

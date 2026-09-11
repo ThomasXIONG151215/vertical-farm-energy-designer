@@ -508,3 +508,109 @@ def test_auto_size_delegates_to_transpiration_model():
         _, _, deh, _, _, _ = _build_devices(p)
         assert deh.P_ref > 0.0, f"method={method}"
 
+
+# ---------------------------------------------------------------------------
+# 3.10  DEH control modes + effective-SMER report (P1-1)
+# ---------------------------------------------------------------------------
+def _deh_scenario(humid_outdoor: bool = True):
+    """Deterministic synthetic-weather scenario with a real DEH load.
+
+    Same room/timestep shape as the P0 humidity-clamp scenario above, but
+    with humid outdoor air so the dehumidifier actually runs all year."""
+    import pandas as pd
+
+    from vfed.design.presets import preset_609
+
+    p = preset_609()
+    p.envelope.V_room = 80.0
+    p.envelope.C_z = 50000.0
+    p.setpoints.RH = 50.0
+    p.deh.P_ref_w = 3000.0
+    p.hvac.P_rated_w = 3000.0
+    p.transpiration.method = "daily"
+    p.transpiration.daily_water_L = 80.0
+
+    idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
+    weather = pd.DataFrame({
+        "temperature_2m": 25.0,
+        "relative_humidity_2m": 80.0 if humid_outdoor else 30.0,
+        "shortwave_radiation": 0.0,
+        "direct_radiation": 0.0,
+        "diffuse_radiation": 0.0,
+        "surface_pressure": 1013.25,
+    }, index=idx)
+    return p, weather
+
+
+def test_engine_reports_deh_effective_smer_vfd_default():
+    """summary['deh_smer'] must report the DEH effective SMER on the same
+    compressor-input basis as the rated SMER (P2-5), for the default VFD
+    mode.  Primary ratio: effective = annual NOMINAL condensate / annual
+    compressor energy (the device-level control penalty, user3's
+    1.28-vs-2.0 figure); delivered adds the inventory clamp on top."""
+    from vfed.design.engine import DesignEngine
+
+    p, weather = _deh_scenario()
+    sim = DesignEngine().run(p, weather=weather)
+    sm = sim.summary["deh_smer"]
+
+    assert sm["control_mode"] == "vfd"  # default unchanged
+    assert sm["rated_smer_kg_per_kwh"] == pytest.approx(p.deh.smer)
+    assert sm["deh_comp_energy_kwh"] > 0.0
+    assert sm["deh_total_energy_kwh"] >= sm["deh_comp_energy_kwh"]
+    eff = sm["effective_smer_kg_per_kwh"]
+    assert eff is not None and eff > 0.0 and np.isfinite(eff)
+    # closure: effective x compressor kWh = NOMINAL condensate (3-dp rounding)
+    perf = sim.summary["dehumidifier_performance"]
+    assert eff == pytest.approx(
+        perf["deh_nominal_dehum_kg"] / sm["deh_comp_energy_kwh"], rel=2e-3
+    )
+    # delivered (inventory-capped) ratio never exceeds the nominal ratio
+    deliv = sm["delivered_smer_kg_per_kwh"]
+    assert deliv is not None and 0.0 < deliv <= eff
+    assert deliv == pytest.approx(
+        perf["deh_actual_dehum_kg"] / sm["deh_comp_energy_kwh"], rel=2e-3
+    )
+
+
+def test_engine_deh_explicit_vfd_matches_default_bitwise():
+    """control='vfd' must be the exact default path — an explicitly-set VFD
+    project produces bitwise-identical output to the implicit default."""
+    from vfed.design.engine import DesignEngine
+
+    p_default, weather = _deh_scenario()
+    p_explicit, _ = _deh_scenario()
+    p_explicit.deh.control = "vfd"
+    sim_d = DesignEngine().run(p_default, weather=weather)
+    sim_e = DesignEngine().run(p_explicit, weather=weather)
+    assert sim_d.summary == sim_e.summary
+    for key in ("load_kw", "E_deh_Wh", "T_z", "RH_z"):
+        assert sim_d.timeseries[key] == sim_e.timeseries[key]
+
+
+def test_engine_deh_on_off_mode_runs_and_reports():
+    """control='on_off' runs the full year end-to-end and reports its own
+    effective SMER.  No direction is asserted between modes: the DOE part-
+    load penalty favours cycling while the engine's set-point inventory
+    clamp penalises full-speed pulses near the set point — the net effect
+    is scenario-dependent and is exactly what the report makes visible."""
+    from vfed.design.engine import DesignEngine
+
+    p, weather = _deh_scenario()
+    p.deh.control = "on_off"
+    sim = DesignEngine().run(p, weather=weather)
+    sm = sim.summary["deh_smer"]
+
+    assert sm["control_mode"] == "on_off"
+    assert sm["deh_comp_energy_kwh"] > 0.0
+    eff = sm["effective_smer_kg_per_kwh"]
+    assert eff is not None and eff > 0.0 and np.isfinite(eff)
+    # on_off self-evidence: full-speed running (m = 1 -> smer_speed_mod = 1)
+    # means the nominal ratio sits at the NAMEPLATE SMER (only transient lag
+    # wiggles it, so a loose 2% band).
+    assert eff == pytest.approx(sm["rated_smer_kg_per_kwh"], rel=2e-2)
+    # RH stays physical under full-speed cycling
+    assert float(np.min(sim.timeseries["RH_z"])) >= 0.0
+    # and the run is numerically healthy overall
+    assert np.isfinite(sim.summary["annual_energy_kwh"])
+

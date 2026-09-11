@@ -23,6 +23,16 @@ S_DH is the on/off modulation driven by a humidity setpoint (hysteresis).
 Moisture removal is governed solely by SMER (Specific Moisture Extraction Rate,
 kg water / kWh electricity). The EnthalpyEfficiency class is deprecated and
 retained only for backward compatibility.
+
+Control modes (P1-1): ``control`` selects how S_DH is produced from the
+humidity error ``RH_z - deh_setpoint``:
+    * ``"vfd"``    (default) variable-speed modulation inside the proportional
+      band (``mod_band_rh``); SMER follows the DOE part-load curve, so part-
+      load operation is efficiency-lossy (effective SMER < rated).
+    * ``"on_off"`` bang-bang cycling between 0 and full speed on the same
+      hysteresis (deadband + min_on/min_off anti-short-cycling, CompressorState
+      with proportional_band=0).  While running, m = 1 exactly -> the DOE speed
+      modifier is 1.0 at m = 1, i.e. the machine runs at its RATED SMER.
 """
 
 from typing import Dict
@@ -32,6 +42,11 @@ from .compressor import CompressorState
 from .lag import FirstOrderLag
 
 __all__ = ["DEHDevice", "EnthalpyEfficiency", "size_deh"]
+
+# P1-1: DEH control modes.  "vfd" = variable-speed (DOE part-load SMER curve),
+# "on_off" = bang-bang cycling at full speed (rated SMER).  An unknown value
+# is rejected (fail-fast) instead of silently falling back to VFD.
+DEH_CONTROL_MODES = ("vfd", "on_off")
 
 # DOE 87 FR 35286 (2022), measured variable-speed dehumidifier: SMER DROPS at
 # part load — opposite to inverter A/C.  As speed falls the evaporator
@@ -90,7 +105,12 @@ class DEHDevice:
         tau_q: float = 90.0,
         tau_m: float = 120.0,
         mod_band_rh: float = 4.0,  # VFD proportional band (% RH)
+        control: str = "vfd",  # "vfd" | "on_off" (P1-1)
     ):
+        if control not in DEH_CONTROL_MODES:
+            raise ValueError(
+                f"DEH control must be one of {'|'.join(DEH_CONTROL_MODES)}, got {control!r}"
+            )
         self.P_ref = P_ref_w
         self.poly_e = poly_e
         self.T_mean, self.T_std = T_mean, T_std
@@ -101,12 +121,18 @@ class DEHDevice:
         self.smer = smer
         self.fan_power_w = fan_power_w
         self.mod_band_rh = mod_band_rh
+        self.control = control
+        # P1-1: both modes share one CompressorState hysteresis (deadband +
+        # min_on/min_off anti-short-cycling).  "on_off" passes
+        # proportional_band=0 -> bang-bang, m = 1 exactly while ON, so the DOE
+        # speed modifier is 1.0 at m = 1 (rated SMER, full-speed compressor).
+        # "vfd" keeps the proportional band modulation (default, unchanged).
         self.comp = CompressorState(
             deadband=deadband_rh,
             min_on_s=min_on_s,
             min_off_s=min_off_s,
             fan_power_w=fan_power_w,
-            proportional_band=mod_band_rh,
+            proportional_band=0.0 if control == "on_off" else mod_band_rh,
             m_min=_DEH_SPEED_M_MIN,
         )
         self.lag_q = FirstOrderLag(tau_rise=tau_q, tau_fall=tau_q)
@@ -143,11 +169,17 @@ class DEHDevice:
         Returns dict with Q_DH_W, M_deh_kgs, P_elec_W, is_on, S_DH,
         latent_cop (with legacy ``eta`` alias).
 
-        Variable-speed modulation (second-round research, DOE 87 FR 35286):
-        capacity scales linearly with m (``m_dh = m * M_full``) while SMER
-        FALLS at part load (``smer_eff = smer * smer_speed_mod(m)``), so the
-        compressor power ``P_comp = P_full * m / smer_mod`` rises faster than
-        linearly — running a dehumidifier at low speed wastes efficiency.
+        ``control="vfd"`` (default): variable-speed modulation (second-round
+        research, DOE 87 FR 35286): capacity scales linearly with m
+        (``m_dh = m * M_full``) while SMER FALLS at part load
+        (``smer_eff = smer * smer_speed_mod(m)``), so the compressor power
+        ``P_comp = P_full * m / smer_mod`` rises faster than linearly —
+        running a dehumidifier at low speed wastes efficiency.
+
+        ``control="on_off"`` (P1-1): the same equations hold with m = 1 while
+        running, so ``smer_speed_mod(1) = 1`` and the machine extracts
+        moisture at its rated SMER, cycling on the hysteresis deadband
+        (min_on/min_off anti-short-cycling included via CompressorState).
         """
         mod = self.comp.update(
             RH_z - deh_setpoint, dt, on_threshold=0.0, off_threshold=-self.comp.deadband

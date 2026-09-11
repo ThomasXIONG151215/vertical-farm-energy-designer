@@ -277,6 +277,14 @@ class DEHConfig:
     W_mean: float = 0.012  # kg/kg mean humidity ratio (W normalisation)
     W_std: float = 0.003  # kg/kg std dev
     smer: float = 2.0
+    control: str = "vfd"
+    #   DEH control mode (P1-1): "vfd" = variable-speed modulation inside
+    #   comp_mod_band_rh (DOE 87 FR 35286 part-load SMER penalty applies);
+    #   "on_off" = bang-bang cycling on the deadband at FULL speed — rated
+    #   SMER while running, zero power while off (min_on/min_off kept).
+    #   Part-load SMER loss can halve the effective kg/kWh of a VFD machine
+    #   (e.g. 1.28 vs rated 2.0) and cost ~56% more DEH electricity than
+    #   cycling at full speed — the engine reports effective SMER either way.
     deadband_rh: float = (
         2.0  # % RH hysteresis stop point (was 3.0; narrowed to avoid the pband×deadband idle band)
     )
@@ -687,6 +695,16 @@ class DesignProject:
             deh_cfg,
             "deh",
         )
+        # P1-1: deh.control whitelist — an unknown mode must fail fast instead
+        # of silently falling back to the VFD path (no silent fallbacks).
+        _deh_control = deh_cfg.get("control")
+        if _deh_control is not None and _deh_control not in ("vfd", "on_off"):
+            raise ValueError(
+                f"deh.control must be one of vfd|on_off, got {_deh_control!r}. "
+                f"'vfd' modulates speed inside deh.comp_mod_band_rh (DOE part-load "
+                f"SMER penalty); 'on_off' cycles at full speed on deh.deadband_rh "
+                f"(rated SMER while running)."
+            )
         rh_sp = sp_cfg.get("RH")
         if rh_sp is not None and not (0.0 <= rh_sp <= 100.0):
             raise ValueError(f"setpoints.RH must be in [0,100] %, got {rh_sp}")

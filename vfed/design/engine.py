@@ -345,6 +345,7 @@ def _build_devices(p, P_atm: float = 101.325):
         tau_q=p.deh.tau_q,
         tau_m=p.deh.tau_m,
         mod_band_rh=p.deh.comp_mod_band_rh,
+        control=p.deh.control,
     )
     # DEH net sensible heat rejection at the design point: P_comp + fan only.
     # m_dh*L_v must NOT be added here — the transpiration portion cancels
@@ -603,6 +604,10 @@ class DesignEngine:
             "removal_limited_events": 0,
             "removal_limited_water_kg": 0.0,
         }
+        # P1-1: annual DEH COMPRESSOR energy (kWh, fan excluded) for the
+        # effective-SMER report.  Same basis as the rated ``deh.smer`` (P2-5
+        # convention), so effective-vs-rated is an apples-to-apples ratio.
+        deh_comp_kwh = 0.0
         for h in range(n):
             energy_wh = 0.0
             hvac_wh = 0.0
@@ -737,6 +742,10 @@ class DesignEngine:
                 deh_perf["deh_actual_kg"] += M_deh_act * dt
                 deh_perf["hvac_nominal_kg"] += M_hvac_nom * dt
                 deh_perf["hvac_actual_kg"] += M_hvac_act * dt
+                # P1-1: compressor input = P_elec - fan exactly while running
+                # (P_elec = P_comp + fan, device contract); zero when off.
+                if dh["is_on"]:
+                    deh_comp_kwh += (dh["P_elec_W"] - deh.fan_power_w) * dt / 3.6e6
                 if removal_scale < 1.0:
                     deh_perf["removal_limited_events"] += 1
                     deh_perf["removal_limited_water_kg"] += (
@@ -889,6 +898,33 @@ class DesignEngine:
                 if deh_perf["deh_nominal_kg"] > 0
                 else 1.0,
             },
+        }
+
+        # P1-1: DEH effective-SMER report — the control strategy's efficiency
+        # footprint made visible.  Two ratios on the same COMPRESSOR-input
+        # denominator as the rated ``deh.smer`` (P2-5), so both are directly
+        # comparable to the nameplate:
+        #   * ``effective_smer_kg_per_kwh`` (primary, the user3 1.28-vs-2.0
+        #     figure): annual NOMINAL device condensate / annual compressor
+        #     energy.  Isolates the device-level control penalty — the DOE
+        #     part-load SMER curve for vfd (smer_speed_mod(m) < 1 at low m),
+        #     exactly 1.0 for on_off (m = 1 while running -> rated).
+        #   * ``delivered_smer_kg_per_kwh``: annual ACTUAL (inventory-capped)
+        #     condensate / annual compressor energy.  Adds the room-vapour
+        #     inventory clamp on top, i.e. the whole-system efficiency
+        #     including water the machine was paid to remove but could not.
+        # ``None`` when the DEH never ran (undefined ratio, not a silent zero).
+        summary["deh_smer"] = {
+            "control_mode": p.deh.control,
+            "effective_smer_kg_per_kwh": round(deh_perf["deh_nominal_kg"] / deh_comp_kwh, 3)
+            if deh_comp_kwh > 0.0
+            else None,
+            "delivered_smer_kg_per_kwh": round(deh_perf["deh_actual_kg"] / deh_comp_kwh, 3)
+            if deh_comp_kwh > 0.0
+            else None,
+            "rated_smer_kg_per_kwh": p.deh.smer,
+            "deh_comp_energy_kwh": round(deh_comp_kwh, 2),
+            "deh_total_energy_kwh": round(deh_kwh, 2),  # incl. fan
         }
 
         # P0-4: rated-capacity (full-load) diagnostics — how often each

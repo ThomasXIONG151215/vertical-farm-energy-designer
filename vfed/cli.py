@@ -218,6 +218,8 @@ _YAML_SECTION_COMMENTS = {
         "# deh: dehumidifier (removes moisture from transpiration)\n"
         "#   P_ref_w     - rated electrical power (W)\n"
         "#   smer        - specific moisture extraction (kg water / kWh)\n"
+        "#   control     - vfd (variable speed, part-load SMER penalty)\n"
+        "#                 | on_off (full-speed cycling, rated SMER)\n"
         "#   auto_size   - true = size capacity from design moisture load\n"
         "#   M_deh_nom   - alternative spec: nominal removal (L/day)\n"
         "#   datasheet aliases: capacity_l_per_day (-> M_deh_nom),\n"
@@ -542,6 +544,16 @@ def _cmd_evaluate(args):
         print(
             f"  Dehumidified     = {dh.get('deh_actual_dehum_kg', 0):.1f} kg (DEH) + "
             f"{dh.get('hvac_actual_dehum_kg', 0):.1f} kg (HVAC coil) per yr"
+        )
+    # P1-1: effective-SMER self-evidence — how much of the rated kg/kWh the
+    # chosen control strategy actually delivers (VFD part-load penalty vs
+    # full-speed cycling).  Skipped when the DEH never ran.
+    sm = summary.get("deh_smer")
+    if sm and sm.get("effective_smer_kg_per_kwh") is not None:
+        print(
+            f"  DEH eff. SMER    = {sm['effective_smer_kg_per_kwh']:.2f} kg/kWh "
+            f"(rated {sm.get('rated_smer_kg_per_kwh', 0.0):.2f}, "
+            f"mode {sm.get('control_mode', 'vfd')})"
         )
     # P0-4: full-load diagnostics — a device pinned at rated output hour
     # after hour usually means a setpoint the room cannot physically reach

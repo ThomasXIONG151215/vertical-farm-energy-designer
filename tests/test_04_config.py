@@ -115,6 +115,28 @@ class TestFromDictErrors:
         assert p2.hvac.auto_size is True
         assert p2.deh.auto_size is True
 
+    # ── DEH control mode (P1-1) ──────────────────────────────────────
+
+    def test_deh_control_defaults_to_vfd(self):
+        """DEH control defaults to 'vfd' — existing projects keep their
+        baseline behaviour (bitwise-identical physics)."""
+        p = DesignProject.from_dict({"deh": {}})
+        assert p.deh.control == "vfd"
+
+    def test_deh_control_on_off_accepted_and_round_trips(self):
+        """'on_off' (full-speed cycling at rated SMER) loads and survives
+        a YAML round-trip."""
+        p = DesignProject.from_dict({"deh": {"control": "on_off"}})
+        assert p.deh.control == "on_off"
+        p2 = DesignProject.from_dict(p.to_dict())
+        assert p2.deh.control == "on_off"
+
+    def test_deh_control_invalid_rejected(self):
+        """An unknown control mode fails fast at load time — it must never
+        silently fall back to the VFD path."""
+        with pytest.raises(ValueError, match="deh.control"):
+            DesignProject.from_dict({"deh": {"control": "turbo"}})
+
     def test_old_style_cop_loads_with_defaults(self):
         """YAML without Carnot params (old constant-mode) still works."""
         d = {"hvac": {"cop_mode": "constant", "cop_value": 4.0}}
