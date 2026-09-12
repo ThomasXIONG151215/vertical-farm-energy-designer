@@ -36,7 +36,7 @@
 | P0-5 | sweep 护栏（capital=0 警告同步到 sweep 分支；best 打印补 annual_om；边界最优提示 "optimum at grid boundary"） | 已验证 | 28e3a71 | PASS：266 passed（262+4）；数值零漂移（sweep CSV 100×24 逐位一致）；evaluate 输出逐字不变；单点 sweep 补 LCOE/annual_om/Capital total+capital=0 警告（与 evaluate 同源常量逐字一致）；边界提示 pv=200/battery=40 命中、pv=150 内点不误报；物理基线 64,184 kWh/yr / 12.7060 逐位不变（P0-3R 前口径） |
 | P1-1 | DEH 湿控器循环模式（on/off ±deadband、满速取铭牌 SMER）与 VFD 并列 + 报告 effective SMER | 已验证 | 50f6774 | PASS 全 7 项：默认 vfd 逐位不变（62,452.72/31.177 复现）；on_off 满速精确回铭牌 2.000；双口径 SMER（effective 1.325 名义/delivered 0.775 实际）独立复算一致；pytest 279 passed（267+12）；物理路径零改动；非法 control 值 exit 1 |
 | P1-2 | 投资指标：CSV 补 grid_independence/self_consumption/annual_savings/payback 列（后两代码已算）+ NPV/IRR 增量口径 + 电池"允许电网充电"开关 | 已验证 | e1ffde2 | PASS 全 7 项：diff 审查 6 文件全落范围（engine.py 仅 1 行透传，默认关）；sweep CSV 24→32 列（8 新列，与 evaluate 命名一致）；独立复算 NPV maxrel 1.13e-14/IRR 6.66e-16/savings 1.82e-12（机器精度）；(0,0) 行 0/inf/NaN 语义正确；零漂移（609 基线 12 项全中+example_sweep 24 旧列×100 行 bitwise）；谷充 confined {0-5,22,23} 账单 −11.7%、往返比 0.8275≈η²、缺省=显式 false；pytest 305 passed（279+26 新 test_08_investment.py） |
-| P1-3 | monthly.csv 加电费列 + harvest_kg 标注干/鲜 + timeseries 时间轴回卷（去 +8h 偏移） | 未开始 | — | — |
+| P1-3 | monthly.csv 加电费列 + harvest_kg 标注干/鲜 + timeseries 时间轴回卷（去 +8h 偏移）【已拆 P1-3a 输出管道 / P1-3b 时间轴两步】 | P1-3a 已验证（P1-3b 待做） | 1f6f918 | P1-3a PASS 全 7 项：pytest 318 passed（305+13 新 test_09_output_columns.py）；物理零漂移（62,452.72/31.177/6,245.27/LCOE 0.6608 逐位，timeseries.csv bitwise 不变，sweep 32 列对 HEAD bitwise identical）；monthly 新列验收：electricity_cost 12 月合计 6245.272、grid_import_kwh 62452.72、water_m3 10.405、harvest_fw_kg 月度纯事件 1974.02；standing 单列 1.4574 不再并入 m1（m1.harvest_kg=8.296396 纯事件）；summary 7 新标量+literal_eval 全格通过 0 np.repr；README 双语列字典。**P1-3b 将迁移基线 62,452.72→62,446.74** |
 | P1-4 | RH 合规 KPI（超标小时数/p95/max/病害风险标记） | 未开始 | — | — |
 | P1-5 | 物理参数词汇表（hvac/deh 30+ 字段注释 + U_wall_A/C_z 估值指引 + 输出术语 removal-limited/RH clamp/X_d 解释【P2-4 与此项合并做】） | 未开始 | — | — |
 | P1-6 | transpiration/growth 逐参数注释（单位+范围+一句话语义）+ 5 方法枚举写全 + 统一默认水情景 + plants_per_m2 密度参数 | 未开始 | — | — |
@@ -57,6 +57,7 @@
 | 第 5 轮 | 2026-09-08 21:31 | P0-3R | ✅ 已验证+已提交(9a9fd01) | 用户指令插队轮：fix(生菜单参数标定 3.5e-9+文档/警示全面改写+测试带更新)→verify PASS 全 16 项→commit |
 | 第 6 轮 | 2026-09-11 09:28 | P1-1 | ✅ 已验证+已提交(50f6774) | 中断恢复轮：前次派发被取消留下半成品，fix subagent 审查后沿用补全（口径缺陷修正：effective 改名义口径+delivered 并列）→verify PASS 全 7 项→commit |
 | 第 7 轮 | 2026-09-12 | P1-2 | ✅ 已验证+已提交(e1ffde2) | 会话直执轮：fix（NPV/IRR/payback/savings/self-consumption 8 新列 + battery.allow_grid_charging 开关默认关）→ 三路并行 verify 全 PASS（①P1-2 独立交叉验证 round6 ②P0-1..P0-5+P0-3R 回归卡复跑 ③P1-1 复核+已修项代码特征抽查）→commit；报告 user-gym/regression/crosscheck_round6_p1-2.md / recheck_p0_cards_20260912.md / recheck_p1-1_features_20260912.md |
+| 第 8 轮 | 2026-09-12 | P1-3a | ✅ 已验证+已提交(1f6f918) | 用户确认拆 a/b 轮：fix（additive 输出管道：monthly grid/cost/water/fw 列 + summary 7 标量 + standing 单列 + summary CSV json-safe + README 双语列字典；general subagent 实现）→ 主会话独立 verify PASS 全 7 项（含 sweep bitwise 与 yaml 混淆假警报排查，见 Executor Feedback）→commit；工件 %TEMP%\opencode\p13a\；scratchpad 2026-09-12_scratchpad_p1-3a-output-pipeline.md |
 
 ## 5. Executor Feedback or Help Requests
 - 基线数字（回归对照）：609 preset 基准 66,310 kWh/yr、13.06 kWh/kg fresh、HVAC 占比 18.2%（P0-4 修复后 HVAC 占比应显著下降并记录新基线）
@@ -91,3 +92,7 @@
 - 【P0-2 代码位置勘误】禁用路径计价实际落点 engine.py:1137-1153 + cli.py:585 自证行 + sweep.py（早期记录笼统写 energy_system.py，后者仅启用路径 tariff）
 - 【P1-1 on_off SMER 补录】on_off delivered SMER=0.598（账本原只录 vfd 口径 0.775；effective 2.000=铭牌满速、vfd delivered 0.775、on_off delivered 0.598 三口径并存）
 - 【环境注意】vfed CLI 不在系统 PATH（沙盒命令须用 user1 venv exe 绝对路径）；user1 venv 无 pytest（回归卡 $PY 照抄会失败，须系统 Python）；`-k engine_deh` 会漏 engine_reports_deh 用例，点名补跑
+- 【P1-3a 新列与验收数字（1f6f918）】monthly 新列：electricity_cost/grid_import_kwh/water_m3/harvest_fw_kg（grid-only）；PV 启用另加 pv_generation_kwh/grid_export_kwh/battery_net_kwh；summary 新标量：annual_led_kwh/annual_hvac_kwh/hvac_pct/deh_pct/led_pct/misc_pct（0-1 分数，0.30=30%）/harvest_final_standing_kg；save_summary_csv 已套 _ensure_json_safe（literal_eval 全格可解析）
+- 【⚠ sweep 基线 yaml 警示】r5 权威基线（LCOE 0.76976/capital 23,255.814/dry 77.57）对照必须用 `user-gym/regression/r4_p05_example_sweep.yaml`（C_pv=500 legacy 回退计价 C_pv×kWp）；**勿用 `p05_example_sweep.yaml`（C_pv=110，市场价）**——后者 best capital_pv=5116.28（0.22×），曾引发假警报；物理列两 yaml 逐位一致，仅资本计价不同
+- 【P1-3a fw 双口径】月度 harvest_fw_kg 合计 1974.02 = 纯收割事件口径（annual−standing 换算）；年度 annual_harvest_fw_kg 2003.17 含年末在田 standing——两口径均正确，README 已写明，验证勿混
+- 【P1-3b 排队预告】时间轴/窗口对齐：①city 摄取路径补 P4-16 式对齐守卫（weather_bridge.py:242-259）②重新生成 50 城市数据文件（含去误导性 +00:00 后缀）③ts/monthly 增 ISO8601 timestamp 列+price 列 ④离线语义须定义（守卫=警告+沿用或 fail-fast，禁静默插值）⑤**将迁移权威基线 62,452.72→62,446.74（−0.01%）+收割归属月全体移位**——回归卡/example_sweep/user10/user11 全部数字须按 SYNTHESIS §12a 先例重记录
