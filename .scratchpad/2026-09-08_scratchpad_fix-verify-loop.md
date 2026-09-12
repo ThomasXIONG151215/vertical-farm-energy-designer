@@ -35,7 +35,7 @@
 | P0-4 | 满载/可达性诊断（HVAC/DEH 连续满载>24h 输出 WARNING）+ 修 609 preset (T_dark,C_z,P_rated) 三元组【会改物理基线，完成后记录新基线】 | 已验证 | 896db3b | PASS：新基线 64,184 kWh/yr / HVAC 10,393（16.2%）/ 暗期满速 195/2920 / 暗期均温 22.32°C（设定 21，偏差 1.32K）/ 12.7060 kWh/kg；双向告警（cooling/heating/DEH）真实+合成双验证；pytest 262 passed（251+11）；物理守恒全保；ODE/设备模型零触碰 |
 | P0-5 | sweep 护栏（capital=0 警告同步到 sweep 分支；best 打印补 annual_om；边界最优提示 "optimum at grid boundary"） | 已验证 | 28e3a71 | PASS：266 passed（262+4）；数值零漂移（sweep CSV 100×24 逐位一致）；evaluate 输出逐字不变；单点 sweep 补 LCOE/annual_om/Capital total+capital=0 警告（与 evaluate 同源常量逐字一致）；边界提示 pv=200/battery=40 命中、pv=150 内点不误报；物理基线 64,184 kWh/yr / 12.7060 逐位不变（P0-3R 前口径） |
 | P1-1 | DEH 湿控器循环模式（on/off ±deadband、满速取铭牌 SMER）与 VFD 并列 + 报告 effective SMER | 已验证 | 50f6774 | PASS 全 7 项：默认 vfd 逐位不变（62,452.72/31.177 复现）；on_off 满速精确回铭牌 2.000；双口径 SMER（effective 1.325 名义/delivered 0.775 实际）独立复算一致；pytest 279 passed（267+12）；物理路径零改动；非法 control 值 exit 1 |
-| P1-2 | 投资指标：CSV 补 grid_independence/self_consumption/annual_savings/payback 列（后两代码已算）+ NPV/IRR 增量口径 + 电池"允许电网充电"开关 | 未开始 | — | — |
+| P1-2 | 投资指标：CSV 补 grid_independence/self_consumption/annual_savings/payback 列（后两代码已算）+ NPV/IRR 增量口径 + 电池"允许电网充电"开关 | 已验证 | e1ffde2 | PASS 全 7 项：diff 审查 6 文件全落范围（engine.py 仅 1 行透传，默认关）；sweep CSV 24→32 列（8 新列，与 evaluate 命名一致）；独立复算 NPV maxrel 1.13e-14/IRR 6.66e-16/savings 1.82e-12（机器精度）；(0,0) 行 0/inf/NaN 语义正确；零漂移（609 基线 12 项全中+example_sweep 24 旧列×100 行 bitwise）；谷充 confined {0-5,22,23} 账单 −11.7%、往返比 0.8275≈η²、缺省=显式 false；pytest 305 passed（279+26 新 test_08_investment.py） |
 | P1-3 | monthly.csv 加电费列 + harvest_kg 标注干/鲜 + timeseries 时间轴回卷（去 +8h 偏移） | 未开始 | — | — |
 | P1-4 | RH 合规 KPI（超标小时数/p95/max/病害风险标记） | 未开始 | — | — |
 | P1-5 | 物理参数词汇表（hvac/deh 30+ 字段注释 + U_wall_A/C_z 估值指引 + 输出术语 removal-limited/RH clamp/X_d 解释【P2-4 与此项合并做】） | 未开始 | — | — |
@@ -56,7 +56,7 @@
 | 第 4 轮 | 2026-09-08 20:15 | P0-5 | ✅ 已验证+已提交(28e3a71) | 心跳轮：fix(共享警告常量+单点 sweep 经济自证行+边界提示纯 ASCII)→verify PASS 全项→commit |
 | 第 5 轮 | 2026-09-08 21:31 | P0-3R | ✅ 已验证+已提交(9a9fd01) | 用户指令插队轮：fix(生菜单参数标定 3.5e-9+文档/警示全面改写+测试带更新)→verify PASS 全 16 项→commit |
 | 第 6 轮 | 2026-09-11 09:28 | P1-1 | ✅ 已验证+已提交(50f6774) | 中断恢复轮：前次派发被取消留下半成品，fix subagent 审查后沿用补全（口径缺陷修正：effective 改名义口径+delivered 并列）→verify PASS 全 7 项→commit |
-| 第 7 轮 | 待心跳触发 | P1-2 | 排队中 | 投资指标：CSV 补 grid_independence/self_consumption/annual_savings/payback 列 + NPV/IRR 增量口径 + 电池允许电网充电开关 |
+| 第 7 轮 | 2026-09-12 | P1-2 | ✅ 已验证+已提交(e1ffde2) | 会话直执轮：fix（NPV/IRR/payback/savings/self-consumption 8 新列 + battery.allow_grid_charging 开关默认关）→ 三路并行 verify 全 PASS（①P1-2 独立交叉验证 round6 ②P0-1..P0-5+P0-3R 回归卡复跑 ③P1-1 复核+已修项代码特征抽查）→commit；报告 user-gym/regression/crosscheck_round6_p1-2.md / recheck_p0_cards_20260912.md / recheck_p1-1_features_20260912.md |
 
 ## 5. Executor Feedback or Help Requests
 - 基线数字（回归对照）：609 preset 基准 66,310 kWh/yr、13.06 kWh/kg fresh、HVAC 占比 18.2%（P0-4 修复后 HVAC 占比应显著下降并记录新基线）
@@ -85,3 +85,9 @@
 - 【P1-1 基线复现坐标澄清】P0-3R 权威基线（62,452.72/31.177）须用回归卡命令 --city Shanghai（坐标 31.23/121.47）；--lat 30.9 --lon 121.5 是另一站点（62,261.59/30.9442），勿混用——修正账本早期「两路径逐位一致」的表述
 - 【P1-1 遗留观察】on_off 模式会触发 P0-4 满载 WARNING（8739h 满速，99.8%）——bang-bang+库存钳位的预期形态非缺陷；deh_smer 的 None 分支（DEH 全年未运行）仅代码审阅无运行时用例
 - 【P1-1 测试计数勘误】fix 报告称 +8（基线 271）系记数笔误，实际 +12（267→279：devices 6/config 3/engine 级 3）；终值 279 正确
+- 【P1-2 权威经济基线（e1ffde2）】example_sweep 32 列 CSV：best=pv200+batt0+ppfd300 三边界，LCOE 0.7698（CSV 0.7697603292315144）、capital 23,255.814 USD、dry 77.57 kg——新增 8 列：grid_independence/self_consumption/annual_savings/payback_years/npv_25yr/irr_pct（增量口径，vs 无 PV 基线）；P1-3+ 验证经济列以此为准；旧 24 列 bitwise 不变
+- 【P1-2 遗留观察（7 条非阻断）】①evaluate summary 无 savings/payback 列（仅 sweep 侧）②单点 sweep 控制台不打投资块 ③README 未同步新列 ④谷充 C-rate 理论越限（实际 0 发生）⑤N-5 子项（CO2/月度发电）顺延 ⑥pv=0+batt 自放电微循环（既有、bitwise 同 round5）⑦基线对照须仓库根 cache + r5_example_sweep_results.csv（regcache 0.76924 变体勿用）
+- 【三路复核记录（2026-09-12，HEAD=e1ffde2 后）】①P0-1..P0-5 回归卡复跑全 PASS（P0-1 capital_pv@200m²=162,790.70 RMB；P0-2 grid_cost_net=6245.27 与 sweep(0,0) 逐位等；P0-3 警示 3 要素+31.177/44.51/100.16 全中；P0-4 暗期满速 165/2920+T_dark=35 双向告警；P0-5 单点+best+C_pv=0 边界全过）；②P1-1 复核全 PASS 逐位（vfd 62,452.72/31.177/SMER 1.325/0.775；on_off 73,435.29/19,583.84/2.000/满载 8739h）；③已修项代码特征抽查全在——漂移归因均非回归
+- 【P0-2 代码位置勘误】禁用路径计价实际落点 engine.py:1137-1153 + cli.py:585 自证行 + sweep.py（早期记录笼统写 energy_system.py，后者仅启用路径 tariff）
+- 【P1-1 on_off SMER 补录】on_off delivered SMER=0.598（账本原只录 vfd 口径 0.775；effective 2.000=铭牌满速、vfd delivered 0.775、on_off delivered 0.598 三口径并存）
+- 【环境注意】vfed CLI 不在系统 PATH（沙盒命令须用 user1 venv exe 绝对路径）；user1 venv 无 pytest（回归卡 $PY 照抄会失败，须系统 Python）；`-k engine_deh` 会漏 engine_reports_deh 用例，点名补跑
