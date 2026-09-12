@@ -157,7 +157,11 @@ class SimulationResult:
 
     def save_summary_csv(self, path: str) -> None:
         """Write a single-row CSV of scalar KPIs."""
-        s = self.summary
+        # P1-3a: sanitise every value through _ensure_json_safe (same as
+        # to_dict) so dict-valued keys (deh_smer, dehumidifier_performance,
+        # full_load_diagnostics, ...) no longer leak `np.float64(...)` reprs
+        # into the CSV and every cell stays ast.literal_eval-parseable.
+        s = {k: _ensure_json_safe(v) for k, v in self.summary.items()}
         keys = sorted(s.keys())
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)

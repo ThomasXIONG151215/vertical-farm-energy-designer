@@ -224,7 +224,7 @@ vertical-farm-energy-designer/
 | 免费能源 | `free_energy_kwh` | kWh/年 | PV 自用 + 电池放电 |
 | 电网独立率 | `grid_independence_pct` | % | （1 − 电网购入 ÷ 负荷）× 100；**电网依赖率 = 100 − 该值** |
 
-其余附带输出：`energy_breakdown`（`hvac_pct`/`led_pct`/`deh_pct`/`misc_pct`，分数形式如 0.30=30%）、`monthly`（12 个月聚合）、`timeseries`（逐时列：`load_kw`/`T_z`/`RH_z`/`E_*_Wh` 等）、`typical_daily`（12×24 典型日负荷）、`sizing`（自动选型铭牌值）。仅当项目配置了 `pv`/`battery` 时 `evaluate` 才打印光伏/电网行。若能源系统禁用（`pv_area_m2=0` 且 `battery_kwh=0`），`grid_import_kwh=年负荷`，电费仍按 `grid_import_kwh × tariff` 计价——计入 `annual_grid_cost_net`、`total_electricity_cost`、`lcoe` 与 `specific_cost_per_kg`，与 sweep 路径的 `(0, 0)` 行口径一致——而光伏/电池相关列（`pv_generation_kwh`、`grid_export_kwh`、`battery_*`、`grid_independence_pct` 等）为 0。
+其余附带输出：`energy_breakdown`（`hvac_pct`/`led_pct`/`deh_pct`/`misc_pct`，分数形式如 0.30=30%）、`monthly`（12 个月聚合）、`timeseries`（逐时列：`load_kw`/`T_z`/`RH_z`/`E_*_Wh` 等）、`typical_daily`（12×24 典型日负荷）、`sizing`（自动选型铭牌值）。仅当项目配置了 `pv`/`battery` 时 `evaluate` 才打印光伏/电网行。若能源系统禁用（`pv_area_m2=0` 且 `battery_kwh=0`），`grid_import_kwh=年负荷`，电费仍按 `grid_import_kwh × tariff` 计价——计入 `annual_grid_cost_net`、`total_electricity_cost`、`lcoe` 与 `specific_cost_per_kg`，与 sweep 路径的 `(0, 0)` 行口径一致——而光伏/电池相关列（`pv_generation_kwh`、`grid_export_kwh`、`battery_*`、`grid_independence_pct` 等）为 0。三个导出 CSV 的逐列语义见下方 **CSV 列字典**。
 
 ### sweep 输出（results.csv 列清单）
 
@@ -249,6 +249,61 @@ vertical-farm-energy-designer/
 | `annual_grid_import` | kWh/年 | 年购电 |
 | `annual_grid_export` | kWh/年 | 年售电 |
 | `battery_cycles` | 等效满循环/年 | 电池循环 |
+
+### CSV 列字典
+
+`vfed evaluate --export <dir>` 导出 `summary.csv`、`timeseries.csv`、`monthly.csv` 三个文件。**质量口径：所有产量（harvest）列均为干重（kg DM），仅 `_fw` 后缀列为鲜重换算。** summary 中的 dict 值单元格均为 Python 字面量字典（可用 `ast.literal_eval` 解析），不会出现 numpy repr。
+
+summary.csv（单行 — 标量 KPI）：
+
+| 列名 | 单位 | 含义 / 口径 |
+|---|---|---|
+| `annual_energy_kwh` | kWh/年 | 全年建筑耗电（LED+HVAC+DEH+杂项） |
+| `annual_led_kwh` / `annual_hvac_kwh` | kWh/年 | LED / HVAC 全年电量（与逐时 `E_led_Wh` / `E_hvac_Wh` 求和一致） |
+| `hvac_pct` / `deh_pct` / `led_pct` / `misc_pct` | 分数（0-1） | 各设备占年电量比（`energy_breakdown` 扁平化；0.30 = 30%） |
+| `annual_harvest_kg` | kg 干重/年 | 全年干物质收获 — **含**年末在田生物量 |
+| `annual_harvest_fw_kg` | kg 鲜重/年 | `annual_harvest_kg` ÷ `dry_matter_fraction` |
+| `harvest_final_standing_kg` | kg 干重 | 年末在田生物量（最后一茬未完成部分）。计入 `annual_harvest_kg` 但**不并入任何月份** — `monthly.harvest_kg` 合计 = `annual_harvest_kg` − 该值 |
+| `harvest_per_month_avg_kg` | kg 干重 | 月均收割事件产量（仅事件，不含在田） |
+| `specific_energy_kwh_per_kg` | kWh/kg **鲜重** | `annual_energy_kwh` ÷ `annual_harvest_fw_kg` — 鲜重口径，列名无 `_fw` 后缀（兼容保留） |
+| `specific_cost_per_kg` | currency/kg 鲜重 | （年化资本 + 运营 + 净购电）÷ 鲜重产量 |
+| `dry_matter_fraction` | — | 干→鲜换算系数（默认 0.05） |
+| `annual_water_m3` | m³/年 | 全年蒸腾耗水 |
+| `lcoe` | currency/kWh | （年化资本 + 运营 + 净购电）÷ 年负荷 — 设施全成本口径，非发电 LCOE |
+| `capital_total` / `annual_om` | currency、currency/年 | 总资本 / 年运营 |
+| `total_electricity_cost` = `annual_grid_cost_net` | currency/年 | 净电费：Σ(`grid_import` × 逐时电价) − Σ(`grid_export` × `export_price`)。始终计价 — 没有"禁用电价"模式；yaml 无 `tariff` 节时用默认值（平价 0.10/kWh、上网 0.05） |
+| `grid_import_kwh` / `grid_export_kwh` / `pv_generation_kwh` | kWh/年 | 年购电 / 售电 / 光伏发电（纯电网运行为 0，此时购电 = 负荷） |
+| `battery_cycles` / `battery_discharge_kwh` / `pv_self_consumed_kwh` / `pv_self_consumption_rate` / `free_energy_kwh` / `grid_independence_pct` | 混合 | 电池吞吐、光伏自用、电网独立率（见上方 KPI 表） |
+| `moisture_clamp_stats` / `temperature_clamp_stats` | dict | 湿度积分器削顶事件（饱和上限 / 零下限）与温度削顶事件 |
+| `dehumidifier_performance` | dict | 名义 vs 实际（受室内湿存水限制）除湿量；`removal_limited_*` |
+| `deh_smer` | dict | 有效/送达/额定 SMER（kg/kWh，压缩机输入口径，不含风机）；`deh_comp_energy_kwh` 不含风机，`deh_total_energy_kwh` 含风机 |
+| `full_load_diagnostics` | dict | 各设备满载运行的小时数/占比/最长连续时长 + 告警阈值 |
+
+timeseries.csv（8760 行逐时数据）：
+
+| 列名 | 单位 | 含义 |
+|---|---|---|
+| `hour_of_year` | 0-8759 | 仿真步序号 |
+| `month` / `day` / `hour_of_day` | — | 标签取自天气文件（预下载城市数据为本地 1/1 08:00 起的旋转 8760 小时窗；lat/lon 抓取数据为本地自然年） |
+| `T_z` / `RH_z` | °C / % | 室内温度 / 相对湿度 |
+| `T_ext` / `RH_ext` | °C / % | 室外温度 / 相对湿度 |
+| `GHI` | W/m² | 水平面总辐照 |
+| `load_kw` | kW | 建筑电功率（1 小时步长：kW = kWh/h） |
+| `E_hvac_Wh` / `E_deh_Wh` / `E_led_Wh` / `E_misc_Wh` | Wh | 各设备逐时电量（misc = `equipment_power_w`） |
+| `X_d` | kg 干重/m² | 在田干物质密度：**锯齿态状态变量，每次收割重置为 `growth.initial_dry_weight`，非累积量** |
+
+monthly.csv（12 行，`month` 为 1-12 不含年份 — 同 timeseries 的标签口径说明）：
+
+| 列名 | 单位 | 含义 / 口径 |
+|---|---|---|
+| `energy_kwh__total` / `__hvac` / `__deh` / `__led` / `__misc` | kWh | 各设备月度电量（12 月合计 = 年值） |
+| `avg_T_z` / `avg_RH_z` | °C / % | 月均室内状态 |
+| `harvest_kg` | kg 干重 | **仅收割事件**（干重）。合计 = `annual_harvest_kg` − `harvest_final_standing_kg` |
+| `harvest_fw_kg` | kg 鲜重 | 鲜重换算：`harvest_kg` ÷ `dry_matter_fraction` |
+| `water_m3` | m³ | 月度蒸腾耗水（合计 = `annual_water_m3`） |
+| `grid_import_kwh` | kWh | 月度购电（纯电网运行 = `energy_kwh__total`） |
+| `electricity_cost` | currency | 月度净电费：Σ(`grid_import` × 逐时电价) − Σ(`grid_export` × `export_price`)；12 个月合计与 `annual_grid_cost_net` 闭合（差 < 0.01）。始终计价（见上方电价说明） |
+| `pv_generation_kwh` / `grid_export_kwh` / `battery_net_kwh` | kWh | 仅 PV/电池启用时输出：月度光伏发电 / 售电 / 电池净电量（放电 − 充电） |
 
 ## Web 可视化（vfed-web）
 

@@ -135,6 +135,23 @@ def _full_load_stats(full_hours) -> dict:
     }
 
 
+def _monthly_sum(values, months) -> np.ndarray:
+    """P1-3a: bucket hourly values into the 12 calendar-month totals.
+
+    ``months`` is the hour-indexed month label array (1..12) already used for
+    the engine's monthly accumulators, so the buckets stay consistent with
+    monthly_hours / monthly_energy.  Returns an array of 12 sums (0 for a
+    month with no hours, e.g. short weather windows).
+    """
+    v = np.asarray(values, dtype=float)
+    out = np.zeros(12)
+    for mo in range(1, 13):
+        mask = months == mo
+        if mask.any():
+            out[mo - 1] = float(v[mask].sum())
+    return out
+
+
 def full_load_warnings(summary: dict) -> List[str]:
     """P0-4: setpoint-reachability warnings from ``full_load_diagnostics``.
 
@@ -570,6 +587,9 @@ class DesignEngine:
         monthly_t_sum = np.zeros(12)
         monthly_rh_sum = np.zeros(12)
         monthly_hours = np.zeros(12)
+        # P1-3a: per-month transpiration water (kg) so monthly.csv can carry
+        # water_m3 (= kg / 1000) and close against summary.annual_water_m3.
+        monthly_water_kg = np.zeros(12)
         # typical daily: 12 months × 24 hours accumulators
         typical_load_sum = np.zeros((12, 24))
         typical_count = np.zeros((12, 24))
@@ -651,7 +671,10 @@ class DesignEngine:
                 # Water accounting: condensate (sat_clipped_kg) is assumed to be
                 # drained and NOT recovered, so transpiration is the water demand —
                 # total_water_kg keeps the full E_trans tally (no sat_clip deduction).
+                # P1-3a: the same tally is bucketed per calendar month for
+                # monthly.csv's water_m3 column (identical values, no physics).
                 total_water_kg += E_trans * dt
+                monthly_water_kg[month_idx] += E_trans * dt
                 cycle_h += dt / 3600.0
                 _, X_d = grow.step(T_z, light_wm2, X_d, dt)
                 W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h], pressure_kpa=P_atm)
@@ -807,10 +830,18 @@ class DesignEngine:
             )
         # final partial cycle (skip if the last harvest already landed on the
         # final hour)
+        # P1-3a: the end-of-year standing crop is no longer folded into the
+        # last row's label month (it inflated that month's harvest by up to
+        # ~15% under the rotating window, and still landed in December under
+        # an aligned window).  It keeps counting toward the ANNUAL totals
+        # (annual_harvest_kg unchanged) and is reported separately as
+        # summary["harvest_final_standing_kg"] — monthly.harvest_kg is now
+        # the pure harvest-event sum (annual − standing).
+        harvest_final_standing_kg = 0.0
         if next_harvest_h > n:
             harvested = (X_d - X_d_init) * crop_area
             total_harvest_kg += max(harvested, 0.0)
-            monthly_harvest[months[-1] - 1] += max(harvested, 0.0)
+            harvest_final_standing_kg = max(harvested, 0.0)
 
         annual_water_m3 = total_water_kg / 1000.0
 
@@ -877,6 +908,19 @@ class DesignEngine:
             "harvest_per_month_avg_kg": round(float(np.mean(monthly_harvest)), 2),
             "dry_matter_fraction": dry_fraction,
             "annual_water_m3": round(annual_water_m3, 2),
+            # P1-3a: annual LED / HVAC totals (previously only derivable by
+            # summing the hourly timeseries) and the energy_breakdown shares
+            # flattened into summary scalars so they reach summary.csv.
+            "annual_led_kwh": round(led_kwh, 2),
+            "annual_hvac_kwh": round(hvac_kwh, 2),
+            "hvac_pct": energy_breakdown["hvac_pct"],
+            "deh_pct": energy_breakdown["deh_pct"],
+            "led_pct": energy_breakdown["led_pct"],
+            "misc_pct": energy_breakdown["misc_pct"],
+            # P1-3a: year-end standing crop, excluded from every monthly
+            # bucket (see the harvest block above).  Included in
+            # annual_harvest_kg / annual_harvest_fw_kg as before.
+            "harvest_final_standing_kg": round(harvest_final_standing_kg, 4),
             "moisture_clamp_stats": {
                 "floor_clip_events": clamp_stats["floor_clip_events"],
                 "floor_clip_water_kg": round(clamp_stats["floor_clip_water_kg"], 3),
@@ -944,6 +988,10 @@ class DesignEngine:
         }
 
         # ── monthly dict ───────────────────────────────────────────────────
+        # P1-3a: flat-key columns (water_m3 / harvest_fw_kg here; grid / cost
+        # / PV-dispatch columns are attached by the economics branches below,
+        # where the tariff and the EnergySystem perf arrays live).  Flat keys
+        # keep save_monthly_csv's `__`-flattening style consistent.
         monthly = {
             "month": months_1_12,
             "energy_kwh": {
@@ -954,6 +1002,10 @@ class DesignEngine:
                 "misc": monthly_energy[:, 4].tolist(),
             },
             "harvest_kg": monthly_harvest.tolist(),
+            # fresh-weight conversion of the monthly harvest events
+            "harvest_fw_kg": (monthly_harvest / dry_fraction).tolist(),
+            # transpiration water, m³ (= kg / 1000)
+            "water_m3": (monthly_water_kg / 1000.0).tolist(),
             "avg_T_z": monthly_avg_T.tolist(),
             "avg_RH_z": monthly_avg_RH.tolist(),
         }
@@ -1055,6 +1107,29 @@ class DesignEngine:
                     year=es.lifetime // 2,
                 )
 
+                # ── P1-3a: monthly PV-dispatch columns (additive) ──────────
+                # The EnergySystem perf arrays were previously consumed and
+                # discarded after the summary scalars; now they also feed
+                # monthly.csv so the PV/battery schedule is auditable month
+                # by month.  electricity_cost is the hourly NET bill
+                # (import × price − export × feed-in), matching the annual
+                # net_grid_cost definition, so the 12 monthly values close
+                # against summary.annual_grid_cost_net.
+                _price_arr = tariff.price_array(hours)
+                _cost_hourly = (
+                    np.asarray(perf["grid_import"], dtype=float) * _price_arr
+                    - np.asarray(perf["grid_export"], dtype=float) * tariff.export_price
+                )
+                monthly["grid_import_kwh"] = _monthly_sum(perf["grid_import"], months).tolist()
+                monthly["electricity_cost"] = _monthly_sum(_cost_hourly, months).tolist()
+                monthly["pv_generation_kwh"] = _monthly_sum(perf["pv_power"], months).tolist()
+                monthly["grid_export_kwh"] = _monthly_sum(perf["grid_export"], months).tolist()
+                monthly["battery_net_kwh"] = _monthly_sum(
+                    np.asarray(perf["battery_discharge"], dtype=float)
+                    - np.asarray(perf["battery_charge"], dtype=float),
+                    months,
+                ).tolist()
+
                 # ── Cost breakdown (full-system capital, aligned with sweep.py) ──
                 # PV+Battery component costs (for legacy fields)
                 pv_cost = pv_sys.calculate_costs(p.pv_area_m2)
@@ -1153,6 +1228,18 @@ class DesignEngine:
             # grid_import == load, grid_export == 0 (no PV, no battery)
             tcost = tariff.annual_cost(load_kw, np.zeros_like(load_kw), hours)
             net_grid_cost = tcost["net_grid_cost"]
+
+            # ── P1-3a: monthly grid / cost columns (additive) ──────────────
+            # Same pricing basis as the annual figures above (P0-2): the full
+            # building load is the grid import and is priced at the project
+            # tariff hour by hour, so the 12 monthly electricity_cost values
+            # close against annual_grid_cost_net.  There is no disabled-tariff
+            # mode: a project without an explicit tariff section gets the
+            # TariffConfig defaults (see README column dictionary).
+            _price_arr = tariff.price_array(hours)
+            _cost_hourly = load_kw * _price_arr  # export == 0 in this branch
+            monthly["grid_import_kwh"] = monthly_energy[:, 0].tolist()
+            monthly["electricity_cost"] = _monthly_sum(_cost_hourly, months).tolist()
 
             cap = _total_capital(p, 0.0, 0.0)
             annual_cap = _annualized_capital(p, cap)
