@@ -242,14 +242,42 @@ def fetch_weather(
     if city:
         local = _find_city_csv(city, year)
         if local is not None:
-            # P6-10: pre-downloaded data/weather/{city}_{year}.csv carry a
-            # "+00:00" suffix but the VALUES are local wall-clock time (GHI
-            # peaks at local hour 12).  The engine consumes the index via
-            # wall-clock fields (index.hour/month/day), so this is internally
-            # consistent; the "+00:00" label is a misleading legacy of the
-            # download step — treat the index as local wall time.
             df = pd.read_csv(local, parse_dates=["timestamp"])
             df = df.set_index("timestamp")
+            # P1-3b: pre-downloaded city files carry a legacy "+00:00" suffix
+            # (P6-10) but the VALUES are local wall-clock time (GHI peaks at
+            # local hour 12).  Strip the misleading UTC label so the index is
+            # naive local wall time — the same convention as the P4-16 fetch
+            # pipeline cache format.  Never re-zones or shifts the values.
+            if len(df) > 0 and isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
+                df.index = df.index.tz_localize(None)
+            # P1-3b: alignment guard (P4-16 parity for the city path).  A
+            # rotated window (first row not at local Jan 1 00:00) is missing
+            # the first tz_hours hours of the local year and wraps the tail
+            # into the next year — warn loudly and use the file as-is (no
+            # interpolation / no synthesized rows, no-hardcoded-science).
+            expected_n = (365 + int(calendar.isleap(year))) * 24
+            first_ts = df.index[0] if len(df) > 0 else None
+            strict_mono = bool(
+                len(df) > 0
+                and df.index.is_monotonic_increasing
+                and df.index.is_unique
+            )
+            aligned = (
+                len(df) == expected_n
+                and first_ts == pd.Timestamp(f"{year}-01-01 00:00:00")
+                and strict_mono
+            )
+            if not aligned:
+                warnings.warn(
+                    f"City weather file {local.name} is not aligned to the "
+                    f"local calendar year {year} (first row {first_ts}, "
+                    f"{len(df)} rows, expected {expected_n} rows starting "
+                    f"{year}-01-01 00:00:00, strictly monotonic={strict_mono}); "
+                    f"using it as-is without interpolation. Regenerate the "
+                    f"file from Open-Meteo for an aligned window.",
+                    stacklevel=2,
+                )
             if "poa_radiation" not in df.columns:
                 df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
             # Also write to the standard cache so subsequent calls hit quickly

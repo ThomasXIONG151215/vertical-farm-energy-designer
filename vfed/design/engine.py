@@ -1027,6 +1027,12 @@ class DesignEngine:
             "E_led_Wh": P_led.tolist(),
             "E_misc_Wh": P_misc.tolist(),
             "X_d": X_d_arr.tolist(),
+            # P1-3b: ISO8601 local wall-clock timestamp per row (weather index
+            # is naive local time on the aligned local calendar year) and the
+            # tariff price actually applied to that hour.  Additive columns,
+            # appended last (existing consumers index by name).
+            "timestamp": weather.index.strftime("%Y-%m-%dT%H:%M:%S").tolist(),
+            "price": [p.tariff.hourly_prices[int(h) % 24] for h in hours],
         }
 
         # ── typical daily ──────────────────────────────────────────────────

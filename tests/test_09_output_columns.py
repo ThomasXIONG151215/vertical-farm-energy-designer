@@ -118,7 +118,11 @@ def test_monthly_harvest_is_pure_events_standing_excluded(sim_609):
     )
 
 
-# ── Shanghai 2025 authoritative baseline pin (rotating-window numbers) ───
+# ── Shanghai 2025 authoritative baseline pin ─────────────────────────────
+# P1-3b: numbers migrated from the rotating-window set (62,452.72 / m1
+# 8.2964) after data/weather/Shanghai_2025.csv was regenerated on the
+# aligned local calendar year.  See tests/test_10_time_axis.py for the
+# full alignment contract.
 
 
 @pytest.fixture(scope="module")
@@ -131,13 +135,13 @@ def sim_shanghai_2025():
 
 
 def test_shanghai_2025_harvest_attribution(sim_shanghai_2025):
-    """m1 = harvest event 1 only (8.2964); the 1.4574 kg year-end standing
-    crop is a separate scalar, not folded into any month."""
+    """m1 = harvest event 1 only; the year-end standing crop is a separate
+    scalar, not folded into any month."""
     m = sim_shanghai_2025.monthly
     s = sim_shanghai_2025.summary
-    assert m["harvest_kg"][0] == pytest.approx(8.2964, abs=5e-4)
-    assert s["harvest_final_standing_kg"] == pytest.approx(1.4574, abs=5e-4)
-    assert s["annual_harvest_kg"] == pytest.approx(100.16, abs=5e-3)
+    assert m["harvest_kg"][0] == pytest.approx(8.3285, abs=5e-4)
+    assert s["harvest_final_standing_kg"] == pytest.approx(1.4617, abs=5e-4)
+    assert s["annual_harvest_kg"] == pytest.approx(100.55, abs=5e-3)
     assert sum(m["harvest_kg"]) == pytest.approx(
         s["annual_harvest_kg"] - s["harvest_final_standing_kg"], abs=0.01
     )
@@ -145,15 +149,15 @@ def test_shanghai_2025_harvest_attribution(sim_shanghai_2025):
 
 def test_shanghai_2025_zero_drift_and_cost_closure(sim_shanghai_2025):
     s = sim_shanghai_2025.summary
-    assert s["annual_energy_kwh"] == pytest.approx(62452.72, abs=5e-3)
-    assert s["specific_energy_kwh_per_kg"] == pytest.approx(31.177, abs=5e-4)
+    assert s["annual_energy_kwh"] == pytest.approx(62444.50, abs=5e-3)
+    assert s["specific_energy_kwh_per_kg"] == pytest.approx(31.0499, abs=5e-4)
     assert s["annual_led_kwh"] == pytest.approx(42048.0, abs=0.01)
-    assert s["annual_hvac_kwh"] == pytest.approx(10169.71, abs=0.01)
+    assert s["annual_hvac_kwh"] == pytest.approx(10163.59, abs=0.01)
     assert s["lcoe"] == pytest.approx(0.6608, abs=5e-5)
-    assert s["annual_grid_cost_net"] == pytest.approx(6245.27, abs=0.01)
+    assert s["annual_grid_cost_net"] == pytest.approx(6244.45, abs=0.01)
     m = sim_shanghai_2025.monthly
-    assert sum(m["electricity_cost"]) == pytest.approx(6245.27, abs=0.01)
-    assert sum(m["grid_import_kwh"]) == pytest.approx(62452.72, abs=0.01)
+    assert sum(m["electricity_cost"]) == pytest.approx(6244.45, abs=0.01)
+    assert sum(m["grid_import_kwh"]) == pytest.approx(62444.50, abs=0.01)
 
 
 # ── PV/battery enabled: dispatch columns appear and close ────────────────

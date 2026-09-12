@@ -362,10 +362,14 @@ summary.csv (single row — scalar KPIs):
 
 timeseries.csv (8760 hourly rows):
 
+**Time axis (P1-3b):** the simulation window is the **local calendar year** — hour 0 = local Jan 1 00:00, and monthly buckets are natural months (Jan = 744 h in 2025). The `timestamp` column is ISO8601 **local wall clock** (naive, no UTC offset). The ingestion guard checks every pre-downloaded city file for this alignment (first row = `{year}-01-01 00:00`, 8760/8784 rows, strictly monotonic); a non-conforming file is still used **as-is** — never interpolated — after a grep-able ASCII `WARNING` naming the file and its actual first timestamp. Legacy rotated-window files (first row local 01-01 08:00, tail wrapped into next Jan 1) carry a misleading `+00:00` tag on what are actually local wall-clock values; on load the tag is stripped and the rotated window is reported by the guard (its local Jan 1 00:00-07:00 hours do not exist in the file, so Jan mixes 8 h of next-year Jan 1, ~+0.6% of annual energy). Regenerate such files from Open-Meteo for an aligned window.
+
 | Column | Unit | Meaning |
 |---|---|---|
 | `hour_of_year` | 0-8759 | Simulation step index |
-| `month` / `day` / `hour_of_day` | — | Labels taken from the weather file (pre-downloaded city files use a rotating 8760-h window that starts at local 01-01 08:00; lat/lon-fetched data is a natural local year) |
+| `timestamp` | ISO8601 (local wall clock) | `YYYY-MM-DDTHH:MM:SS` per hour, 8760 strictly monotonic unique stamps from `{year}-01-01T00:00:00` |
+| `price` | currency/kWh | Tariff price applied to that hour (`tariff.hourly_prices[hour_of_day]`) — makes every `electricity_cost` cell recomputable from the CSV |
+| `month` / `day` / `hour_of_day` | — | Labels taken from the weather file (aligned local natural year; see time-axis note above) |
 | `T_z` / `RH_z` | °C / % | Indoor air temperature / relative humidity |
 | `T_ext` / `RH_ext` | °C / % | Outdoor air temperature / relative humidity |
 | `GHI` | W/m² | Global horizontal irradiance |
@@ -373,7 +377,7 @@ timeseries.csv (8760 hourly rows):
 | `E_hvac_Wh` / `E_deh_Wh` / `E_led_Wh` / `E_misc_Wh` | Wh | Hourly electricity per device (misc = `equipment_power_w`) |
 | `X_d` | kg DM/m² | Standing dry-biomass density: **sawtooth state variable, reset to `growth.initial_dry_weight` at each harvest, NOT cumulative** |
 
-monthly.csv (12 rows, `month` 1-12 without a year — same label caveat as the timeseries):
+monthly.csv (12 rows, `month` 1-12 without a year — each bucket is one natural calendar month of the weather year, see the time-axis note above):
 
 | Column | Unit | Meaning / basis |
 |---|---|---|
