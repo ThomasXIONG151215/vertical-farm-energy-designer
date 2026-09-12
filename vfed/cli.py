@@ -94,6 +94,7 @@ _CAPITAL_ZERO_WARNING = (
 
 # P0-5: best-row keys that are never swept parameters (metrics + currency);
 # used by _print_boundary_hints to pick out the swept axes of a sweep row.
+# P1-2: + the investment-metric columns (evaluate-parity + incremental).
 _SWEEP_METRIC_KEYS = frozenset(
     {
         "currency",
@@ -118,6 +119,15 @@ _SWEEP_METRIC_KEYS = frozenset(
         "capital_battery",
         "capital_equipment",
         "capital_envelope",
+        # P1-2 investment metrics
+        "grid_independence_pct",
+        "pv_self_consumption_rate",
+        "annual_savings",
+        "payback_period",
+        "delta_capital",
+        "delta_annual_savings",
+        "npv_25yr",
+        "irr_pct",
     }
 )
 
@@ -282,6 +292,10 @@ _YAML_SECTION_COMMENTS = {
         "#   c_energy - legacy unit price (currency/kWh)\n"
         "#   capital - use mode 'per_kwh' with rate_per_kwh (currency/kWh)\n"
         "#   c_rate, eta_ch/eta_dis, soc_min/soc_max, cycle_life\n"
+        "#   allow_grid_charging - true: buy grid power in valley-price hours\n"
+        "#       to charge the battery for peak-hour discharge (TOU arbitrage;\n"
+        "#       only when peak > valley/(eta_ch*eta_dis)). Default false =\n"
+        "#       PV-charging only (legacy dispatch).\n"
         "# ------------------------------------------------------------------\n"
     ),
     "tariff": (
@@ -744,6 +758,15 @@ def _cmd_sweep(args):
             "capital_battery",
             "capital_equipment",
             "capital_envelope",
+            # P1-2 investment metrics (printed in the block above)
+            "grid_independence_pct",
+            "pv_self_consumption_rate",
+            "annual_savings",
+            "payback_period",
+            "delta_capital",
+            "delta_annual_savings",
+            "npv_25yr",
+            "irr_pct",
         ):
             continue
         elif key == "pv_area":
@@ -752,6 +775,50 @@ def _cmd_sweep(args):
             print(f"    battery                 = {val:.1f} kWh")
         else:
             print(f"    {key:24s} = {val}")
+
+    # P1-2: investment metrics on the best row.
+    # * annual_savings / payback_period — legacy EnergySystem scope (bill
+    #   savings vs the all-grid baseline; legacy PV+battery unit pricing).
+    # * delta_* / npv_25yr / irr_pct — incremental (corrected) economics vs
+    #   the no-PV/no-battery baseline; assumptions printed below.
+    import math
+
+    _sav = best.get("annual_savings")
+    _pb = best.get("payback_period")
+    if _sav is not None:
+        print(f"    annual_savings          = {_sav:.0f} {currency}/yr (legacy bill-savings scope)")
+    if _pb is not None:
+        _pb_s = "inf" if math.isinf(_pb) else f"{_pb:.1f}"
+        print(f"    payback_period          = {_pb_s} yr (legacy scope)")
+    _dc = best.get("delta_capital")
+    _ds = best.get("delta_annual_savings")
+    _npv = best.get("npv_25yr")
+    _irr = best.get("irr_pct")
+    if _dc is not None:
+        print(
+            "    [NOTE] npv/irr vs no-PV/battery baseline: 25-yr horizon, "
+            "constant tariff, mid-life PV output, battery replaced at its "
+            "cycle-life year, discount = interest_rate"
+        )
+        print(f"    delta_capital           = {_dc:.0f} {currency} (PV + battery capital)")
+        print(
+            f"    delta_annual_savings    = {_ds:.0f} {currency}/yr "
+            "(baseline grid bill - net grid bill - O&M on delta capital)"
+        )
+        if _ds is not None and _ds > 0:
+            print(f"    payback (incremental)   = {_dc / _ds:.1f} yr")
+        else:
+            print("    payback (incremental)   = inf (delta_annual_savings <= 0)")
+        if _npv is not None and _npv == _npv:  # NaN-safe (NaN != NaN)
+            print(f"    npv_25yr                = {_npv:.0f} {currency}")
+        else:
+            print("    npv_25yr                = n/a (undefined incremental cash flow)")
+        if _irr is not None and _irr == _irr:
+            print(f"    irr_pct                 = {_irr:.1f} %")
+        else:
+            print(
+                "    irr_pct                 = n/a (no IRR: incremental cash flow never pays back)"
+            )
 
     # P0-5: a best design pinned at a scan-range edge usually means the true
     # optimum lies outside the scanned grid (example_lcoe_full: battery = 40

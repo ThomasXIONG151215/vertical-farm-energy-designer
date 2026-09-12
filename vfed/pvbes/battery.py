@@ -7,10 +7,18 @@ to / imported from the grid by ``EnergySystem``.
 
     charge   : surplus <= P_charge_max, soc rises by P*eta_ch*dt/E_bat
     discharge: deficit  <= P_discharge_max*eta_dis, soc falls accordingly
+
+P1-2: with ``allow_grid_charging=True`` the battery additionally buys grid
+power in valley-price hours (price == tariff minimum) to top up SOC, so the
+stored energy can later be discharged into higher-priced hours (TOU
+arbitrage).  Simple greedy, no optimisation: arbitrage is enabled only when
+the tariff's peak price exceeds the round-trip breakeven
+``valley / (eta_ch * eta_dis)`` — flat tariffs never qualify, so the default
+``False`` (PV charging only) dispatch path is bitwise unchanged.
 """
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -34,6 +42,11 @@ class BatterySystem:
     maintenance: float = 0.01  # LEGACY (P4-15/P5): config field removed,
     # never read anywhere; kept for interface
     # stability only.
+    allow_grid_charging: bool = False  # P1-2: TOU arbitrage — buy grid power
+    # in valley-price hours (price == tariff min) to displace peak-price
+    # imports later.  Gated on peak > valley/(eta_ch*eta_dis) (round-trip
+    # breakeven); flat tariffs are a no-op.  Default False = legacy
+    # PV-charging-only dispatch, bitwise unchanged.
 
     def calculate_battery_flows(
         self,
@@ -42,8 +55,42 @@ class BatterySystem:
         E_bat: float,
         dt: float = 1.0,
         soc0: float = 0.5,
+        hourly_prices: Optional[List[float]] = None,  # P1-2: tariff table
+        hours: Optional[np.ndarray] = None,  # hour-of-day per timestep
     ) -> Dict[str, np.ndarray]:
         n = len(power_balance)
+
+        # ── P1-2: TOU grid-charging setup (fail-fast, no silent fallback) ──
+        if self.allow_grid_charging and (hourly_prices is None or hours is None):
+            raise ValueError(
+                "battery.allow_grid_charging=True requires the tariff "
+                "hourly_prices and the hour-of-day array; EnergySystem "
+                "supplies both automatically."
+            )
+        grid_charged = np.zeros(n)  # kW bought from the grid for charging
+        grid_charging_on = False
+        valley_set: frozenset = frozenset()
+        n_p = 0
+        if self.allow_grid_charging and E_bat > 0 and n > 0:
+            prices = np.asarray(hourly_prices, dtype=float)
+            if prices.size == 0:
+                raise ValueError("hourly_prices must be non-empty when allow_grid_charging=True")
+            if len(hours) != n:
+                raise ValueError(
+                    f"hours length {len(hours)} != power_balance length {n} "
+                    "(allow_grid_charging=True)"
+                )
+            n_p = int(prices.size)
+            p_min = float(prices.min())
+            p_max = float(prices.max())
+            # Arbitrage pays only if some hour repays the round-trip loss:
+            # 1 kWh bought at valley returns eta_ch*eta_dis kWh, so it must
+            # displace a price > valley/(eta_ch*eta_dis).  A flat tariff
+            # (p_max == p_min) never qualifies -> exact no-op.
+            if p_max > p_min / max(self.eta_ch * self.eta_dis, 1e-9) + 1e-12:
+                grid_charging_on = True
+                valley_set = frozenset(h for h in range(n_p) if float(prices[h]) <= p_min + 1e-12)
+
         battery_power = np.zeros(n)  # signed: + discharge, - charge
         battery_discharge = np.zeros(n)  # kW delivered to load
         battery_charge = np.zeros(n)  # kW into battery
@@ -77,6 +124,22 @@ class BatterySystem:
             soc = min(self.soc_max, max(self.soc_min, soc))
             battery_soc[i] = soc
 
+            # ── P1-2: valley-hour grid top-up (after the normal PV step) ──
+            # Greedy: fill remaining headroom at the valley price; the extra
+            # SOC is discharged by the existing deficit path into (on
+            # average) higher-priced hours.  Skipped entirely unless the
+            # tariff passed the round-trip breakeven check above.
+            if grid_charging_on and int(hours[i]) % n_p in valley_set:
+                headroom = min(self.c_rate * E_bat, (self.soc_max - soc) * E_bat / dt)
+                g = max(0.0, headroom)
+                if g > 0.0:
+                    soc += g * self.eta_ch * dt / E_bat
+                    battery_charge[i] += g
+                    grid_charged[i] = g
+                    total_charged += g * dt
+                    soc = min(self.soc_max, max(self.soc_min, soc))
+                    battery_soc[i] = soc
+
         # ── Year-end periodic reconciliation (P4-18) ──────────────────────
         # Dispatch starts at soc0 but is not guaranteed to end there, leaving
         # E_bat*(soc_end - soc0) of stored energy unaccounted in the annual
@@ -102,6 +165,10 @@ class BatterySystem:
             "battery_discharge": battery_discharge,
             "battery_charge": battery_charge,
             "battery_soc": battery_soc,
+            # P1-2: grid power bought for valley charging (kW).  Zero array
+            # unless allow_grid_charging=True and the tariff qualifies;
+            # EnergySystem routes it into grid_import (never against export).
+            "grid_charged": grid_charged,
             "total_charged": total_charged,
             "total_discharged": total_discharged,
             "battery_cycles": (

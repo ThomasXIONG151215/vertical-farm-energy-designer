@@ -418,6 +418,11 @@ class BatteryConfig:
     soc_min: float = 0.10  # 最小荷电状态 SOC (−, 0~1)
     soc_max: float = 0.90  # 最大荷电状态 SOC (−, 0~1)
     cycle_life: int = 4000  # 循环寿命 (全充放电循环次数至寿命终了, −); 寿命年折算见 P4-15
+    allow_grid_charging: bool = False  # 允许电网充电 (P1-2, −)
+    #   true  = 谷价时段 (电价==表内最小值) 从电网买电充电池, 用于峰时放电
+    #           置换高价电 (TOU 套利; 仅当峰价 > 谷价/(η_ch·η_dis) 往返盈亏
+    #           平衡点时启用, 平价电价为空操作)。
+    #   false = 现行为 (仅 PV 余电充电), 调度路径逐位不变。
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 
@@ -998,6 +1003,15 @@ class DesignProject:
             BatteryConfig, d.get("battery", {}), yaml_path="battery", has_nested_capital=True
         )
         _check_capital(battery_cfg, "battery")
+        # P1-2: allow_grid_charging must be a real boolean (YAML true/false).
+        # Strings like "true" or the numbers 0/1 previously would coerce or
+        # crash deep inside dispatch — reject at load time instead.
+        _agc = battery_cfg.get("allow_grid_charging")
+        if _agc is not None and not isinstance(_agc, bool):
+            raise ValueError(
+                f"battery.allow_grid_charging must be a boolean (true/false), "
+                f"got {type(_agc).__name__}: {_agc!r}"
+            )
         _equipment_cap = CapitalCostConfig(
             **sub(CapitalCostConfig, d.get("equipment_capital", {}), yaml_path="equipment_capital")
         )

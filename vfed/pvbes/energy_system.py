@@ -46,11 +46,32 @@ class EnergySystem:
         load = np.asarray(load, dtype=float)
         pv_power = self.pv.calculate_pv_output(weather, A_pv, year=year)
         power_balance = pv_power - load
-        bat = self.battery.calculate_battery_flows(power_balance, load, E_bat)
+        # P1-2: hand the tariff + hour-of-day to the battery only when grid
+        # charging is enabled; the default path keeps the exact previous
+        # call (bitwise-identical dispatch).
+        if self.battery.allow_grid_charging:
+            bat = self.battery.calculate_battery_flows(
+                power_balance,
+                load,
+                E_bat,
+                hourly_prices=self.tariff.hourly_prices,
+                hours=np.asarray(weather.get("hour", np.zeros(len(load))), dtype=int),
+            )
+        else:
+            bat = self.battery.calculate_battery_flows(power_balance, load, E_bat)
         battery_discharge = np.array(bat["battery_discharge"])
         battery_charge = np.array(bat["battery_charge"])
         grid_import = np.maximum(0.0, load - pv_power - battery_discharge)
         grid_export = np.maximum(0.0, pv_power - battery_charge - load)
+        # P1-2: TOU grid charging draws power FROM the grid.  It must land
+        # in grid_import; grid_export stays PV-only (grid-bought charging
+        # power must not be netted against PV surplus).  battery_charge
+        # keeps the grid-charged component so the annual balance
+        # (pv + import + discharge = load + charge + export) closes exactly.
+        grid_charged = np.asarray(bat.get("grid_charged", np.zeros_like(grid_import)))
+        if np.any(grid_charged != 0.0):
+            grid_import = grid_import + grid_charged
+            grid_export = np.maximum(0.0, pv_power - (battery_charge - grid_charged) - load)
         # P4-18: year-end SOC reconciliation (battery restored to soc0).  The
         # drift E_bat*(soc0 - soc_end) crosses the grid interface at the last
         # timestep.  Applied AFTER the max() above so both sides of the annual
@@ -123,6 +144,12 @@ class EnergySystem:
         # Classical energy-weighted unmet-load share (LPSP), informational.
         lpsp_pct = float(np.sum(perf["power_deficit"])) / max(float(np.sum(load)), 1e-9) * 100.0
 
+        # P1-2: PV self-consumption share — direct PV-to-load fraction of
+        # total generation (same formula as engine.py's summary, so sweep
+        # CSV and evaluate summary.csv column values agree).
+        pv_self_consumed = float(np.sum(np.minimum(perf["pv_power"], perf["load"])))
+        pv_self_consumption_rate = pv_self_consumed / max(float(np.sum(perf["pv_power"])), 1e-6)
+
         # P4-15: battery replacement economics.  Equivalent life in years from
         # cycle_life vs actual cycling; if it falls short of the system lifetime
         # a mid-life replacement is due.  Exposed as INFORMATIONAL metrics —
@@ -155,6 +182,7 @@ class EnergySystem:
             "grid_dependency_pct": grid_dependency_pct,  # P6-6
             "tlps": grid_dependency_pct,  # backward-compat alias
             "lpsp_pct": lpsp_pct,  # P6-6 energy-weighted LPSP
+            "pv_self_consumption_rate": pv_self_consumption_rate,  # P1-2
             "battery_life_years": battery_life_years,  # P4-15
             "battery_replacement_annual": battery_replacement_annual,  # P4-15
             "capital_cost": capital_cost,
