@@ -40,6 +40,13 @@ RH_KPIS = (
     "rh_disease_risk_hours",
 )
 
+# P1-7: OPEX transparency scalars (additive, summary only).
+OPEX_KPIS = (
+    "opex_labor_per_year",
+    "opex_misc_per_year",
+    "annual_om_pct_of_cost",
+)
+
 # Frozen pre-P1-4 summary key set (grid-only 609 path): base scalars +
 # deh_smer / full_load_diagnostics + the P0-2 economics block.  P1-4 is
 # strictly additive — this set must survive untouched, and the P1-4 keys
@@ -97,7 +104,7 @@ def sim_shanghai_2025():
 def test_summary_additive_keys(sim_shanghai_2025):
     s = sim_shanghai_2025.summary
     assert OLD_SUMMARY_KEYS <= set(s), f"pre-existing summary keys lost: {OLD_SUMMARY_KEYS - set(s)}"
-    assert set(s) == OLD_SUMMARY_KEYS | set(RH_KPIS)
+    assert set(s) == OLD_SUMMARY_KEYS | set(RH_KPIS) | set(OPEX_KPIS)
 
 
 # ── 609@Shanghai2025 aligned-window KPI pins (self-test measured) ──────────

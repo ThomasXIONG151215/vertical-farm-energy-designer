@@ -360,7 +360,11 @@ _YAML_SECTION_COMMENTS = {
     "pump_capital": None,
     "opex": (
         "# ------------------------------------------------------------------\n"
-        "# opex: annual operating costs\n"
+        "# opex: annual operating costs (project currency/yr)\n"
+        "#   WARNING: defaults apply silently if this section is omitted --\n"
+        "#   labor 30000 + misc 5000 per year (USD-scale preset values),\n"
+        "#   typically 72-96% of LCOE's numerator. Keep these amounts in the\n"
+        "#   SAME currency as tariff/capital/currency below.\n"
         "#   labor_cost_per_year / misc_opex_per_year (currency/yr)\n"
         "#   water_cost_per_m3 (currency/m3), maintenance_pct (fraction of capital)\n"
         "# ------------------------------------------------------------------\n"
@@ -387,9 +391,16 @@ def _commented_project_yaml(project) -> str:
     """
     import io
     import yaml
+    from dataclasses import asdict
 
     buf = io.StringIO()
-    yaml.safe_dump(project.to_dict(), buf, sort_keys=False, allow_unicode=True)
+    # P1-7: the editable template must spell the opex section out explicitly
+    # (defaults become visible/editable), so build the dict from asdict()
+    # minus the internal flag -- NOT from to_dict(), which drops a defaulted
+    # opex section so that from_dict re-derives opex_was_defaulted.
+    d = asdict(project)
+    d.pop("opex_was_defaulted", None)
+    yaml.safe_dump(d, buf, sort_keys=False, allow_unicode=True)
     lines = buf.getvalue().splitlines()
     out = [_YAML_HEADER.rstrip("\n")]
     emitted = set()
@@ -616,6 +627,17 @@ def _cmd_evaluate(args):
         else:
             # P0-1: unit-price self-check lines (capital / rating per component)
             _print_capital_unit_check(project, getattr(project, "currency", "USD"))
+    # P1-7: OPEX transparency -- show the annual OPEX share next to LCOE /
+    # capital (the default presets are 72-96% OPEX-dominated).  Additive
+    # line only: existing evaluate output lines are pinned by tests (P0-5).
+    if summary.get("annual_om_pct_of_cost") is not None:
+        _cur = getattr(project, "currency", "USD")
+        print(
+            f"  OPEX share       = {summary['annual_om_pct_of_cost'] * 100:.1f}% of annual "
+            f"cost (annual_om = {summary.get('annual_om', 0):.0f} {_cur}/yr: "
+            f"labor {summary.get('opex_labor_per_year', 0):.0f} + misc "
+            f"{summary.get('opex_misc_per_year', 0):.0f} + water/maintenance)"
+        )
     if project.pv_area_m2 <= 0 and project.battery_kwh <= 0:
         print("  Energy system    = disabled (pv_area_m2=0, battery_kwh=0)")
         # P0-2: self-evidence that electricity IS priced when the energy

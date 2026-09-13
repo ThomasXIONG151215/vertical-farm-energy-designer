@@ -198,6 +198,8 @@ vertical-farm-energy-designer/
 
 > **产量模型标定说明 — 引用绝对 KPI 前必读**：Van Henten 生长系数 `c_rad_phot` 已按 PFAL 生菜标定（P0-3R）：默认 `3.5e-9 kg/J` 将 609 preset 锚定到商业 PFAL 生菜产量带 **30-60 kg 鲜重/m²/年** 的中值附近（约 45 kg/m²/年；30 天茬期、400 µmol/m²/s、800 ppm CO₂），替换此前偏乐观 2-4 倍的文献默认值。推导与交叉校验（量子产额上限、单茬鲜重、整茬光能利用效率）见 `vfed/plants/van_henten.py`。残余不确定性：这是**单参数标定**——与外部设施数据对比 `kwh_per_kg_fresh` / `cost_per_kg_fresh` 前，请先用贵方设施收获记录校验（调整 `growth.c_rad_phot`）；这些 KPI 在 VFED 设计变体之间横向比较仍然有效。
 
+> **默认 OPEX 与货币量级（P1-7）**：若项目 yaml 省略整个 `opex` 节，USD 量级的默认值将**静默生效**：`labor_cost_per_year = 30000` + `misc_opex_per_year = 5000`（currency/年）——在自带 preset 上约占 LCOE 分子的 72-96%。因此 summary 始终报告 `opex_labor_per_year` / `opex_misc_per_year` / `annual_om_pct_of_cost`（= `annual_om` ÷（年化资本 + `annual_om` + 净购电成本）），`vfed evaluate` 控制台会打印 OPEX 占比行；当 opex 节缺省**且** OPEX 占年成本总额超过 50% 时触发一条 WARNING（每次运行至多一条）。请保持量级一致：`opex` 金额、`tariff.hourly_prices` 与所有资本单价都应与 `currency` 声明**同币种**——内置 OPEX 默认值是 USD 量级预设，人民币项目若省略该节，会得到贴着 RMB 标签的 USD 量级数字。
+
 ### evaluate 输出（核心 KPI）
 
 | KPI | JSON summary 键 / CLI 标签 | 单位 | 定义 |

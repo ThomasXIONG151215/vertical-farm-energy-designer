@@ -33,6 +33,41 @@ from .result import SimulationResult
 __all__ = ["DesignEngine", "run_project", "full_load_warnings"]
 
 
+# ── P1-7: OPEX transparency ────────────────────────────────────────────
+# The bundled presets' default OPEX (labor 30000 + misc 5000 per year) is
+# USD-scale and silently dominates LCOE (72-96% of its numerator) whenever
+# a project YAML omits the opex section.  When that default is in effect
+# AND OPEX exceeds half of the annual cost total, warn once per process:
+# a sweep re-evaluates the same defaulted project for every row and would
+# otherwise repeat the identical text hundreds of times.
+_OPEX_DEFAULT_WARNED = False
+
+
+def _warn_opex_dominance(project, annual_om: float, pct_of_cost: float) -> None:
+    """P1-7: warn when silent default OPEX dominates the annual cost.
+
+    Fires at most once per process, and only when BOTH hold: the project
+    YAML had no explicit opex section (``opex_was_defaulted``) and OPEX is
+    > 50% of ``annual_capital + annual_om + net_grid_cost``.  The message
+    is pure ASCII (GBK-console safe) and worded distinctly from cli.py's
+    capital = 0 warning (P0-5).
+    """
+    global _OPEX_DEFAULT_WARNED
+    if _OPEX_DEFAULT_WARNED or not project.opex_was_defaulted or pct_of_cost <= 0.5:
+        return
+    _OPEX_DEFAULT_WARNED = True
+    warnings.warn(
+        f"default OPEX in effect: annual_om {annual_om:.2f} "
+        f"{project.currency}/yr is {pct_of_cost * 100:.1f}% of the annual "
+        f"cost total (labor 30000 + misc 5000 per year are built-in "
+        f"USD-scale defaults). To silence this warning, add an explicit "
+        f"opex section to your YAML and verify the amounts are in YOUR "
+        f"currency.",
+        UserWarning,
+        stacklevel=2,
+    )
+
+
 def _limit_removal_by_inventory(
     M_deh_kgs,
     M_hvac_kgs,
@@ -1254,6 +1289,15 @@ class DesignEngine:
                 summary["capital_total"] = round(float(capital_cost), 2)
                 summary["annual_om"] = round(float(annual_om), 2)
                 summary["annual_grid_cost_net"] = round(float(net_grid_cost), 2)
+                # ── P1-7: OPEX transparency scalars (additive, summary only;
+                # no numeric result is touched) ──
+                summary["opex_labor_per_year"] = round(float(p.opex.labor_cost_per_year), 2)
+                summary["opex_misc_per_year"] = round(float(p.opex.misc_opex_per_year), 2)
+                _om_denom = annual_cap + annual_om + net_grid_cost
+                summary["annual_om_pct_of_cost"] = (
+                    round(float(annual_om / _om_denom), 4) if _om_denom > 0 else 0.0
+                )
+                _warn_opex_dominance(p, annual_om, summary["annual_om_pct_of_cost"])
             except Exception as e:
                 # P4-4 (MAJOR): the core economics (lcoe/capital/om/grid) must
                 # NOT vanish silently — re-raise so the CLI/agent layer maps it
@@ -1313,6 +1357,15 @@ class DesignEngine:
             summary["capital_total"] = round(float(cap["total"]), 2)
             summary["annual_om"] = round(float(annual_om), 2)
             summary["annual_grid_cost_net"] = round(float(net_grid_cost), 2)
+            # ── P1-7: OPEX transparency scalars (additive, summary only;
+            # no numeric result is touched) ──
+            summary["opex_labor_per_year"] = round(float(p.opex.labor_cost_per_year), 2)
+            summary["opex_misc_per_year"] = round(float(p.opex.misc_opex_per_year), 2)
+            _om_denom = annual_cap + annual_om + net_grid_cost
+            summary["annual_om_pct_of_cost"] = (
+                round(float(annual_om / _om_denom), 4) if _om_denom > 0 else 0.0
+            )
+            _warn_opex_dominance(p, annual_om, summary["annual_om_pct_of_cost"])
             summary["pv_generation_kwh"] = 0.0
             summary["grid_import_kwh"] = round(annual_load, 2)
             summary["grid_export_kwh"] = 0.0

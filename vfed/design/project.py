@@ -162,18 +162,37 @@ class OpexConfig:
     """Annual operating expenditure for the farm.
 
     All costs are in the project's currency unit (see ``DesignProject.currency``
-    and ``exchange_rate`` for conversion).
+    and ``exchange_rate`` for conversion).  Currency-magnitude consistency:
+    labor / water / misc OPEX, tariff prices and capital costs must all be
+    written in the SAME currency that ``currency`` claims.  The defaults
+    below are USD-scale preset figures -- an RMB project that omits this
+    section silently inherits USD magnitudes under an RMB label.
+
+    P1-7 transparency: if the YAML omits the whole ``opex`` section, these
+    defaults apply SILENTLY (labor 30000 + misc 5000 per year, about 72-96%
+    of LCOE's numerator on the bundled presets).  ``DesignProject`` then
+    sets ``opex_was_defaulted`` and the engine reports
+    ``annual_om_pct_of_cost`` plus a WARNING when OPEX dominates.
 
     * ``water_cost_per_m3``: water price (irrigation + makeup).
+      Default 2.0 currency/m3.
     * ``labor_cost_per_year``: total annual labor cost.
+      Default 30000.0 currency/yr -- USD-scale preset; NOT rescaled to your
+      currency or farm size.
     * ``maintenance_pct``: annual maintenance as fraction of total CAPEX.
+      Default 0.02 (2%/yr).
     * ``misc_opex_per_year``: other operating costs (seeds, nutrients, etc.).
+      Default 5000.0 currency/yr -- USD-scale preset.
     """
 
-    water_cost_per_m3: float = 2.0
+    water_cost_per_m3: float = 2.0  # currency/m3 irrigation + makeup water
     labor_cost_per_year: float = 30000.0
-    maintenance_pct: float = 0.02
+    #   currency/yr; USD-scale default -- applies silently if the opex
+    #   section is omitted (P1-7); verify against YOUR currency.
+    maintenance_pct: float = 0.02  # fraction of total CAPEX per year
     misc_opex_per_year: float = 5000.0
+    #   currency/yr (seeds, nutrients, ...); USD-scale default -- applies
+    #   silently if the opex section is omitted (P1-7).
 
 
 @dataclass
@@ -599,6 +618,12 @@ class DesignProject:
     # no project-level pump rated power exists, so per_watt resolves to 0).
     # Aggregated in sweep._total_capital under "Pump".
     opex: OpexConfig = field(default_factory=OpexConfig)
+    # P1-7: internal provenance flag -- True when the source dict/YAML had
+    # no explicit 'opex' section, so the built-in USD-scale defaults (labor
+    # 30000 + misc 5000 per year) are silently in effect.  Set only by
+    # ``from_dict``; never emitted by ``to_dict`` (a user YAML that spells
+    # it out is rejected).  Consumed by the engine's OPEX-dominance warning.
+    opex_was_defaulted: bool = False
     interest_rate: float = 0.06  # annual discount rate (fraction)
     currency: str = "USD"  # monetary unit for all costs
     exchange_rate: float = 1.0  # conversion factor to USD (7.2 for RMB)
@@ -609,7 +634,17 @@ class DesignProject:
 
     # ---- (de)serialisation ---------------------------------------------
     def to_dict(self) -> dict:
-        return asdict(self)
+        # P1-7: ``opex_was_defaulted`` is runtime provenance, not schema --
+        # strip it so serialized projects never carry an internal key (and
+        # ``from_dict``'s internal-key rejection cannot fire on a
+        # roundtrip).  When the opex section was defaulted, ``opex`` is
+        # omitted as well so ``from_dict`` re-derives the flag (absent
+        # section -> True) and the roundtrip stays lossless.
+        d = asdict(self)
+        d.pop("opex_was_defaulted", None)
+        if self.opex_was_defaulted:
+            d.pop("opex", None)
+        return d
 
     def save(self, path) -> None:
         with open(path, "w", encoding="utf-8") as f:
@@ -617,6 +652,17 @@ class DesignProject:
 
     @classmethod
     def from_dict(cls, d: dict) -> "DesignProject":
+        # P1-7: 'opex_was_defaulted' is an internal flag that from_dict sets
+        # itself (raw dict has no 'opex' key).  It is never a user config
+        # key -- reject it with a dedicated message instead of the generic
+        # unknown-key error so the fix is obvious.
+        if "opex_was_defaulted" in d:
+            raise ValueError(
+                "'opex_was_defaulted' is an internal VFED field, not a user "
+                "config key: it is set automatically when the YAML has no "
+                "explicit 'opex' section. Remove it from the YAML; to take "
+                "control of OPEX, write an explicit 'opex' section instead."
+            )
         # Build sub-dataclasses; raise on unrecognised keys.
         _TOP_KEYS = {
             "name",
@@ -1177,6 +1223,11 @@ class DesignProject:
         )
         validate_capital_config(_pump_cap, "pump", yaml_path="pump_capital")
 
+        # P1-7: flag = the opex section was not spelled out, so the built-in
+        # defaults (labor 30000 + misc 5000 per year, USD-scale) are in
+        # effect.  Pure provenance -- never touches any numeric result.
+        _opex_was_defaulted = "opex" not in d
+
         return cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**site_cfg),
@@ -1198,6 +1249,7 @@ class DesignProject:
             envelope_capital=_envelope_cap,
             pump_capital=_pump_cap,
             opex=OpexConfig(**sub(OpexConfig, d.get("opex", {}), yaml_path="opex")),
+            opex_was_defaulted=_opex_was_defaulted,
             interest_rate=d.get("interest_rate", 0.06),
             currency=d.get("currency", "USD"),
             exchange_rate=d.get("exchange_rate", 1.0),
