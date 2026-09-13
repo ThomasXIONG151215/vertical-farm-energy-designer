@@ -179,7 +179,7 @@ vfed sweep my_farm.yaml --cache weather_cache --out results.csv
 
 ### Humidity and moisture results
 
-`vfed evaluate` prints more than energy: annual water use, RH clamp events, DEH utilization, and how much moisture the dehumidifier vs the HVAC coil removed. `vfed evaluate ... --export out/` also writes `summary.csv`, `timeseries.csv` (8,760 hourly rows) and `monthly.csv` for your own analysis.
+`vfed evaluate` prints more than energy: annual water use, RH clamp events, DEH utilization, and how much moisture the dehumidifier vs the HVAC coil removed (see the **Output Glossary** under *Interpreting Results* for what these mean). `vfed evaluate ... --export out/` also writes `summary.csv`, `timeseries.csv` (8,760 hourly rows) and `monthly.csv` for your own analysis.
 
 ## Architecture
 
@@ -394,6 +394,22 @@ monthly.csv (12 rows, `month` 1-12 without a year — each bucket is one natural
 | `grid_import_kwh` | kWh | Monthly grid purchases (= `energy_kwh__total` on a grid-only run) |
 | `electricity_cost` | currency | Monthly net bill: Σ(`grid_import` × hourly tariff price) − Σ(`grid_export` × `export_price`); the 12 values close against `annual_grid_cost_net` (diff < 0.01). Always priced (see tariff note above) |
 | `pv_generation_kwh` / `grid_export_kwh` / `battery_net_kwh` | kWh | Only when PV or battery is enabled: monthly PV output / grid sales / net battery energy (discharge − charge) |
+
+### Output Glossary (warnings & special outputs)
+
+Plain-language semantics for the summary keys users most often ask about:
+
+- **removal-limited events** — `dehumidifier_performance.removal_limited_events` / `removal_limited_water_kg`. Sub-steps where the DEH / HVAC coil was commanded to condense more vapour than the room actually contained. Each sub-step the engine caps nominal moisture removal to the available room vapour inventory, so the event count tallies the capped sub-steps and `removal_limited_water_kg` is the water that could not be removed (nominal − actual). A large count means the dehumidification capacity exceeds what the room can supply — check the DEH sizing / RH setpoint rather than extrapolating from nameplate capacity.
+
+- **RH clamp** — `moisture_clamp_stats`. The humidity integrator clamps the room's absolute humidity to the physical bounds [0, W_sat(T)] every sub-step:
+  - `sat_clip_events` / `sat_clip_water_kg` — moisture condensed at the saturation cap (RH would otherwise exceed 100 %); the latent heat of this water is added back to the room balance.
+  - `floor_clip_events` / `floor_clip_water_kg` — moisture "removed" past the zero floor (devices tried to dry the room below 0 kg/kg — phantom condensation); the corresponding phantom condenser heat is backed out of the heat balance.
+  
+  Occasional events are benign numerical bookkeeping; large water totals mean the moisture balance is being forced past its physical limits (undersized DEH, mis-set setpoints).
+
+- **X_d** — the timeseries.csv `X_d` column: standing in-canopy dry-biomass density (kg DM/m²). It is a **sawtooth state variable**: it grows over each crop cycle and resets to `growth.initial_dry_weight` at every harvest — it is NOT a cumulative production counter. Annual production is `annual_harvest_kg`.
+
+- **LCOE** — `lcoe` is the facility full cost per kWh of load: `(annual_capital + annual_om + annual_grid_cost_net) ÷ annual_load_kwh`. Toy example (any currency): `capital_total` 12,000 depreciated over 10 yr at 6 % interest → CRF ≈ 0.136 → `annual_capital` ≈ 1,630; `annual_om` = 600; `annual_grid_cost_net` = 1,770 → total 4,000/yr; annual load 10,000 kWh → **lcoe = 0.40 currency/kWh**.
 
 ## Web Visualisation (vfed-web)
 

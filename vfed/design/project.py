@@ -202,9 +202,16 @@ class SiteConfig:
 
 @dataclass
 class EnvelopeConfig:
-    U_wall_A: float = 50.0  # W/K envelope conductance
+    U_wall_A: float = 50.0  # W/K envelope conductance (UA = Σ U_i×A_i over walls/roof/floor)
+    #   Estimating UA: pick U per construction (handbook values, W/m²K) and
+    #   multiply by its area: 50-100 mm PU/PIR sandwich panel 0.2-0.45,
+    #   insulated brick 0.5-1.0, plain brick/concrete 1.5-2.5, single glazing
+    #   ~5-6. E.g. a 60 m² envelope in 100 mm PU panel ≈ 15-25 W/K; 50 W/K
+    #   ≈ lightly insulated or a larger shell.
     A_window: float = 0.0  # m^2 glazing
     eta_solar: float = 0.15  # solar heat gain coeff
+    #   Fraction of incident GHI admitted as heat (SHGC, typical 0.1-0.6);
+    #   Q_solar = eta_solar × A_window × GHI.
     ach: float = 0.001  # air changes / hour (infiltration)
     #   Sealed plant factories (positive-pressure, airtight) exchange
     #   N≈0.01-0.02 h⁻¹ (Kozai 2013; WUR WPR-1315); 0.1 is a conservative
@@ -214,53 +221,69 @@ class EnvelopeConfig:
     V_room: float = 200.0  # m^3
     rho_air: float = 1.2  # kg/m^3
     cp_air: float = 1005.0  # J/(kg.K)
-    C_z: float = 80000.0  # Wh/K equivalent heat capacity
-    # 默认 = 房间空气主导 200 m³×1.2×1005/3600 ≈ 67 kWh/K,
-    # 结构/货架/冠层水另加 ~30-130 kWh/K (P4-5 校准用 200,000)。
-    # 注意: 归档数字孪生 499,597 已被判定超物理 (≈430 m³ 水当量),
-    # 勿沿用。
+    C_z: float = 80000.0  # Wh/K equivalent heat capacity (room thermal inertia, ode.py: dT/dt = Q/(C_z·3600))
+    #   Estimating: air alone = V_room×rho_air×cp_air/3600 ≈ 67 Wh/K for the
+    #   200 m³ default — usually negligible vs the internal mass. Add
+    #   Σ(m_i × c_i)/3600 (kg × J/(kg·K) → Wh/K): shelves/racks, concrete slab
+    #   and canopy/nutrient water dominate (water ≈ 1.16 kWh/K per m³).
+    #   Practical band for a 100-500 m³ PFAL room: 30-200 kWh/K
+    #   (P4-5 calibration used 200,000; default 80,000 Wh/K = moderate mass).
+    #   注意: 归档数字孪生 499,597 已被判定超物理 (≈430 m³ 水当量), 勿沿用。
 
 
 @dataclass
 class HVACConfig:
     # ── primary sizing (new, industry-standard) ──
     Q_cool_nom: float = 0.0  # nominal cooling capacity (kW); 0 → use P_rated_w or auto_size
+    #   Datasheet cooling capacity: P_rated_w = Q_cool_nom×1000/COP(design_T_ext).
+    #   Typical 2-10 kW for a grow room.
     P_rated_max: float = 0.0  # max electrical input (kW); 0 → derived from Q_cool_nom/COP_design
+    #   Optional cap: derived P_rated_w = min(P_rated_w, P_rated_max×1000). Typical 0.5-5 kW.
     # ── legacy (kept for backward compat) ──
     P_rated_w: float = 3000.0  # rated electrical power (W), used if Q_cool_nom == 0
-    cop_value: float = 4.0
+    #   Rated ELECTRICAL input; cooling capacity = P_rated_w × COP(T_ext). Typical 0.5-10 kW.
+    cop_value: float = 4.0  # COP at rated condition (feeds constant/linear/table modes); air-cooled DX 3-6
     cop_mode: str = "carnot"  # carnot | constant | linear | table
-    cop_k: float = 0.02
-    cop_T_ref: float = 25.0
+    cop_k: float = 0.02  # linear-mode slope (1/K): COP = cop_value×(1−k×(T_ext−cop_T_ref)), clamp [1,10]; typical 0.01-0.04
+    cop_T_ref: float = 25.0  # linear-mode reference outdoor temperature (°C)
     cop_table: dict = field(default_factory=dict)  # key = T_ext(°C), value = COP
-    cop_heat: float = 3.0
-    heat_mode: str = "heat_pump"
-    P_rated_heat_w: float = 3000.0
+    #   table mode: piecewise-linear between sorted edges (flat outside), COP floor 0.5;
+    #   e.g. {20: 3.0, 35: 2.5}
+    cop_heat: float = 3.0  # heating COP at EN 14511 A7/W35 (7°C ext / 20°C int); Carnot-scaled vs T_ext, clamp [1.5, 5]
+    heat_mode: str = "heat_pump"  # heat_pump (COP-scaled) | resistive (COP = 1, power ∝ modulation m)
+    P_rated_heat_w: float = 3000.0  # rated electrical input in heating mode (W); 0 → falls back to P_rated_w
     deadband_c: float = 1.0  # °C thermostat hysteresis deadband
-    min_on_s: float = 180.0
-    min_off_s: float = 180.0
-    fan_power_w: float = 70.0
+    #   ON when T_z > T_setpoint, OFF when T_z < T_setpoint − deadband. Typical 0.5-2 °C.
+    min_on_s: float = 180.0  # anti-short-cycle min compressor run time (s); typical 120-300
+    min_off_s: float = 180.0  # anti-short-cycle min compressor stop time (s); typical 120-300
+    fan_power_w: float = 70.0  # indoor fan power (W): counted while compressor runs, fan heat stays in room; typical 40-150
     shr_BF: float = 0.15
+    #   Coil bypass factor [0, 1) — BF-ADP SHR model (physics/shr.py):
+    #   W_out = BF·W_in + (1−BF)·W_sat(T_adp); higher = less coil contact =
+    #   less latent removed by the coil. 0.10-0.20 for a 4-row DX coil.
     t_coil_drop: float = 9.0  # supply-air temperature depression T_supply = T_setpoint - t_coil_drop (real ACs ~8-12°C)
-    tau_q: float = 90.0
-    tau_m: float = 60.0
+    tau_q: float = 90.0  # first-order lag of heat output (s, coil thermal inertia); typical 30-120
+    tau_m: float = 60.0  # first-order lag of moisture removal (s, condensate retention); typical 30-120
     shr_rh_guard: float = 65.0  # % RH; below this the AC stops latent removal (P4-1a)
+    #   Humidity-protection guard: SHR → 1.0 (sensible-only) at/below the guard,
+    #   blended linearly up to guard + rh_guard_band. Keep near/below setpoints.RH.
     rh_guard_band: float = 3.0  # % RH blend width for the humidity guard
     coil_condense_max_gps: float = (
         0.0  # explicit coil condensate cap (g/s); 0 → auto ~5e-4·P_rated_w (P4-1b)
     )
+    #   Airflow-limited condensate bound: auto ≈ 1.5 g/s per 3 kW rated (real DX 1-2 g/s).
     comp_mod_band_c: float = 2.0  # VFD proportional band (°C): m=demand/band, m=1 at ±band
     speed_curve: str = "default"  # compressor part-load curve: default | flat
     #   VFD part-load: COP rises as speed falls (50%→1.33x, 30%→1.54x);
     #   coefficients from Effsys2/KTH Madani + Szreder&Miara 2020 + Fahlén 2012.
     #   "flat" = Maxa i-290 conservative (COP≈const).
-    eta_II: float = 0.35
-    delta_T_evap: float = 8.0
-    delta_T_cond: float = 15.0
-    auto_size: bool = False
-    design_T_ext: float = 35.0
-    shr_design: float = 0.80
-    safety_factor: float = 1.2
+    eta_II: float = 0.35  # carnot-mode 2nd-law efficiency (−); typical 0.2-0.5
+    delta_T_evap: float = 8.0  # evaporator approach (K): T_evap = T_indoor − ΔT_evap; typical 5-10
+    delta_T_cond: float = 15.0  # condenser approach (K): T_cond = T_ext + ΔT_cond; typical 10-20
+    auto_size: bool = False  # true = size P_rated_w from the design-day load via size_hvac
+    design_T_ext: float = 35.0  # sizing design outdoor temperature (°C); also seeds DEH auto-size (@80% RH outdoor)
+    shr_design: float = 0.80  # design SHR for sizing: total capacity = sensible load / shr_design; PFAL 0.6-0.8
+    safety_factor: float = 1.2  # sizing margin multiplier on the computed P_rated; typical 1.1-1.3
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 
@@ -268,15 +291,20 @@ class HVACConfig:
 class DEHConfig:
     # ── primary sizing (new, industry-standard) ──
     M_deh_nom: float = 0.0  # nominal dehumidification (L/day); 0 → use P_ref_w or auto_size
+    #   Datasheet capacity: P_ref_w = M_deh_nom×41.67/smer. Typical 10-60 L/day.
     P_rated_max: float = 0.0  # max electrical input (kW); 0 → derived from M_deh_nom/SMER
+    #   Optional cap: derived P_ref_w = min(P_ref_w, P_rated_max×1000). Typical 0.2-3 kW.
     # ── legacy (kept for backward compat) ──
-    P_ref_w: float = 2233.0
+    P_ref_w: float = 2233.0  # compressor reference electrical power (W); fan metered separately; typical 0.2-3 kW
     poly_e: tuple = (1.0, 0.02, 0.0, 0.05, 0.0, 0.0)
+    #   Power-surface poly (e0..e5): P_comp = P_ref×(e0 + e1·tn + e2·tn² + e3·wn
+    #   + e4·wn² + e5·tn·wn), tn = (T_z−T_mean)/T_std, wn = (W_z−W_mean)/W_std,
+    #   clamped ≥ 0. Defaults: mildly rising with T and W.
     T_mean: float = 22.0  # °C mean room temp (DEH power poly centre)
     T_std: float = 5.0  # °C std dev (T normalisation scale)
     W_mean: float = 0.012  # kg/kg mean humidity ratio (W normalisation)
     W_std: float = 0.003  # kg/kg std dev
-    smer: float = 2.0
+    smer: float = 2.0  # rated SMER (kg water / kWh COMPRESSOR input, fan excluded — P2-5); realistic 1.5-3.0
     control: str = "vfd"
     #   DEH control mode (P1-1): "vfd" = variable-speed modulation inside
     #   comp_mod_band_rh (DOE 87 FR 35286 part-load SMER penalty applies);
@@ -292,13 +320,13 @@ class DEHConfig:
     #   VFD dehumidifier: SMER FALLS as speed falls (DOE 87 FR 35286 — opposite
     #   of AC; dew-point approach gets worse at low speed).  SMER(m) curve in
     #   dehumidifier.py; constant-SMER assumption valid only for m≥0.75.
-    min_on_s: float = 180.0
-    min_off_s: float = 180.0
-    fan_power_w: float = 40.0
-    tau_q: float = 90.0
-    tau_m: float = 120.0
-    auto_size: bool = False
-    safety_factor: float = 1.2
+    min_on_s: float = 180.0  # anti-short-cycle min compressor run time (s); typical 120-300
+    min_off_s: float = 180.0  # anti-short-cycle min compressor stop time (s); typical 120-300
+    fan_power_w: float = 40.0  # fan power (W); metered OUTSIDE smer (P2-5), fan heat stays in room; ≈2% of full load
+    tau_q: float = 90.0  # first-order lag of sensible heat output (s, coil thermal inertia); typical 30-120
+    tau_m: float = 120.0  # first-order lag of moisture removal (s, retained-condensate inertia); typical 60-180
+    auto_size: bool = False  # true = size P_ref_w from the peak design moisture load (transp + infil + permeance)
+    safety_factor: float = 1.2  # sizing margin multiplier on the computed P_ref_w; typical 1.1-1.3
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 

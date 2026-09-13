@@ -252,7 +252,7 @@ vertical-farm-energy-designer/
 
 ### CSV 列字典
 
-`vfed evaluate --export <dir>` 导出 `summary.csv`、`timeseries.csv`、`monthly.csv` 三个文件。**质量口径：所有产量（harvest）列均为干重（kg DM），仅 `_fw` 后缀列为鲜重换算。** summary 中的 dict 值单元格均为 Python 字面量字典（可用 `ast.literal_eval` 解析），不会出现 numpy repr。
+`vfed evaluate --export <dir>` 导出 `summary.csv`、`timeseries.csv`、`monthly.csv` 三个文件。**质量口径：所有产量（harvest）列均为干重（kg DM），仅 `_fw` 后缀列为鲜重换算。** summary 中的 dict 值单元格均为 Python 字面量字典（可用 `ast.literal_eval` 解析），不会出现 numpy repr。removal-limited events / RH clamp / X_d / LCOE 等特殊键的白话解释见下方「输出术语与警告解释（Output Glossary）」。
 
 **RH 合规 / 病害风险（P1-4）：** summary 报告 RH 设定值的实际守持情况。`rh_setpoint_pct` 为目标值（`setpoints.RH`）；`rh_exceed_hours` / `rh_exceed_pct` 统计室内 RH **高于**设定值的小时数（严格 `>`；`rh_exceed_pct` 为占全年 0-1 分数）；`rh_p95_pct` / `rh_max_pct` 给出分布尾部；`rh_disease_risk_hours` 统计室内 RH **达到或超过** `setpoints.rh_disease_risk_threshold` 的小时数（默认 85 % RH — 灰霉病风险带下沿，可在项目 yaml 中配置）。全部指标与 timeseries.csv 导出的逐时 `RH_z` 序列同源，可从 CSV 独立复算；风险小时数 > 0 时发出纯 ASCII `WARNING`。
 
@@ -313,6 +313,22 @@ monthly.csv（12 行，`month` 为 1-12 不含年份 — 每个桶即天气年�
 | `grid_import_kwh` | kWh | 月度购电（纯电网运行 = `energy_kwh__total`） |
 | `electricity_cost` | currency | 月度净电费：Σ(`grid_import` × 逐时电价) − Σ(`grid_export` × `export_price`)；12 个月合计与 `annual_grid_cost_net` 闭合（差 < 0.01）。始终计价（见上方电价说明） |
 | `pv_generation_kwh` / `grid_export_kwh` / `battery_net_kwh` | kWh | 仅 PV/电池启用时输出：月度光伏发电 / 售电 / 电池净电量（放电 − 充电） |
+
+### 输出术语与警告解释（Output Glossary）
+
+summary 中最常被问到的输出/警告键的白话解释：
+
+- **removal-limited events** — `dehumidifier_performance.removal_limited_events` / `removal_limited_water_kg`。DEH / HVAC 盘管被要求冷凝的湿分超过房间实际水汽存量的子步。引擎每个子步把名义除湿量钳制到当前室内水汽库存，事件数即被钳制的子步数，`removal_limited_water_kg` 为未能移除的水量（名义 − 实际）。计数大说明除湿配置超出房间可供给的水汽 — 请检查 DEH 选型 / RH 设定值，不要按铭牌容量外推。
+
+- **RH clamp** — `moisture_clamp_stats`。湿度积分器每个子步把室内绝对湿度钳制到物理边界 [0, W_sat(T)]：
+  - `sat_clip_events` / `sat_clip_water_kg` — 在饱和上限处被冷凝的水汽（否则 RH 会超过 100 %）；该水的潜热已加回房间热平衡。
+  - `floor_clip_events` / `floor_clip_water_kg` — 被"除湿"到零下限以下的水（设备试图把房间干燥到 0 kg/kg — 幻影冷凝）；对应的幻影冷凝热已从热平衡中扣除。
+  
+  偶发事件属正常数值簿记；水量很大说明湿平衡被强行推出物理边界（DEH 选型不足、设定值不当）。
+
+- **X_d** — timeseries.csv 的 `X_d` 列：在田干物质密度（kg 干重/m²）。它是**锯齿形状态变量**：随茬期增长，每次收割重置为 `growth.initial_dry_weight` — 不是累积产量计数器。年产量看 `annual_harvest_kg`。
+
+- **LCOE** — `lcoe` 是设施全成本每 kWh 负荷：`(annual_capital + annual_om + annual_grid_cost_net) ÷ annual_load_kwh`。玩具算例（货币任意）：`capital_total` 12,000 按 10 年、6 % 折现 → CRF ≈ 0.136 → `annual_capital` ≈ 1,630；`annual_om` = 600；`annual_grid_cost_net` = 1,770 → 年全成本 4,000；年负荷 10,000 kWh → **lcoe = 0.40 currency/kWh**。
 
 ## Web 可视化（vfed-web）
 
