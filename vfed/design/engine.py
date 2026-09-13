@@ -244,7 +244,7 @@ def full_load_warnings(summary: dict) -> List[str]:
             msgs.append(
                 f"{label} at rated capacity for {d.get('hours', 0)} h "
                 f"({d.get('pct', 0.0):.1f}% of year, longest run "
-                f"{d.get('max_streak_h', 0)} h) — setpoint may be unreachable, {hint}"
+                f"{d.get('max_streak_h', 0)} h) -- setpoint may be unreachable, {hint}"
             )
     return msgs
 
@@ -465,7 +465,7 @@ def _build_devices(p, P_atm: float = 101.325):
         )
         if P_rated <= 0:
             logging.warning(
-                "HVAC auto-size returned P_rated=%.1f W — net sensible load "
+                "HVAC auto-size returned P_rated=%.1f W -- net sensible load "
                 "clamped to 0. HVAC may be undersized.",
                 P_rated,
             )

@@ -1039,7 +1039,7 @@ class DesignProject:
             if len(_pd) != len(_req):
                 raise ValueError(
                     f"transpiration.{_need} has {len(_req)} entries but "
-                    f"transpiration.period_days has {len(_pd)} — one water "
+                    f"transpiration.period_days has {len(_pd)} -- one water "
                     f"total per stage is required."
                 )
             if any(isinstance(x, bool) or not isinstance(x, (int, float)) or x <= 0 for x in _pd):
@@ -1057,7 +1057,7 @@ class DesignProject:
             if _cycle is not None and abs(_sum_pd - _cycle) > 1e-9:
                 raise ValueError(
                     f"transpiration.period_days sums to {_sum_pd} days but "
-                    f"setpoints.crop_cycle_days is {_cycle} — they must "
+                    f"setpoints.crop_cycle_days is {_cycle} -- they must "
                     f"match so stage boundaries stay aligned with the "
                     f"harvest cycle."
                 )
@@ -1168,7 +1168,7 @@ class DesignProject:
         _site_d = d.get("site", {}) or {}
         if ("lat" not in _site_d or "lon" not in _site_d) and not _site_d.get("city"):
             _w.warn(
-                "site.lat/site.lon missing — falling back to Shanghai "
+                "site.lat/site.lon missing -- falling back to Shanghai "
                 "defaults (31.2, 121.5). Set them (or site.city) to avoid "
                 "a silently wrong climate.",
                 UserWarning,
@@ -1176,7 +1176,7 @@ class DesignProject:
             )
         if "name" not in d:
             _w.warn(
-                "project 'name' missing — using 'unnamed'. Set name to "
+                "project 'name' missing -- using 'unnamed'. Set name to "
                 "identify this design in outputs.",
                 UserWarning,
                 stacklevel=2,
@@ -1186,7 +1186,7 @@ class DesignProject:
         if _cur and _cur != "USD" and _fx == 1.0:
             _w.warn(
                 f"currency='{_cur}' with exchange_rate=1.0 treats all costs "
-                f"as 1:1 to USD — set exchange_rate (e.g. 7.2 for RMB) or "
+                f"as 1:1 to USD -- set exchange_rate (e.g. 7.2 for RMB) or "
                 f"keep currency='USD'.",
                 UserWarning,
                 stacklevel=2,

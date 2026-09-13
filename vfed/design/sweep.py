@@ -464,7 +464,7 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
             if canonical in ranges:
                 raise ValueError(
                     f"parameter_ranges contains both '{alias}' and "
-                    f"'{canonical}' — specify only one."
+                    f"'{canonical}' -- specify only one."
                 )
             ranges[canonical] = ranges.pop(alias)
     objective = getattr(project.space, "objective", "lcoe")

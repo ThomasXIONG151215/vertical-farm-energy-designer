@@ -64,8 +64,8 @@ class RoomODESolver:
         # year-long run.
         if not (-100.0 <= T_raw <= 100.0):
             raise RuntimeError(
-                f"Temperature diverged to {T_raw:.1f}°C — check model inputs "
-                f"(Q_total={Q_total_W:.0f}W, T_current={T_z:.1f}°C)"
+                f"Temperature diverged to {T_raw:.1f} C -- check model inputs "
+                f"(Q_total={Q_total_W:.0f}W, T_current={T_z:.1f} C)"
             )
         clipped_deg_c = 0.0
         if T_raw < self.T_min:

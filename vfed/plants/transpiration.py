@@ -208,7 +208,7 @@ class TranspirationModel:
         elif self.method == "van_henten":
             raise ValueError(
                 "design_rate_kgs() is not defined for the 'van_henten' method "
-                "— its biomass evolves over the crop cycle, so the engine "
+                "-- its biomass evolves over the crop cycle, so the engine "
                 "sizes the DEH with a cycle pre-run peak instead (P3-4)."
             )
         else:
@@ -260,5 +260,5 @@ class TranspirationModel:
         )
         hint = _LEGACY_METHOD_HINTS.get(self.method)
         if hint:
-            msg += f"  '{self.method}' was removed — migrate to " f"'{hint}'."
+            msg += f"  '{self.method}' was removed -- migrate to " f"'{hint}'."
         return msg

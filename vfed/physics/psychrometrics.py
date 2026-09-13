@@ -49,7 +49,7 @@ def _check_temp(temp_c: float) -> None:
     if not (_MAGNUS_T_MIN <= temp_c <= _MAGNUS_T_MAX):
         raise ValueError(
             f"saturation_vapor_pressure valid for "
-            f"{_MAGNUS_T_MIN:.0f}..{_MAGNUS_T_MAX:.0f} °C, got {temp_c:.1f} °C"
+            f"{_MAGNUS_T_MIN:.0f}..{_MAGNUS_T_MAX:.0f} C, got {temp_c:.1f} C"
         )
 
 
@@ -156,7 +156,7 @@ def temp_rh_to_wetbulb(
     else:
         raise RuntimeError(
             f"Wet-bulb iteration did not converge after {max_iter} iterations "
-            f"(T={temp_c:.1f}°C, RH={rh_pct:.1f}%)"
+            f"(T={temp_c:.1f} C, RH={rh_pct:.1f}%)"
         )
     return t_wb
 

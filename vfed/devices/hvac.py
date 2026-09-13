@@ -403,7 +403,7 @@ def size_hvac(
     )
     if q_sens_raw < 0:
         logging.warning(
-            "Net sensible load is negative (%.1f W) — clamping to 0 for HVAC sizing. "
+            "Net sensible load is negative (%.1f W) -- clamping to 0 for HVAC sizing. "
             "Check design conditions: T_ext=%.1f, T_setpoint=%.1f, "
             "q_env=%.1f, q_solar=%.1f, q_inf=%.1f, led=%.1f, equip=%.1f, "
             "deh=%.1f, deh_lat=%.1f",
