@@ -381,6 +381,11 @@ class SetpointConfig:
     T_light: float = 22.0  # °C target during photoperiod
     T_dark: float = 18.0  # °C target during dark period
     RH: float = 65.0
+    # P1-4: disease-risk band lower edge (% RH). Hours with indoor RH_z
+    # >= this value enter summary["rh_disease_risk_hours"] (grey-mould /
+    # Botrytis risk band) and emit an ASCII WARNING when the count > 0.
+    # Reporting-only threshold — no device behaviour depends on it.
+    rh_disease_risk_threshold: float = 85.0
     co2_ppm: float = 800.0  # ambient CO₂ for plant growth model
     crop_cycle_days: float = 30.0  # harvest interval (resets canopy dry weight)
 
@@ -681,7 +686,16 @@ class DesignProject:
         _check_capital(deh_cfg, "deh")  # P0-1
         sp_cfg = sub(SetpointConfig, d.get("setpoints", {}), yaml_path="setpoints")
         _require_number(
-            ["T_light", "T_dark", "RH", "co2_ppm", "crop_cycle_days"], sp_cfg, "setpoints"
+            [
+                "T_light",
+                "T_dark",
+                "RH",
+                "rh_disease_risk_threshold",
+                "co2_ppm",
+                "crop_cycle_days",
+            ],
+            sp_cfg,
+            "setpoints",
         )
         _require_nonnegative(
             [
@@ -713,6 +727,14 @@ class DesignProject:
         rh_sp = sp_cfg.get("RH")
         if rh_sp is not None and not (0.0 <= rh_sp <= 100.0):
             raise ValueError(f"setpoints.RH must be in [0,100] %, got {rh_sp}")
+        # P1-4: disease-risk threshold must be a sane % RH (0 excluded -- an
+        # always-true threshold would turn every hour into a risk hour).
+        _rh_thr = sp_cfg.get("rh_disease_risk_threshold")
+        if _rh_thr is not None and not (0.0 < _rh_thr <= 100.0):
+            raise ValueError(
+                f"setpoints.rh_disease_risk_threshold must be in (0, 100] %, "
+                f"got {_rh_thr}"
+            )
 
         # ── PV temperature-coefficient dimension guards ──
         # alpha_sc / beta_voc are RELATIVE coefficients (/K). A value of 0.045

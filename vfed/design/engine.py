@@ -8,6 +8,7 @@ aggregated to hourly load (kW) consumed by the PVBES layer. Device state
 """
 
 import logging
+import warnings
 from typing import List, Optional
 
 import numpy as np
@@ -987,6 +988,34 @@ class DesignEngine:
             },
         }
 
+        # ── P1-4: RH compliance / disease-risk KPIs (additive, reporting
+        # only) ── How well the RH setpoint was actually held, and how long
+        # the room sat in the grey-mould (Botrytis) disease-risk band — the
+        # control-deviation story the device-terse output (removal-limited /
+        # utilization) could not tell.  All statistics run on the same
+        # RH_z_out array that feeds the ts "RH_z" column, so recomputing
+        # from timeseries.csv reproduces every value.  No physics touched.
+        rh_set = p.setpoints.RH
+        thr = p.setpoints.rh_disease_risk_threshold
+        rh_exceed_hours = int(np.count_nonzero(RH_z_out > rh_set))
+        rh_disease_risk_hours = int(np.count_nonzero(RH_z_out >= thr))
+        summary["rh_setpoint_pct"] = rh_set
+        summary["rh_exceed_hours"] = rh_exceed_hours
+        summary["rh_exceed_pct"] = round(rh_exceed_hours / n, 4)
+        summary["rh_p95_pct"] = round(float(np.percentile(RH_z_out, 95)), 2)
+        summary["rh_max_pct"] = round(float(np.max(RH_z_out)), 2)
+        summary["rh_disease_risk_hours"] = rh_disease_risk_hours
+        if rh_disease_risk_hours > 0:
+            warnings.warn(
+                f"RH disease risk: {rh_disease_risk_hours} h/yr at or above "
+                f"{thr:.1f}% RH (grey-mould risk band; RH setpoint "
+                f"{rh_set:.1f}%, p95 {summary['rh_p95_pct']:.2f}%, max "
+                f"{summary['rh_max_pct']:.2f}%) -- check dehumidifier "
+                f"sizing/setpoints.RH",
+                UserWarning,
+                stacklevel=2,
+            )
+
         # ── monthly dict ───────────────────────────────────────────────────
         # P1-3a: flat-key columns (water_m3 / harvest_fw_kg here; grid / cost
         # / PV-dispatch columns are attached by the economics branches below,
@@ -1006,6 +1035,11 @@ class DesignEngine:
             "harvest_fw_kg": (monthly_harvest / dry_fraction).tolist(),
             # transpiration water, m³ (= kg / 1000)
             "water_m3": (monthly_water_kg / 1000.0).tolist(),
+            # P1-4: hours per month with indoor RH above the setpoint
+            # (strict >); the 12 values sum to summary.rh_exceed_hours.
+            "rh_exceed_hours": [
+                int(v) for v in _monthly_sum((RH_z_out > rh_set).astype(float), months).tolist()
+            ],
             "avg_T_z": monthly_avg_T.tolist(),
             "avg_RH_z": monthly_avg_RH.tolist(),
         }

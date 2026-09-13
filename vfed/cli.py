@@ -257,6 +257,8 @@ _YAML_SECTION_COMMENTS = {
         "# setpoints: indoor climate targets\n"
         "#   T_light / T_dark - temperature during light/dark (deg C)\n"
         "#   RH      - relative humidity (%)\n"
+        "#   rh_disease_risk_threshold - disease-risk band lower edge (% RH);\n"
+        "#             hours at/above it are counted in rh_disease_risk_hours\n"
         "#   co2_ppm - CO2 concentration (ppm)\n"
         "#   crop_cycle_days - days from seeding to harvest\n"
         "# ------------------------------------------------------------------\n"

@@ -335,6 +335,8 @@ All `cost*` / `capital*` / `annual_*` monetary columns are in the project's `cur
 
 `vfed evaluate --export <dir>` writes `summary.csv`, `timeseries.csv` and `monthly.csv`. **Mass semantics: every harvest column is DRY matter (kg DM) unless suffixed `_fw` (fresh weight).** Dict-valued summary cells are Python-literal dicts (parse with `ast.literal_eval`); they never contain numpy reprs.
 
+**RH compliance / disease risk (P1-4):** summary reports how well the RH setpoint was actually held. `rh_setpoint_pct` is the target (`setpoints.RH`); `rh_exceed_hours` / `rh_exceed_pct` count hours with indoor RH **above** the setpoint (strict `>`; `rh_exceed_pct` is a 0-1 fraction of the year); `rh_p95_pct` / `rh_max_pct` give the distribution tail; `rh_disease_risk_hours` counts hours **at or above** `setpoints.rh_disease_risk_threshold` (default 85 % RH — the lower edge of the grey-mould/Botrytis risk band, configurable in the project yaml). All figures derive from the same hourly `RH_z` series exported to timeseries.csv, so they are recomputable from the CSV; a positive risk-hour count emits a pure-ASCII `WARNING`.
+
 summary.csv (single row — scalar KPIs):
 
 | Column | Unit | Meaning / basis |
@@ -359,6 +361,8 @@ summary.csv (single row — scalar KPIs):
 | `dehumidifier_performance` | dict | Nominal vs actual (inventory-capped) moisture removal; `removal_limited_*` |
 | `deh_smer` | dict | Effective / delivered / rated SMER (kg/kWh, compressor input, fan excluded); `deh_comp_energy_kwh` excludes the fan, `deh_total_energy_kwh` includes it |
 | `full_load_diagnostics` | dict | Hours/pct/longest streak at rated capacity per device + warning criteria |
+| `rh_setpoint_pct` / `rh_exceed_hours` / `rh_exceed_pct` | % / h / fraction (0-1) | RH target and control deviation: hours with indoor RH **above** the setpoint (strict `>`), and their share of the year (see RH compliance note above) |
+| `rh_p95_pct` / `rh_max_pct` / `rh_disease_risk_hours` | % / % / h | Indoor-RH 95th percentile and maximum; hours **at or above** `setpoints.rh_disease_risk_threshold` (grey-mould risk band, default 85 % RH, yaml-configurable) |
 
 timeseries.csv (8760 hourly rows):
 
@@ -386,6 +390,7 @@ monthly.csv (12 rows, `month` 1-12 without a year — each bucket is one natural
 | `harvest_kg` | kg DM | **Harvest events only** (dry). Sum = `annual_harvest_kg` − `harvest_final_standing_kg` |
 | `harvest_fw_kg` | kg fresh | Fresh-weight conversion: `harvest_kg` ÷ `dry_matter_fraction` |
 | `water_m3` | m³ | Monthly transpiration water (sums = `annual_water_m3`) |
+| `rh_exceed_hours` | h | Monthly hours with indoor RH above the setpoint (12-month sum = `summary.rh_exceed_hours`) |
 | `grid_import_kwh` | kWh | Monthly grid purchases (= `energy_kwh__total` on a grid-only run) |
 | `electricity_cost` | currency | Monthly net bill: Σ(`grid_import` × hourly tariff price) − Σ(`grid_export` × `export_price`); the 12 values close against `annual_grid_cost_net` (diff < 0.01). Always priced (see tariff note above) |
 | `pv_generation_kwh` / `grid_export_kwh` / `battery_net_kwh` | kWh | Only when PV or battery is enabled: monthly PV output / grid sales / net battery energy (discharge − charge) |

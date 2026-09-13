@@ -254,6 +254,8 @@ vertical-farm-energy-designer/
 
 `vfed evaluate --export <dir>` 导出 `summary.csv`、`timeseries.csv`、`monthly.csv` 三个文件。**质量口径：所有产量（harvest）列均为干重（kg DM），仅 `_fw` 后缀列为鲜重换算。** summary 中的 dict 值单元格均为 Python 字面量字典（可用 `ast.literal_eval` 解析），不会出现 numpy repr。
 
+**RH 合规 / 病害风险（P1-4）：** summary 报告 RH 设定值的实际守持情况。`rh_setpoint_pct` 为目标值（`setpoints.RH`）；`rh_exceed_hours` / `rh_exceed_pct` 统计室内 RH **高于**设定值的小时数（严格 `>`；`rh_exceed_pct` 为占全年 0-1 分数）；`rh_p95_pct` / `rh_max_pct` 给出分布尾部；`rh_disease_risk_hours` 统计室内 RH **达到或超过** `setpoints.rh_disease_risk_threshold` 的小时数（默认 85 % RH — 灰霉病风险带下沿，可在项目 yaml 中配置）。全部指标与 timeseries.csv 导出的逐时 `RH_z` 序列同源，可从 CSV 独立复算；风险小时数 > 0 时发出纯 ASCII `WARNING`。
+
 summary.csv（单行 — 标量 KPI）：
 
 | 列名 | 单位 | 含义 / 口径 |
@@ -278,6 +280,8 @@ summary.csv（单行 — 标量 KPI）：
 | `dehumidifier_performance` | dict | 名义 vs 实际（受室内湿存水限制）除湿量；`removal_limited_*` |
 | `deh_smer` | dict | 有效/送达/额定 SMER（kg/kWh，压缩机输入口径，不含风机）；`deh_comp_energy_kwh` 不含风机，`deh_total_energy_kwh` 含风机 |
 | `full_load_diagnostics` | dict | 各设备满载运行的小时数/占比/最长连续时长 + 告警阈值 |
+| `rh_setpoint_pct` / `rh_exceed_hours` / `rh_exceed_pct` | % / h / 分数（0-1） | RH 目标与控制偏差：室内 RH **高于**设定值（严格 `>`）的小时数及其占全年比例（见上方 RH 合规说明） |
+| `rh_p95_pct` / `rh_max_pct` / `rh_disease_risk_hours` | % / % / h | 室内 RH 第 95 百分位与最大值；**达到或超过** `setpoints.rh_disease_risk_threshold` 的小时数（灰霉病风险带，默认 85 % RH，yaml 可配置） |
 
 timeseries.csv（8760 行逐时数据）：
 
@@ -305,6 +309,7 @@ monthly.csv（12 行，`month` 为 1-12 不含年份 — 每个桶即天气年�
 | `harvest_kg` | kg 干重 | **仅收割事件**（干重）。合计 = `annual_harvest_kg` − `harvest_final_standing_kg` |
 | `harvest_fw_kg` | kg 鲜重 | 鲜重换算：`harvest_kg` ÷ `dry_matter_fraction` |
 | `water_m3` | m³ | 月度蒸腾耗水（合计 = `annual_water_m3`） |
+| `rh_exceed_hours` | h | 月度室内 RH 高于设定值的小时数（12 月合计 = `summary.rh_exceed_hours`） |
 | `grid_import_kwh` | kWh | 月度购电（纯电网运行 = `energy_kwh__total`） |
 | `electricity_cost` | currency | 月度净电费：Σ(`grid_import` × 逐时电价) − Σ(`grid_export` × `export_price`)；12 个月合计与 `annual_grid_cost_net` 闭合（差 < 0.01）。始终计价（见上方电价说明） |
 | `pv_generation_kwh` / `grid_export_kwh` / `battery_net_kwh` | kWh | 仅 PV/电池启用时输出：月度光伏发电 / 售电 / 电池净电量（放电 − 充电） |
