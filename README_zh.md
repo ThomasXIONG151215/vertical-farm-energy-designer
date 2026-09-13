@@ -192,6 +192,32 @@ vertical-farm-energy-designer/
 - **opex / equipment_capital / envelope_capital / pump_capital** — 资本与运营成本输入
 - **currency / exchange_rate** — 成本报告的货币设置
 
+## 模型适用范围与已知局限
+
+在底层证据薄弱之处，VFED 的物理与作物模型刻意保持简洁。以下边界均附量化数字，便于以恰当的置信度解读结果；另见"输出结果解读"中的产量模型标定说明（生菜标定的 `growth.c_rad_phot`，30-60 kg 鲜重/m²/年 合理性区间）与 Output Glossary（输出术语与警告解释）。
+
+### 作物与生长模型
+
+Van Henten 生物量只响应光照与温度 — 没有水分胁迫耦合：灌溉量变化 2.7 倍，年产量仅移动约 ±0.5%。direct-set 蒸腾方法同样不向生长模型反馈胁迫项。光强响应呈轻微超线性，且没有长光周期惩罚 — 而真实作物在光照超过 17-18 h 后边际递减并出现烧尖（tipburn）。年产量随 `crop_cycle_days` 单调下降，且对生长速率校准敏感 — 引用绝对数值前，请先用自己的收获记录重新标定 `growth.c_rad_phot`（见"输出结果解读"的 30-60 kg 鲜重/m²/年 合理性区间警示与生菜标定说明）。
+
+### 水量参数
+
+`daily_water_L` / `ml_per_plant_day`（及 `_per_period` 变体）代表的是**光期**水量，而非 24 小时总量：模型在夜间仍持续蒸腾，会在名义日水量之上再叠加约 7.5%。请把参数值理解为光期口径，并预期仿真得到的 24 小时总量比它高出这一幅度。
+
+### 天气与光伏（单年）
+
+仿真只用单一年份的天气（默认 2025）— 没有年际波动。光伏出力同样取寿命中值年份：不含组件衰减，也不含逐年差异。
+
+### HVAC COP 冬季上限
+
+制热 COP 被 4.5 的硬顶封顶 — 这是工程上限而非物理规律，冬季不加顶的 Carnot 值可超过 17。参数对 (η_II = 0.35, ΔT_cond = 15 K) 不可唯一辨识：多组参数对给出相同的 COP，请把这个顶当作工程包络，而非标定出来的物理结果。
+
+### 热湿数值处理
+
+温度 ODE 携带一项焓流项，按标准负荷计算的口径处理；在真实换气速率下其影响可忽略。湿度积分器以湿空气质量近似（标准做法为干空气质量），影响约 1-2%。
+
+这些边界在此如实声明，并非当作定论接受 — 后续版本可能收紧。
+
 ## 输出结果解读
 
 `vfed evaluate` 与 `vfed sweep` 输出同一套经济/能耗 KPI。所有货币值均以项目配置的 `currency`（默认 USD）报告；`exchange_rate` 仅用于显示标注（如 "1 USD = 7.2 CNY"），**不改变数值**。
@@ -350,7 +376,7 @@ python -m http.server 8000
 
 ### 内置预设与仿真链路
 
-- **内置预设** `BUILTIN_PRESETS`：`609`（Fengxian Strawberry PFAL，奉贤草莓）、`lettuce_standard`（Lettuce — Standard PFAL）。
+- **内置预设** `BUILTIN_PRESETS`：`609`（Fengxian Lettuce PFAL，奉贤生菜）、`lettuce_standard`（Lettuce — Standard PFAL）。
 - **仿真链路**：表单 → `generateYaml()` 生成 YAML → `postMessage({type:'simulate', projectYaml})` → Worker 内 Pyodide 运行 vfed 仿真 → 结果回传 → 图表渲染。
 - **重新打包**：修改 `vfed/` Python 代码或更新 `weather_cache/` 后，需在 `vfed-web/` 目录重跑 `python bundle.py`，把源码与天气缓存重新内嵌进 `worker.js`。
 
