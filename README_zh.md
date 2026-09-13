@@ -202,6 +202,8 @@ vertical-farm-energy-designer/
 
 ### evaluate 输出（核心 KPI）
 
+> **天气来源自证（P2-2）**：`Project:` 下方第一行标明本次评估实际使用的气象数据：`Weather source  : pre-downloaded city file (Shanghai_2025.csv)`、`cache hit (weather_<lat>_<lon>_<year>_...csv)` 或 `live fetch (api.open-meteo.com)`。P1-3b 之后预下载城市文件与 lat/lon 缓存是两种不同口径——对比结果前先看这一行。该行仅打印在控制台（纯 ASCII）：sweep 输出不会重复（百行扫描不刷屏），导出的 CSV / JSON 保持不变。
+
 | KPI | JSON summary 键 / CLI 标签 | 单位 | 定义 |
 |---|---|---|---|
 | 年总负荷 | `annual_energy_kwh` / Annual load | kWh/年 | 全年建筑耗电量（LED+HVAC+DEH+杂项） |

@@ -20,6 +20,7 @@ import warnings
 from datetime import date, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Tuple
+from urllib.parse import urlsplit
 
 import numpy as np
 import pandas as pd
@@ -280,6 +281,10 @@ def fetch_weather(
                 )
             if "poa_radiation" not in df.columns:
                 df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+            # P2-2: provenance metadata (in-process only; attrs never enter
+            # to_csv round-trips or the JSON result schema).
+            df.attrs["weather_source"] = "pre-downloaded city file"
+            df.attrs["weather_source_detail"] = local.name
             # Also write to the standard cache so subsequent calls hit quickly
             if not cp.exists():
                 cache_dir.mkdir(parents=True, exist_ok=True)
@@ -319,6 +324,9 @@ def fetch_weather(
                 )
                 df = df.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
                 df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+            # P2-2: provenance metadata (cache hit, legacy or geometry-aware).
+            df.attrs["weather_source"] = "cache"
+            df.attrs["weather_source_detail"] = path.name
             return df
         # Pre-fix cache (window shifted by tz_hours): keep it as an offline
         # fallback and regenerate below when the network is available.
@@ -400,6 +408,9 @@ def fetch_weather(
                 # tilt/azimuth (pure numpy, no network needed).
                 fb = fb.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
                 fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours)
+            # P2-2: provenance metadata (offline stale-cache fallback).
+            fb.attrs["weather_source"] = "cache"
+            fb.attrs["weather_source_detail"] = f"{path.name} (stale pre-P4-16)"
             return fb
         raise WeatherFetchError(
             f"weather fetch failed: {e}. Check network connectivity or "
@@ -432,4 +443,9 @@ def fetch_weather(
     df.index = df.index.tz_localize(None)  # naive local wall time (cache format)
     df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
     df.to_csv(cp)
+    # P2-2: provenance metadata (live Open-Meteo).  Detail carries the API
+    # host only -- no query string, no credentials (Open-Meteo is keyless,
+    # but keep the convention key-safe by construction).
+    df.attrs["weather_source"] = "live fetch"
+    df.attrs["weather_source_detail"] = urlsplit(url).netloc
     return df

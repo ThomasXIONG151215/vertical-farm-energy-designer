@@ -84,6 +84,13 @@ class SimulationResult:
     #    wrote back into the caller's project for CAPEX accounting ────
     sizing: Dict[str, float] = field(default_factory=dict)
 
+    # ── weather provenance (P2-2): copy of the weather DataFrame's ``attrs``
+    #    set by ``weather_bridge.fetch_weather`` (``weather_source`` /
+    #    ``weather_source_detail``).  Process-local only -- deliberately NOT
+    #    serialized in to_dict() / from_dict(), mirroring DataFrame.attrs
+    #    semantics (no JSON / CSV schema change).
+    weather_attrs: Dict[str, Any] = field(default_factory=dict, repr=False)
+
     # -----------------------------------------------------------------
     def __getitem__(self, key: str) -> Any:
         """Backward-compat dict-like access for sweep.py and legacy callers."""

@@ -528,6 +528,11 @@ class DesignEngine:
                 cache_dir=self.cache_dir,
                 city=p.site.city,
             )
+        # P2-2: weather provenance (fetch layer tags df.attrs) -- copy it out
+        # so the reporting layer can self-evidence the weather source.  The
+        # DataFrame itself is never rebuilt here, so the attrs survive; a
+        # caller-supplied df without attrs degrades to an empty dict.
+        weather_attrs = dict(getattr(weather, "attrs", {}) or {})
         n = len(weather)
         dt = p.space.timestep_s
         sub = max(1, int(round(3600.0 / dt)))
@@ -1397,6 +1402,7 @@ class DesignEngine:
             typical_daily=typical_daily,
             _raw=_raw,
             sizing=sizing,
+            weather_attrs=weather_attrs,
         )
 
 

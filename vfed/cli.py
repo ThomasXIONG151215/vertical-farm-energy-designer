@@ -531,6 +531,39 @@ def _cmd_validate(args):
     return 0
 
 
+# P2-2: display labels for the weather provenance carried on the weather
+# DataFrame's ``attrs`` (set by weather_bridge.fetch_weather, relayed by
+# DesignEngine into SimulationResult.weather_attrs).  "cache" reads better
+# as "cache hit" on the console; the other sources pass through verbatim.
+_WEATHER_SOURCE_LABELS = {"cache": "cache hit"}
+
+
+def _print_weather_source(result) -> None:
+    """P2-2: one self-evidence line telling the user which weather dataset
+    the run actually used -- reproducibility depends on it, and after P1-3b
+    the pre-downloaded city file and the lat/lon cache are two different
+    provenances that can silently diverge.
+
+    * ``pre-downloaded city file (Shanghai_2025.csv)``
+    * ``cache hit (weather_31.230_121.470_2025_t20.000_a180.000_z8.000.csv)``
+    * ``live fetch (api.open-meteo.com)``
+
+    Silently skipped when the attrs are absent (caller-supplied weather or
+    an older engine) -- no warning, provenance is additive information.
+    Pure ASCII normal print style (not a WARNING; nothing is wrong).
+    """
+    attrs = getattr(result, "weather_attrs", None) or {}
+    source = attrs.get("weather_source")
+    if not source:
+        return
+    detail = attrs.get("weather_source_detail", "")
+    label = _WEATHER_SOURCE_LABELS.get(source, source)
+    if detail:
+        print(f"  Weather source  : {label} ({detail})")
+    else:
+        print(f"  Weather source  : {label}")
+
+
 def _cmd_evaluate(args):
     """Evaluate a single design — building simulation only (no sweep)."""
     import numpy as np
@@ -571,6 +604,8 @@ def _cmd_evaluate(args):
         )
         return 1
     print(f"Project: {project.name}")
+    # P2-2: which weather dataset fed this run (city file / cache / live).
+    _print_weather_source(result)
     print(f"  Annual load      = {annual_load:.0f} kWh/yr")
     print(f"  Biomass (dry)    = {result.get('biomass_kg', 0):.1f} kg")
     print(f"  kWh/kg (dry)     = {result.get('kwh_per_kg', 0):.1f}")
