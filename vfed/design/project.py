@@ -355,14 +355,27 @@ class VanHentenConfig:
     control problem in greenhouse climate management. Biosystems Engineering,
     85(3), 355-364.
 
-    All parameters are in SI units.
+    All parameters are in SI units.  Semantics reverse-engineered from
+    vfed/plants/van_henten.py: gross photosynthesis
+    ``phi = f(light) x f(T) x (X_c - Gamma)`` with
+    ``f(T) = -c_co2_1*T^2 + c_co2_2*T - c_co2_3`` (must stay > 0, i.e.
+    T below ~42 C), net growth ``dX_d = c_alpha_beta*phi - c_resp_d*X_d*Q10(T)``
+    and canopy light interception ``1 - exp(-c_pl_d*X_d)``.
     """
 
-    c_alpha_beta: float = 0.544  # conversion efficiency (dimensionless)
-    c_resp_d: float = 2.65e-7  # dark respiration at 25°C (s⁻¹)
-    dry_matter_fraction: float = 0.05  # dry→fresh weight conversion (−)
-    c_pl_d: float = 53.0  # light extinction per LAI (m²/kg)
-    c_rad_phot: float = 3.5e-9  # radiation use efficiency (kg/J), lettuce-calibrated
+    c_alpha_beta: float = 0.544  # (-) assimilate -> dry-matter conversion
+    #   efficiency (0-1; literature 0.49-0.6).  Fraction of gross
+    #   photosynthesis that ends up as structural dry matter.
+    c_resp_d: float = 2.65e-7  # 1/s dark-respiration coefficient at 25 C
+    #   (typical 1e-7 - 5e-7).  Applied with a Q10 = 2 van't Hoff response:
+    #   rate doubles every +10 C; only active term that can shrink X_d.
+    dry_matter_fraction: float = 0.05  # (-) dry -> fresh weight conversion
+    #   (leafy vegetables 4-6 % dry matter).  Used only for KPI reporting
+    #   (kg fresh = kg dry / fraction); does not feed back into growth.
+    c_pl_d: float = 53.0  # m2/kg canopy light extinction per unit dry weight
+    #   (typical 40-70).  Enters interception exp(-c_pl_d*X_d): converts
+    #   standing dry weight X_d (kg/m2) into effective leaf area.
+    c_rad_phot: float = 3.5e-9  # kg/J radiation use efficiency (PAR), lettuce-calibrated
     #   CALIBRATION BASIS (P0-3R, 2026-09-08): recalibrated for PFAL lettuce
     #   to the commercial PFAL yield band 30-60 kg fresh/m2/yr (Kozai et al.
     #   2016): 3.5e-9 anchors the band midpoint (~45 kg/m2/yr at the 609
@@ -371,33 +384,106 @@ class VanHentenConfig:
     #   maximum (no canopy / respiration / whole-cycle discount) and
     #   overpredicted yield 2-4x.  Full derivation and cross-checks:
     #   vfed/plants/van_henten.py; new baseline: user-gym/regression/README.md.
-    c_co2_1: float = 5.11e-6  # CO₂ assimilation coef (m/(s·°C²))
-    c_co2_2: float = 2.3e-4  # CO₂ assimilation coef (m/(s·°C))
-    c_co2_3: float = 6.29e-4  # CO₂ assimilation coef (m/s)
-    c_Gamma: float = 5.2e-5  # CO₂ compensation point (kg/m³)
-    initial_dry_weight: float = 0.02  # initial dry biomass (kg/m²); real
-    # transplant seedlings ~15-80 g/m²,
-    # former 1 g/m² was an order low (P3-14)
+    c_co2_1: float = 5.11e-6  # m/(s*C^2) quadratic temperature-response term
+    #   of gross photosynthesis (Van Henten 2003 Table 1; keep defaults).
+    c_co2_2: float = 2.3e-4  # m/(s*C) linear temperature-response term
+    c_co2_3: float = 6.29e-4  # m/s temperature-response offset; the parabola
+    #   -c_co2_1*T^2 + c_co2_2*T - c_co2_3 turns negative above ~42 C and
+    #   photosynthesis is clamped to 0 there (van_henten.py guard).
+    c_Gamma: float = 5.2e-5  # kg/m3 CO2 compensation point (C3 plants, ~30 ppm
+    #   at 25 C; rises with temperature).  Photosynthesis scales with the
+    #   CO2 density above this floor: (X_c - c_Gamma).
+    initial_dry_weight: float = 0.02  # kg/m2 initial (transplant) dry biomass
+    #   real transplant seedlings ~15-80 g/m2,
+    #   former 1 g/m2 was an order low (P3-14).  X_d resets to this at every
+    #   harvest (sawtooth state).
 
 
 @dataclass
 class TranspirationConfig:
+    """Crop water-loss (transpiration) configuration — the room's internal
+    moisture source.  Five methods in two families; see the ``method`` enum
+    below and vfed/plants/transpiration.py for the model.
+
+    Reference water scenario for the direct-set defaults (P1-6): mature
+    PFAL lettuce transpires ~1.5 L/m2/day at a dense 25 plants/m2 planting
+    (literature band 0.75-2.0 L/m2/day; typical PFAL design figures at the
+    Kozai-et-al-2016 Plant-Factory-handbook level).  On the default 45 m2
+    canopy this is 1.5 x 45 = 67.5 L/day whole-canopy, or 1500 mL/m2/day
+    / 25 plants/m2 = 60 mL/plant/day.
+    """
+
     method: str = "van_henten"
-    #   van_henten | daily | per_plant | daily_per_period | per_plant_per_period
-    #   Legacy methods (constant / vpd / stomatal) were REMOVED — the method
-    #   whitelist below fails fast with a migration hint.
-    daily_water_L: float = 40.0  # daily water for whole canopy (L/day), "daily" method
-    plant_count: int = 0  # number of plants, "per_plant" family
-    ml_per_plant_day: float = 80.0  # mL water per plant per day, "per_plant" method
+    #   Transpiration method — 5 valid values in 2 families:
+    #
+    #   Model-coupled (physics-driven, default):
+    #     "van_henten" — E = k_van_henten x X_d x VPD x area x light_factor;
+    #       biomass X_d comes from the growth model, so water use tracks the
+    #       canopy and peaks at harvest.  Consumes: k_van_henten,
+    #       stage_factor, dark_transpiration_frac (+ runtime X_d).  All
+    #       fields have physical defaults — no missing-field fail-fast.
+    #   Direct-set (user states the water use; independent of T/RH):
+    #     "daily" — whole-canopy daily total spread over the photoperiod.
+    #       Consumes: daily_water_L (default > 0, always usable).
+    #     "per_plant" — plant_count x ml_per_plant_day -> daily total.
+    #       Consumes: plant_count, ml_per_plant_day (plants_per_m2 may
+    #       auto-derive plant_count, see below).  plant_count <= 0 with no
+    #       usable plants_per_m2 -> fail-fast at load (E prefix, exit 1)
+    #       and again at step time for direct TranspirationModel use.
+    #     "daily_per_period" — as "daily" but staged over period_days.
+    #       Consumes: period_days + daily_water_L_period (one entry per
+    #       stage; shape / positivity / sum == crop_cycle_days validated
+    #       at load -> fail-fast).
+    #     "per_plant_per_period" — as "per_plant" but staged over
+    #       period_days.  Consumes: period_days + ml_per_plant_day_period
+    #       + plant_count (or plants_per_m2).  Missing/invalid entries ->
+    #       fail-fast at load.
+    #   Legacy "constant" / "vpd" / "stomatal" were REMOVED — the whitelist
+    #   below fails fast with a migration hint.
+    daily_water_L: float = 67.5
+    #   L/day whole-canopy water use ("daily" method), typical 20-150.
+    #   Anchor: 1.5 L/m2/day (mature lettuce, band 0.75-2.0) x 45 m2 default
+    #   canopy = 67.5.  Rescale as daily_water_L = rate * led.covered_area.
+    plant_count: int = 0
+    #   plants in the room (count), "per_plant" family.  0 = unset: either
+    #   plants_per_m2 derives it (see below) or per-plant methods fail fast.
+    ml_per_plant_day: float = 60.0
+    #   mL water per plant per day ("per_plant" method), typical 20-150 for
+    #   leafy greens.  Anchor: 1500 mL/m2/day / 25 plants/m2 = 60 mL, the
+    #   same 67.5 L/day scenario as daily_water_L (25 plants/m2 x 45 m2 x
+    #   60 mL = 67.5 L/day).
+    plants_per_m2: Optional[float] = None
+    #   planting density (plants/m2), optional alternative source for
+    #   plant_count in the "per_plant" family.  Valid range (0, 200]
+    #   (200/m2 ~ mechanical/spacing ceiling for lettuce-style canopies).
+    #   Behaviour: per_plant / per_plant_per_period with plant_count == 0
+    #   and plants_per_m2 > 0 derive plant_count =
+    #   round(plants_per_m2 x led.covered_area) in the engine
+    #   (25 plants/m2 x 45 m2 = 1125 plants).  If BOTH plant_count and
+    #   plants_per_m2 are given, plant_count wins (no warning).  If neither
+    #   is usable the load-time guard fails fast.
     period_days: List[float] = field(default_factory=lambda: [10.0, 10.0, 10.0])
     #   stage widths (days), "*_per_period" methods; sum(period_days) must
     #   equal setpoints.crop_cycle_days (validated below).
-    daily_water_L_period: List[float] = field(default_factory=lambda: [30.0, 45.0, 60.0])
-    #   daily water per stage (L/day), "daily_per_period"; one entry per stage.
-    ml_per_plant_day_period: List[float] = field(default_factory=lambda: [10.0, 30.0, 50.0])
+    daily_water_L_period: List[float] = field(default_factory=lambda: [22.5, 45.0, 90.0])
+    #   daily water per stage (L/day), "daily_per_period"; one entry per
+    #   stage.  Anchor ladder 0.5 / 1.0 / 2.0 L/m2/day x 45 m2 = 22.5 / 45 /
+    #   90 (seedling -> mature; late stage at the 2.0 L/m2/day band edge).
+    #   Stage difference vs the flat "daily" 1.5 L/m2/day anchor is
+    #   intentional: early stages use far less, so the ladder's cycle total
+    #   (1575 L / 30 d) sits ~22 % below a flat mature-rate cycle (2025 L).
+    ml_per_plant_day_period: List[float] = field(default_factory=lambda: [20.0, 40.0, 80.0])
     #   mL water per plant per day per stage, "per_plant_per_period".
+    #   Same 0.5 / 1.0 / 2.0 L/m2/day ladder at 25 plants/m2:
+    #   rate x 1000 / 25 = 20 / 40 / 80 mL — consistent with
+    #   daily_water_L_period (25 plants/m2 x 45 m2 x [20,40,80] mL =
+    #   [22.5, 45, 90] L/day).
     k_van_henten: float = 1.0e-4  # biomass-scaled gain (1/(s·kPa)), van_henten method
+    #   Calibrated (P3-1, vfed/plants/transpiration.py): 1e-4 gives ~2.4
+    #   L/m2/day at harvest; the former 4e-4 was physically impossible.
+    #   Typical 0.5e-4 - 5e-4.
     stage_factor: float = 1.0
+    #   extra growth-stage multiplier on every method (-, 0-1+); 1.0 = off.
     dark_transpiration_frac: float = 0.15  # night rate / light rate, all methods
     #   Stomata stay partly open at night (Caird et al. 2007: E_night/E_day
     #   5-15%, up to 30%; Kim et al. 2004: lettuce g_night/g_day 11-39%); PFAL
@@ -737,6 +823,22 @@ class DesignProject:
             transp_cfg,
             "transpiration",
         )
+        # P1-6: optional planting density — if set it must be a sane number.
+        # Band (0, 200] plants/m2: ~200/m2 is the mechanical/spacing ceiling
+        # for lettuce-style canopies; a denser figure is almost surely a
+        # unit mistake (e.g. plants per tray).
+        _ppm2 = transp_cfg.get("plants_per_m2")
+        if _ppm2 is not None:
+            if isinstance(_ppm2, bool) or not isinstance(_ppm2, (int, float)):
+                raise ValueError(
+                    f"transpiration.plants_per_m2 must be a number "
+                    f"(plants/m2), got {type(_ppm2).__name__}: {_ppm2!r}"
+                )
+            if not (0.0 < _ppm2 <= 200.0):
+                raise ValueError(
+                    f"transpiration.plants_per_m2 must be in (0, 200] "
+                    f"plants/m2, got {_ppm2}"
+                )
         _require_nonnegative(
             ["smer", "M_deh_nom", "P_ref_w", "P_rated_max", "comp_mod_band_rh"],
             deh_cfg,
@@ -913,24 +1015,24 @@ class DesignProject:
                     f"match so stage boundaries stay aligned with the "
                     f"harvest cycle."
                 )
-            if _method == "per_plant_per_period":
-                _pc = transp_cfg.get("plant_count")
-                if _pc is None:
-                    _pc = _t_dflt.plant_count
-                if _pc is not None and _pc <= 0:
-                    raise ValueError(
-                        f"transpiration.method='per_plant_per_period' "
-                        f"requires transpiration.plant_count > 0, "
-                        f"got {_pc}"
-                    )
-        if _method == "per_plant":
+
+        # P1-6: per-plant methods need a usable plant count.  Sources, in
+        # order: explicit plant_count > 0, else plants_per_m2 x
+        # led.covered_area (derived by the engine at build time), else fail
+        # fast here.
+        if _method in ("per_plant", "per_plant_per_period"):
             _pc = transp_cfg.get("plant_count")
             if _pc is None:
                 _pc = TranspirationConfig().plant_count
-            if _pc is not None and _pc <= 0:
+            _pc_ok = _pc is not None and _pc > 0
+            _ppm2_ok = _ppm2 is not None and _ppm2 > 0
+            if not _pc_ok and not _ppm2_ok:
                 raise ValueError(
-                    f"transpiration.method='per_plant' requires "
-                    f"transpiration.plant_count > 0, got {_pc}"
+                    f"transpiration.method='{_method}' requires a plant "
+                    f"count: set transpiration.plant_count > 0 (got {_pc}) "
+                    f"or transpiration.plants_per_m2 in (0, 200] plants/m2 "
+                    f"(the engine then derives plant_count = "
+                    f"round(plants_per_m2 * led.covered_area))"
                 )
 
         # ── LED guards (P5-6 / P5-7) ──

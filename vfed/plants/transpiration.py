@@ -70,18 +70,25 @@ _LEGACY_METHOD_HINTS = {
 @dataclass
 class TranspirationModel:
     method: str = "van_henten"  # see module docstring / VALID_METHODS
-    daily_water_L: float = 40.0  # daily water for whole canopy (L/day), "daily"
-    plant_count: int = 0  # number of plants, "per_plant" family
-    ml_per_plant_day: float = 80.0  # mL water per plant per day, "per_plant"
+    # Reference scenario for the direct-set defaults (P1-6): mature PFAL
+    # lettuce ~1.5 L/m2/day at 25 plants/m2 (literature band 0.75-2.0
+    # L/m2/day; typical PFAL design figures).  On the 45 m2 default canopy:
+    # 67.5 L/day whole-canopy, or 60 mL/plant/day at 25 plants/m2.
+    daily_water_L: float = 67.5  # daily canopy water (L/day), "daily"
+    #   anchor: 1.5 L/m2/day x 45 m2 canopy = 67.5 (band 33.75-90 at 45 m2)
+    plant_count: int = 0  # number of plants, "per_plant" family (the engine
+    #   may derive it as round(plants_per_m2 x covered_area), P1-6)
+    ml_per_plant_day: float = 60.0  # mL water per plant per day, "per_plant"
+    #   anchor: 1500 mL/m2/day / 25 plants/m2 = 60
     period_days: List[float] = field(
         default_factory=lambda: [10.0, 10.0, 10.0]
     )  # stage widths (days)
     daily_water_L_period: List[float] = field(
-        default_factory=lambda: [30.0, 45.0, 60.0]
-    )  # L/day per stage
+        default_factory=lambda: [22.5, 45.0, 90.0]
+    )  # L/day per stage — 0.5/1.0/2.0 L/m2/day ladder x 45 m2
     ml_per_plant_day_period: List[float] = field(
-        default_factory=lambda: [10.0, 30.0, 50.0]
-    )  # mL/plant/day per stage
+        default_factory=lambda: [20.0, 40.0, 80.0]
+    )  # mL/plant/day per stage — same ladder at 25 plants/m2 (x1000/25)
     photoperiod_hours: float = 16.0  # light hours per day
     k_van_henten: float = 1.0e-4  # biomass-scaled gain (1/(s·kPa)), van_henten
     #   P3-1 (calibrated 4e-4 -> 1e-4): 4e-4 gave harvest λE≈616 W/m²
@@ -241,7 +248,9 @@ class TranspirationModel:
                 f"transpiration.method='{self.method}' requires "
                 f"transpiration.plant_count > 0, got {self.plant_count}. "
                 f"Set transpiration.plant_count in the project YAML "
-                f"(and optionally transpiration.ml_per_plant_day)."
+                f"(or transpiration.plants_per_m2 -- the engine derives "
+                f"plant_count = round(plants_per_m2 * covered_area)), "
+                f"and optionally transpiration.ml_per_plant_day."
             )
 
     def _unknown_method_message(self) -> str:

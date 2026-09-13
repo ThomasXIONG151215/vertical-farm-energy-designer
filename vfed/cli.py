@@ -258,7 +258,17 @@ _YAML_SECTION_COMMENTS = {
     "transpiration": (
         "# ------------------------------------------------------------------\n"
         "# transpiration: crop water-loss model\n"
-        "#   method - van_henten (coupled to growth) | daily | per_plant | ...\n"
+        "#   method - van_henten (model-coupled, default) | daily (L/day\n"
+        "#            whole canopy) | per_plant (count x mL/plant/day) |\n"
+        "#            daily_per_period | per_plant_per_period (staged)\n"
+        "#   Reference scenario for the direct-set defaults: mature lettuce\n"
+        "#     ~1.5 L/m2/day @ 25 plants/m2 (band 0.75-2.0) -> 67.5 L/day on\n"
+        "#     a 45 m2 canopy, or 60 mL/plant/day at 25 plants/m2; the staged\n"
+        "#     defaults use a 0.5/1.0/2.0 L/m2/day seedling->mature ladder.\n"
+        "#   plants_per_m2 - optional density (plants/m2): for per_plant\n"
+        "#     methods it derives plant_count = round(plants_per_m2 x\n"
+        "#     covered_area) when plant_count is 0 (valid 0-200).\n"
+        "#   period_days must sum to setpoints.crop_cycle_days (validated).\n"
         "# ------------------------------------------------------------------\n"
     ),
     "setpoints": (
@@ -274,7 +284,14 @@ _YAML_SECTION_COMMENTS = {
     ),
     "growth": (
         "# ------------------------------------------------------------------\n"
-        "# growth: Van Henten crop-growth parameters (keep defaults)\n"
+        "# growth: Van Henten crop-growth parameters (SI units; keep defaults)\n"
+        "#   c_alpha_beta (-) assimilate->dry-matter conversion (0-1)\n"
+        "#   c_resp_d (1/s) dark respiration @25C, Q10=2 response\n"
+        "#   c_pl_d (m2/kg) light extinction per unit dry weight\n"
+        "#   c_rad_phot (kg/J) radiation-use efficiency\n"
+        "#   c_co2_1/2/3 + c_Gamma — photosynthesis T-response / CO2\n"
+        "#     compensation point (kg/m3); initial_dry_weight (kg/m2)\n"
+        "#     transplant seedling start biomass\n"
         "# c_rad_phot is LETTUCE-CALIBRATED (P0-3R): the default 3.5e-9 kg/J\n"
         "#   anchors modelled yield to the commercial PFAL lettuce band\n"
         "#   30-60 kg fresh/m2/yr (mid-band ~45 at 30 d cycles / 400 umol/m2/s\n"

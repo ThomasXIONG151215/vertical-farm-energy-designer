@@ -251,18 +251,32 @@ def _build_devices(p, P_atm: float = 101.325):
     cop_design = cop(p.hvac.design_T_ext, p.setpoints.T_light)
 
     # ── Transpiration model (needed by DEH auto-sizing) ──
+    # P1-6: plant_count may come from planting density.  Load-time
+    # validation (project.py) guarantees per-plant methods have a usable
+    # source: explicit plant_count > 0, or plants_per_m2 in (0, 200], from
+    # which the count is derived here as
+    # round(plants_per_m2 x covered_area).  plant_count wins when both are
+    # given.
+    _tcfg = p.transpiration
+    plant_count = _tcfg.plant_count
+    if (
+        _tcfg.method in ("per_plant", "per_plant_per_period")
+        and plant_count <= 0
+        and _tcfg.plants_per_m2
+    ):
+        plant_count = max(1, int(round(_tcfg.plants_per_m2 * led.covered_area)))
     transp = TranspirationModel(
-        method=p.transpiration.method,
-        daily_water_L=p.transpiration.daily_water_L,
-        plant_count=p.transpiration.plant_count,
-        ml_per_plant_day=p.transpiration.ml_per_plant_day,
-        period_days=p.transpiration.period_days,
-        daily_water_L_period=p.transpiration.daily_water_L_period,
-        ml_per_plant_day_period=p.transpiration.ml_per_plant_day_period,
+        method=_tcfg.method,
+        daily_water_L=_tcfg.daily_water_L,
+        plant_count=plant_count,
+        ml_per_plant_day=_tcfg.ml_per_plant_day,
+        period_days=_tcfg.period_days,
+        daily_water_L_period=_tcfg.daily_water_L_period,
+        ml_per_plant_day_period=_tcfg.ml_per_plant_day_period,
         photoperiod_hours=p.led.photoperiod_hours,
-        k_van_henten=p.transpiration.k_van_henten,
-        stage_factor=p.transpiration.stage_factor,
-        dark_transpiration_frac=p.transpiration.dark_transpiration_frac,
+        k_van_henten=_tcfg.k_van_henten,
+        stage_factor=_tcfg.stage_factor,
+        dark_transpiration_frac=_tcfg.dark_transpiration_frac,
         area_m2=led.covered_area,
     )
 
