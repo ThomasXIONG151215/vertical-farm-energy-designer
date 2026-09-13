@@ -66,14 +66,14 @@ vfed validate my_farm.yaml
 vfed evaluate my_farm.yaml --cache weather_cache
 ```
 
-对单一配置运行建筑仿真，报告年负荷、生物量与能耗强度（kWh/kg，即每千克鲜重的千瓦时）。`609` 预设自带 `pv_area_m2=0` / `battery_kwh=0`，因此此处能源系统为禁用状态 — 输出会显示 `Energy system = disabled`。若项目声明了 `pv` / `battery`（如 `example_lcoe_full.yaml`），本步骤还会报告光伏发电量与电网购电/售电量。
+对单一配置运行建筑仿真，报告年负荷、生物量与能耗强度（kWh/kg，即每千克鲜重的千瓦时）。`609` 预设自带 `pv_area_m2=0` / `battery_kwh=0`，因此此处能源系统为禁用状态 — 输出会显示 `Energy system = disabled`。若项目声明了 `pv` / `battery`（如 `example_lcoe_full.yaml`），本步骤还会报告光伏发电量与电网购电/售电量。单次全年仿真（8760 个逐时步长）在普通笔记本上约 10 秒（视机器而定）。
 
 ### 4. 参数化扫描 — 寻找 LCOE 最优的光伏+电池装机
 
 `609` 预设未声明任何扫描范围，因此 `sweep my_farm.yaml` 只会重新评估这一组固定配置。为演示核心的光伏-电池容量优化，请使用仓库内已声明 `space.parameter_ranges` 的示例文件：
 
 ```bash
-# 3 个参数（ppfd_target × pv_area × battery）= 100 组配置，约 1-2 分钟
+# 3 个参数（ppfd_target × pv_area × battery）= 100 组配置，约 6 秒（普通笔记本）
 vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
 ```
 
@@ -99,7 +99,7 @@ npm start       # 在 http://localhost:8000/ 启动本地服务
 2. **`weather_cache/`** — 之前拉取过的结果，按 lat/lon/year/tilt/azimuth/timezone 键复用。
 3. **Open-Meteo 在线** — 用于任意 (lat, lon, year) 组合。需要联网；失败时 CLI 以 `[ERROR E003]` 终止。断网时请使用已缓存的年份或 `--cache`。
 
-离线快速体验：使用内置城市 + `--year 2025` 即可。任意地点离线运行：先联网预取一次（`vfed evaluate <yaml> --cache weather_cache`），之后复用缓存。注意：`609` 预设自带 `site.city: Shanghai`，即使 `--lat/--lon` 覆盖了坐标，只要年份匹配，城市 CSV 仍会被优先使用 — 若想强制走 lat/lon（在线）路径，请在 YAML 中把 `site.city` 置为 null。示例扫描文件（`example_sweep.yaml` / `example_lcoe_full.yaml`）使用 2023 年 + 显式 lat/lon（不在预下载城市数据内），首次运行需联网（约 1-2 分钟），之后命中缓存即可离线。
+离线快速体验：使用内置城市 + `--year 2025` 即可。任意地点离线运行：先联网预取一次（`vfed evaluate <yaml> --cache weather_cache`），之后复用缓存。注意：`609` 预设自带 `site.city: Shanghai`，即使 `--lat/--lon` 覆盖了坐标，只要年份匹配，城市 CSV 仍会被优先使用 — 若想强制走 lat/lon（在线）路径，请在 YAML 中把 `site.city` 置为 null。示例扫描文件（`example_sweep.yaml` / `example_lcoe_full.yaml`）使用 2023 年 + 显式 lat/lon（不在预下载城市数据内），首次运行需联网（几秒，取决于网络），之后命中缓存即可离线。
 
 ## 架构
 

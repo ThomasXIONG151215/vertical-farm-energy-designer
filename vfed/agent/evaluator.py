@@ -16,7 +16,7 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from ..design.project import DesignProject
+from ..design.project import DesignProject, TariffConfig
 from ..design.engine import DesignEngine
 from ..design.sweep import sweep_design
 from ..weather.weather_bridge import WeatherFetchError
@@ -52,17 +52,27 @@ def agent_simulate(project: DesignProject, cache_dir: Optional[str] = "weather_c
     }
 
 
-def agent_evaluate(project_path: str, cache_dir: Optional[str] = "weather_cache") -> Dict:
+def agent_evaluate(
+    project_path: str,
+    cache_dir: Optional[str] = "weather_cache",
+    tariff: Optional[TariffConfig] = None,
+) -> Dict:
     """Load project → simulate → sweep (if parameter_ranges are defined).
 
     Returns ``{"success": True, ...}`` with best design and full enumeration
     table when ranges are present, or a single-point sim result otherwise.
+
+    T7 (P2-3): *tariff* optionally overrides ``project.tariff`` AFTER load
+    (sensitivity analysis without copying the YAML).  Default ``None`` is a
+    no-op -- numerical behaviour is unchanged.
     """
     # E001: configuration
     try:
         project = DesignProject.load(project_path)
     except Exception as e:  # noqa: BLE001
         return {"success": False, "error_code": "E001", "message": f"invalid project config: {e}"}
+    if tariff is not None:
+        project.tariff = tariff
 
     # Run sweep (handles single-point internally when parameter_ranges is empty).
     try:

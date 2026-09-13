@@ -33,7 +33,10 @@ def preset_default() -> DesignProject:
     """
     return DesignProject(
         name="default",
-        site=SiteConfig(lat=31.2, lon=121.5, tz_hours=8.0, city="Shanghai"),
+        # T5 (P2-3): coords are the authoritative city_db["Shanghai"] values
+        # (vfed/weather/city_db.py) so the preset cache key matches the city
+        # it simulates (was 31.2/121.5).
+        site=SiteConfig(lat=31.23, lon=121.47, tz_hours=8.0, city="Shanghai"),
         envelope=EnvelopeConfig(
             U_wall_A=20.0,  # W/K — insulated small room (~10 m² footprint)
             A_window=0.0,
@@ -44,6 +47,10 @@ def preset_default() -> DesignProject:
             C_z=40000.0,  # Wh/K
         ),
         led=LEDConfig(covered_area=10.0),  # 10 m² canopy → auto power ~1600 W
+        # T6 (P2-3): led.power_w keeps the LEDConfig 1300 W class default,
+        # which is a PLACEHOLDER example only -- size it from your actual
+        # fixture schedule (or keep auto_deduce=true, which recomputes
+        # power_w = ppfd_target * covered_area / efficacy and ignores it).
         hvac=HVACConfig(auto_size=True),
         deh=DEHConfig(auto_size=True),
     )
@@ -84,7 +91,10 @@ def preset_609() -> DesignProject:
     """
     return DesignProject(
         name="fengxian_lettuce_609",
-        site=SiteConfig(lat=30.9, lon=121.5, tz_hours=8.0, city="Shanghai"),
+        # T5 (P2-3): coords are the authoritative city_db["Shanghai"] values
+        # (vfed/weather/city_db.py) so the preset cache key matches the city
+        # it simulates (was 30.9/121.5).
+        site=SiteConfig(lat=31.23, lon=121.47, tz_hours=8.0, city="Shanghai"),
         envelope=EnvelopeConfig(
             U_wall_A=125.3,
             A_window=0.0,
@@ -95,6 +105,10 @@ def preset_609() -> DesignProject:
             C_z=200000.0,  # Wh/K (200 kWh/K) — see P4-5: ~3x room-air capacity
         ),
         led=LEDConfig(light_start_hour=6, photoperiod_hours=16, heat_fraction=1.0),
+        # T6 (P2-3): led.power_w keeps the LEDConfig 1300 W class default,
+        # which is a PLACEHOLDER example only -- size it from the real
+        # fixture schedule (auto_deduce=true here recomputes it from
+        # ppfd_target * covered_area / efficacy and ignores power_w).
         # P0-4: explicit dark-period setpoint (see docstring) — the 18 C class
         # default is unreachable against this room's night balance.
         setpoints=SetpointConfig(T_dark=21.0),

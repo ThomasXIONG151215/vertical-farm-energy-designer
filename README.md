@@ -66,14 +66,14 @@ Checks the YAML against the project schema without running the simulation.
 vfed evaluate my_farm.yaml --cache weather_cache
 ```
 
-Runs the building simulation for a single configuration and reports annual load, biomass, and energy intensity (kWh/kg of fresh biomass). The `609` preset ships with `pv_area_m2=0` / `battery_kwh=0`, so the energy system is disabled here — you will see `Energy system = disabled`. If a project declares `pv` / `battery` (e.g. `example_lcoe_full.yaml`), this step also reports PV generation and grid import/export.
+Runs the building simulation for a single configuration and reports annual load, biomass, and energy intensity (kWh/kg of fresh biomass). The `609` preset ships with `pv_area_m2=0` / `battery_kwh=0`, so the energy system is disabled here — you will see `Energy system = disabled`. If a project declares `pv` / `battery` (e.g. `example_lcoe_full.yaml`), this step also reports PV generation and grid import/export. A single full-year run (8,760 hourly steps) takes ~10 s on a typical laptop (machine-dependent).
 
 ### 4. Parametric Sweep — find the LCOE-optimal PV + battery
 
 The `609` preset declares no sweep ranges, so `vfed sweep my_farm.yaml` would only re-evaluate that single fixed configuration. To demonstrate the core PV-battery sizing, use the shipped example that declares `space.parameter_ranges`:
 
 ```bash
-# 3 parameters (ppfd_target × pv_area × battery) = 100 configurations, ~1-2 min
+# 3 parameters (ppfd_target × pv_area × battery) = 100 configurations, ~6 s (typical laptop)
 vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
 ```
 
@@ -99,7 +99,7 @@ Weather is fetched hourly from Open-Meteo by lat/lon/year on first use and cache
 2. **`weather_cache/`** — previously fetched results, reused keyed by lat/lon/year/tilt/azimuth/timezone.
 3. **Open-Meteo live** — for any other (lat, lon, year) combination. Requires internet; on failure the CLI aborts with `[ERROR E003]`. To stay offline, use a cached year or pass `--cache`.
 
-For an offline quickstart, stick with a built-in city and `--year 2025`. To run an arbitrary site offline, fetch once while online (`vfed evaluate <yaml> --cache weather_cache`), then reuse the cache. Note that `preset 609` keeps `site.city: Shanghai` even when `--lat/--lon` override the coordinates — the city CSV wins whenever its year matches. Set `site.city: null` in the YAML to force the lat/lon (online) path. The example sweep files (`example_sweep.yaml`, `example_lcoe_full.yaml`) use year 2023 with explicit lat/lon, so their first run fetches from Open-Meteo (~1-2 min) and subsequent runs hit the cache.
+For an offline quickstart, stick with a built-in city and `--year 2025`. To run an arbitrary site offline, fetch once while online (`vfed evaluate <yaml> --cache weather_cache`), then reuse the cache. Note that `preset 609` keeps `site.city: Shanghai` even when `--lat/--lon` override the coordinates — the city CSV wins whenever its year matches. Set `site.city: null` in the YAML to force the lat/lon (online) path. The example sweep files (`example_sweep.yaml`, `example_lcoe_full.yaml`) use year 2023 with explicit lat/lon, so their first run fetches from Open-Meteo (a few seconds, network-dependent) and subsequent runs hit the cache.
 
 ## DIY / Prosumer Guide
 
@@ -216,7 +216,7 @@ vertical-farm-energy-designer/
 │   ├── pvbes/              # PV (single-diode), battery (Zhao 2024), grid (TOU), energy system
 │   ├── design/             # Project config (YAML), engine, presets, sweep
 │   ├── weather/            # Open-Meteo bridge, Erbs GHI split, POA, geocoding
-│   ├── plants/             # Transpiration (6 methods), Van Henten growth model
+│   ├── plants/             # Transpiration (5 methods: 1 model-coupled van_henten + 4 direct-set), Van Henten growth model
 │   ├── agent/              # Evaluator (preserves agent-cli error-code contract)
 │   └── cli.py              # CLI entry point: vfed
 ├── research/               # Archived research paper code & data (see below)

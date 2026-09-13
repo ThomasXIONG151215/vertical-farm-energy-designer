@@ -7,8 +7,8 @@ Commands:
     vfed design cities
     vfed design tariffs
     vfed validate <project.yaml>
-    vfed evaluate <project.yaml> [--cache weather_cache]
-    vfed sweep <project.yaml> [--cache weather_cache] [--out results.csv]
+    vfed evaluate <project.yaml> [--cache weather_cache] [--tariff NAME|PATH]
+    vfed sweep <project.yaml> [--cache weather_cache] [--out results.csv] [--tariff NAME|PATH]
 
 The CLI is intentionally dependency-light (argparse) and wraps the parametric
 ODE building model + optional PVBES energy system.
@@ -18,6 +18,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from . import __version__
 from .design.project import DesignProject, TariffConfig
 from .design.presets import preset_default, preset_609
 from .design.engine import DesignEngine, full_load_warnings
@@ -196,7 +197,8 @@ _YAML_SECTION_COMMENTS = {
     "site": (
         "# ------------------------------------------------------------------\n"
         "# site: location & weather\n"
-        "#   lat/lon    - degrees (default = Shanghai 31.2, 121.5)\n"
+        "#   lat/lon    - degrees (default = Shanghai 31.23, 121.47,\n"
+        "#                the city_db values the presets ship with)\n"
         "#   city       - pre-downloaded weather name ('vfed design cities');\n"
         "#                offline data exists only for 2025 (year is locked)\n"
         "#   tz_hours   - UTC offset (h)\n"
@@ -564,6 +566,72 @@ def _print_weather_source(result) -> None:
         print(f"  Weather source  : {label}")
 
 
+def _resolve_tariff_arg(value):
+    """T7 (P2-3): resolve ``--tariff {NAME|PATH}`` to a TariffConfig.
+
+    * ``NAME``  - a tariff-db region id (as listed by ``vfed design tariffs``);
+      resolved through ``pvbes.tariff_db.lookup_tariff``.
+    * ``PATH``  - an existing YAML file with a top-level ``tariff:`` section;
+      parsed through ``DesignProject.from_dict`` so the validation (24 hourly
+      values, legacy peak/normal/valley form) is exactly the project schema's.
+    * anything else -> fail fast (SystemExit 1, pure ASCII E001 message).
+
+    Returns ``None`` when *value* is None (default: no override, zero
+    behaviour change).
+    """
+    if value is None:
+        return None
+    rec = lookup_tariff(value)
+    if rec is not None:
+        return TariffConfig(
+            hourly_prices=list(rec["hourly_prices"]), export_price=float(rec["export_price"])
+        )
+    path = Path(value)
+    if path.is_file():
+        import yaml
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                doc = yaml.safe_load(f)
+        except Exception as e:  # noqa: BLE001
+            print(
+                f"[ERROR E001] --tariff file '{value}' is not readable YAML: {e}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        section = doc.get("tariff") if isinstance(doc, dict) else None
+        if not isinstance(section, dict):
+            print(
+                f"[ERROR E001] --tariff file '{value}' has no top-level "
+                f"'tariff:' section (expected a mapping).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        try:
+            # Route the section through the project schema so --tariff file
+            # validation is identical to a project YAML's tariff: block.
+            # The intentional partial dict ("tariff" only) trips from_dict's
+            # soft missing-name/site warnings, which are meaningless here --
+            # suppress just those for this extraction.
+            import warnings
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                return DesignProject.from_dict({"tariff": section}).tariff
+        except Exception as e:  # noqa: BLE001
+            print(
+                f"[ERROR E001] invalid tariff section in '{value}': {e}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    print(
+        f"[ERROR E001] --tariff '{value}' is neither a tariff-db region name "
+        f"(run 'vfed design tariffs' to list) nor an existing YAML file.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
 def _cmd_evaluate(args):
     """Evaluate a single design — building simulation only (no sweep)."""
     import numpy as np
@@ -580,6 +648,12 @@ def _cmd_evaluate(args):
     except Exception as e:
         print(f"[ERROR E001] invalid project config: {e}", file=sys.stderr)
         return 1
+    # T7 (P2-3): optional --tariff override (db region name or YAML file).
+    # Resolved AFTER the project load so config errors keep priority; the
+    # override is additive -- None (default) leaves project.tariff untouched.
+    tariff_override = _resolve_tariff_arg(args.tariff)
+    if tariff_override is not None:
+        project.tariff = tariff_override
     engine = DesignEngine(cache_dir=args.cache)
     print(
         f"Fetching weather for ({project.site.lat:.1f}, {project.site.lon:.1f}) "
@@ -603,7 +677,11 @@ def _cmd_evaluate(args):
             file=sys.stderr,
         )
         return 1
-    print(f"Project: {project.name}")
+    # T2 (P2-3): unified Project line = YAML file basename + internal name.
+    # The internal name alone confused multi-variant comparisons (every file
+    # generated from the same preset shares it); the filename is what the
+    # user typed.  evaluate and sweep now print the identical format.
+    print(f"Project: {Path(args.project).name} (name: {project.name})")
     # P2-2: which weather dataset fed this run (city file / cache / live).
     _print_weather_source(result)
     print(f"  Annual load      = {annual_load:.0f} kWh/yr")
@@ -708,11 +786,18 @@ def _cmd_sweep(args):
             file=sys.stderr,
         )
         return 1
+    # T7 (P2-3): optional --tariff override, fail fast BEFORE any simulation
+    # work.  The kwarg is passed only when set -- agent_evaluate's default
+    # (tariff=None) keeps the sweep numerical behaviour bitwise unchanged.
+    tariff_override = _resolve_tariff_arg(args.tariff)
     print(
         f"Loading '{args.project}', fetching weather if needed " f"(cache: '{args.cache}')...",
         file=sys.stderr,
     )
-    res = agent_evaluate(args.project, cache_dir=args.cache)
+    if tariff_override is not None:
+        res = agent_evaluate(args.project, cache_dir=args.cache, tariff=tariff_override)
+    else:
+        res = agent_evaluate(args.project, cache_dir=args.cache)
     if not res["success"]:
         print(f"[ERROR {res.get('error_code', '?')}] {res['message']}", file=sys.stderr)
         return 1
@@ -724,7 +809,9 @@ def _cmd_sweep(args):
     if currency != "USD" and abs(exchange_rate - 1.0) > 1e-6:
         cur_label = f"{currency} (1 USD = {exchange_rate:.1f} {currency})"
 
-    print(f"Project: {project}  |  Currency: {cur_label}")
+    # T2 (P2-3): same unified Project line as evaluate (file basename + the
+    # internal name that agent_evaluate reports in res["project"]).
+    print(f"Project: {Path(args.project).name} (name: {project})  |  Currency: {cur_label}")
 
     best = res["best"]
     if best is None:
@@ -929,6 +1016,8 @@ def _cmd_sweep(args):
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="vfed", description="VFED design simulator")
+    # T1 (P2-3): `vfed --version` -> "vfed <x.y.z>" (single source: vfed/__version__).
+    p.add_argument("--version", action="version", version=f"vfed {__version__}")
     # Not required=True: a bare `vfed` prints help and exits 2 (P7-9) instead
     # of leaking the internal `arguments required: cmd` message.
     sub = p.add_subparsers(dest="cmd")
@@ -984,6 +1073,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="directory to write summary.csv / timeseries.csv / "
         "monthly.csv (created if missing)",
     )
+    e.add_argument(
+        "--tariff",
+        default=None,
+        help="tariff override: tariff-db region name (see 'vfed design tariffs') "
+        "or path to a YAML file with a top-level 'tariff:' section",
+    )
     e.set_defaults(func=_cmd_evaluate)
 
     s = sub.add_parser("sweep", help="run a design sweep (single-point if no ranges)")
@@ -992,6 +1087,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--cache", default="weather_cache", help="weather cache directory (default: weather_cache)"
     )
     s.add_argument("--out", default=None, help="CSV output file for the enumeration table")
+    s.add_argument(
+        "--tariff",
+        default=None,
+        help="tariff override: tariff-db region name (see 'vfed design tariffs') "
+        "or path to a YAML file with a top-level 'tariff:' section",
+    )
     s.set_defaults(func=_cmd_sweep)
 
     return p

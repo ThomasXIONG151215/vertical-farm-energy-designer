@@ -14,8 +14,8 @@ Covers the batch-7 CLI hardening (P7-1..P7-15):
 * weather:        transport failures surface as ``WeatherFetchError`` (E003).
 * evaluator:      ``WeatherFetchError`` -> E003 (P7-14); zero load -> E103.
 
-End-to-end CLI cases run preset 609 (30.9, 121.5, 2025) against the disk
-cache, so they never touch the network.
+End-to-end CLI cases run preset 609 (31.23, 121.47 = the city_db Shanghai
+coordinates, 2025) against the disk cache, so they never touch the network.
 """
 import sys
 from pathlib import Path
