@@ -477,12 +477,28 @@ def _cmd_design_new(args):
         if rec is None:
             print(f"Tariff region '{args.tariff}' not found. Available:", file=sys.stderr)
             for r in list_regions():
-                print(f"  {r['id']:15s}  {r['label']}", file=sys.stderr)
+                print(f"  {r['id']:15s}  {str(r.get('currency', '?')):4s}  {r['label']}", file=sys.stderr)
             sys.exit(1)
         preset.tariff = TariffConfig(
             hourly_prices=rec["hourly_prices"], export_price=rec["export_price"]
         )
         print(f"Set tariff '{args.tariff}' ({rec['label']})")
+        # user12 T2: a brand-new project has no existing numbers to pollute,
+        # so the currency can safely follow the tariff region (unlike the
+        # evaluate/sweep override, which must fail fast instead of silently
+        # rewriting an existing project's currency).  exchange_rate is left
+        # untouched on purpose: no automatic FX conversion is performed, and
+        # from_dict's currency/exchange_rate soft guard still reminds the
+        # user to set it (e.g. 7.2 for RMB) if USD-equivalent reporting is
+        # wanted.  Note the built-in opex/capital defaults stay USD-scale.
+        region_cur = rec.get("currency")
+        if region_cur:
+            preset.currency = region_cur
+            print(
+                f"Currency set to {region_cur} to match tariff region "
+                f"'{args.tariff}' (opex/capital defaults remain USD-scale; "
+                f"review them for your currency)."
+            )
     out = Path(args.out) if args.out else Path(args.name + ".yaml")
     if out.exists():
         print(f"  (overwriting existing file: {out})", file=sys.stderr)
@@ -503,9 +519,9 @@ def _cmd_cities(args):
 
 
 def _cmd_tariffs(args):
-    print("Available electricity tariff regions:")
+    print("Available electricity tariff regions (prices in the listed currency):")
     for r in list_regions():
-        print(f"  {r['id']:15s}  {r['label']}")
+        print(f"  {r['id']:15s}  {str(r.get('currency', '?')):4s}  {r['label']}")
 
 
 def _cmd_validate(args):
@@ -566,7 +582,7 @@ def _print_weather_source(result) -> None:
         print(f"  Weather source  : {label}")
 
 
-def _resolve_tariff_arg(value):
+def _resolve_tariff_arg(value, project_currency=None):
     """T7 (P2-3): resolve ``--tariff {NAME|PATH}`` to a TariffConfig.
 
     * ``NAME``  - a tariff-db region id (as listed by ``vfed design tariffs``);
@@ -574,7 +590,18 @@ def _resolve_tariff_arg(value):
     * ``PATH``  - an existing YAML file with a top-level ``tariff:`` section;
       parsed through ``DesignProject.from_dict`` so the validation (24 hourly
       values, legacy peak/normal/valley form) is exactly the project schema's.
+      A user-supplied file is assumed to be priced in the project's own
+      currency (no currency check -- user12 T2).
     * anything else -> fail fast (SystemExit 1, pure ASCII E001 message).
+
+    Currency consistency (user12 T2): when *value* is a tariff-db region and
+    *project_currency* is given, a region priced in a different currency is
+    rejected with E001 (exit 1) instead of silently producing a mislabelled
+    LCOE (e.g. RMB prices under a ``currency: USD`` project).  Two fixes are
+    offered in the message: change the project currency or pick a matching
+    region.  No automatic conversion, no automatic currency rewrite -- the
+    built-in opex/capital defaults are USD-scale and must not be silently
+    polluted either.
 
     Returns ``None`` when *value* is None (default: no override, zero
     behaviour change).
@@ -583,6 +610,18 @@ def _resolve_tariff_arg(value):
         return None
     rec = lookup_tariff(value)
     if rec is not None:
+        region_cur = rec.get("currency")
+        if project_currency and region_cur and region_cur != project_currency:
+            print(
+                f"[ERROR E001] --tariff '{value}' is priced in {region_cur} but "
+                f"the project currency is {project_currency}. Fix one of the two: "
+                f"edit the project YAML 'currency:' (then re-check opex/capital "
+                f"prices and exchange_rate yourself), or pick a "
+                f"{project_currency}-priced region "
+                f"(run 'vfed design tariffs' to list each region's currency).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         return TariffConfig(
             hourly_prices=list(rec["hourly_prices"]), export_price=float(rec["export_price"])
         )
@@ -651,7 +690,9 @@ def _cmd_evaluate(args):
     # T7 (P2-3): optional --tariff override (db region name or YAML file).
     # Resolved AFTER the project load so config errors keep priority; the
     # override is additive -- None (default) leaves project.tariff untouched.
-    tariff_override = _resolve_tariff_arg(args.tariff)
+    # user12 T2: the project currency is passed so a db region priced in a
+    # different currency fails fast here (E001) instead of mislabelling LCOE.
+    tariff_override = _resolve_tariff_arg(args.tariff, project_currency=project.currency)
     if tariff_override is not None:
         project.tariff = tariff_override
     engine = DesignEngine(cache_dir=args.cache)
@@ -789,7 +830,18 @@ def _cmd_sweep(args):
     # T7 (P2-3): optional --tariff override, fail fast BEFORE any simulation
     # work.  The kwarg is passed only when set -- agent_evaluate's default
     # (tariff=None) keeps the sweep numerical behaviour bitwise unchanged.
-    tariff_override = _resolve_tariff_arg(args.tariff)
+    # user12 T2: the currency check needs the project's currency, which
+    # agent_evaluate loads internally -- so when --tariff is given, load the
+    # config here first (same E001 path agent_evaluate would take on a bad
+    # config; a valid load costs milliseconds and no simulation).
+    project_currency = None
+    if args.tariff is not None:
+        try:
+            project_currency = DesignProject.load(args.project).currency
+        except Exception as e:
+            print(f"[ERROR E001] invalid project config: {e}", file=sys.stderr)
+            return 1
+    tariff_override = _resolve_tariff_arg(args.tariff, project_currency=project_currency)
     print(
         f"Loading '{args.project}', fetching weather if needed " f"(cache: '{args.cache}')...",
         file=sys.stderr,
@@ -1047,7 +1099,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dn.add_argument("--year", type=int, default=None, help="weather year (default: 2025)")
     dn.add_argument(
-        "--tariff", default=None, help="load a regional TOU tariff (use 'design tariffs' to list)"
+        "--tariff",
+        default=None,
+        help="load a regional TOU tariff (use 'design tariffs' to list); "
+        "the new project's currency is set to the region's currency",
     )
     dn.set_defaults(func=_cmd_design_new)
     dp = dsub.add_parser("presets", help="list available presets")
@@ -1077,7 +1132,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--tariff",
         default=None,
         help="tariff override: tariff-db region name (see 'vfed design tariffs') "
-        "or path to a YAML file with a top-level 'tariff:' section",
+        "or path to a YAML file with a top-level 'tariff:' section; a db region "
+        "priced in a different currency than the project is rejected (E001)",
     )
     e.set_defaults(func=_cmd_evaluate)
 
@@ -1091,7 +1147,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--tariff",
         default=None,
         help="tariff override: tariff-db region name (see 'vfed design tariffs') "
-        "or path to a YAML file with a top-level 'tariff:' section",
+        "or path to a YAML file with a top-level 'tariff:' section; a db region "
+        "priced in a different currency than the project is rejected (E001)",
     )
     s.set_defaults(func=_cmd_sweep)
 

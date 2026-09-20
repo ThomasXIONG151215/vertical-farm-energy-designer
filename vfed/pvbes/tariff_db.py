@@ -6,7 +6,10 @@ and a few international regions.  Prices are commercial/industrial Time-of-Use
 (TOU) rates (generic reference values, not legally binding).
 
 Each entry returns a 24-element list (index = hour of day) plus an optional
-feed-in (export) price for PV surplus.
+feed-in (export) price for PV surplus.  Every region also carries its
+``currency`` (user12 fix, T2): evaluate/sweep refuse a ``--tariff`` region
+whose currency does not match the project's ``currency`` (E001), so an
+RMB-priced table can no longer be silently fed into a USD-labelled project.
 """
 
 from typing import Dict, List, Optional
@@ -18,6 +21,7 @@ TariffRecord = Dict[str, object]
 TARIFF_DB: Dict[str, TariffRecord] = {
     "Shanghai": {
         "label": "Shanghai (General Industry & Commerce)",
+        "currency": "CNY",
         "hourly_prices": [
             # Peak 08:00-11:00, 18:00-21:00
             # Normal 06:00-08:00, 11:00-18:00, 21:00-22:00
@@ -51,6 +55,7 @@ TARIFF_DB: Dict[str, TariffRecord] = {
     },
     "Beijing": {
         "label": "Beijing (General Industry & Commerce)",
+        "currency": "CNY",
         "hourly_prices": [
             0.32,
             0.32,
@@ -81,6 +86,7 @@ TARIFF_DB: Dict[str, TariffRecord] = {
     },
     "Jiangsu": {
         "label": "Jiangsu (General Industry)",
+        "currency": "CNY",
         "hourly_prices": [
             0.28,
             0.28,
@@ -111,6 +117,7 @@ TARIFF_DB: Dict[str, TariffRecord] = {
     },
     "Zhejiang": {
         "label": "Zhejiang (General Industry)",
+        "currency": "CNY",
         "hourly_prices": [
             0.32,
             0.32,
@@ -141,6 +148,7 @@ TARIFF_DB: Dict[str, TariffRecord] = {
     },
     "Guangdong": {
         "label": "Guangdong (Pearl River Delta, 10kV)",
+        "currency": "CNY",
         "hourly_prices": [
             0.25,
             0.25,
@@ -171,6 +179,7 @@ TARIFF_DB: Dict[str, TariffRecord] = {
     },
     "Sichuan": {
         "label": "Sichuan (General Industry)",
+        "currency": "CNY",
         "hourly_prices": [
             0.24,
             0.24,
@@ -201,6 +210,7 @@ TARIFF_DB: Dict[str, TariffRecord] = {
     },
     "Hubei": {
         "label": "Hubei (General Industry)",
+        "currency": "CNY",
         "hourly_prices": [
             0.30,
             0.30,
@@ -231,6 +241,7 @@ TARIFF_DB: Dict[str, TariffRecord] = {
     },
     "Japan": {
         "label": "Japan (Commercial, TEPCO)",
+        "currency": "JPY",
         "hourly_prices": [
             0.12,
             0.12,
@@ -261,11 +272,13 @@ TARIFF_DB: Dict[str, TariffRecord] = {
     },
     "Singapore": {
         "label": "Singapore (Low Tension)",
+        "currency": "SGD",
         "hourly_prices": [0.14] * 24,
         "export_price": 0.0,
     },
     "USA": {
         "label": "USA (National Avg Commercial)",
+        "currency": "USD",
         "hourly_prices": [
             0.08,
             0.08,
@@ -298,7 +311,7 @@ TARIFF_DB: Dict[str, TariffRecord] = {
 
 
 def lookup_tariff(region: str) -> Optional[TariffRecord]:
-    """Return ``{label, hourly_prices, export_price}`` or ``None``."""
+    """Return ``{label, currency, hourly_prices, export_price}`` or ``None``."""
     if not region:
         return None
     key = region.strip()
@@ -315,4 +328,7 @@ def lookup_tariff(region: str) -> Optional[TariffRecord]:
 
 
 def list_regions() -> List[Dict[str, object]]:
-    return [{"id": k, "label": v["label"]} for k, v in TARIFF_DB.items()]
+    return [
+        {"id": k, "label": v["label"], "currency": v.get("currency")}
+        for k, v in TARIFF_DB.items()
+    ]

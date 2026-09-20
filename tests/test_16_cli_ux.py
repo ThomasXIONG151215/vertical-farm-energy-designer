@@ -235,13 +235,15 @@ def test_resolve_tariff_unknown_fails_fast_ascii(capsys):
 
 
 def test_evaluate_tariff_db_name_overrides(farm_yaml, stub_engine, capsys):
+    """USA is USD-priced like the default preset project (user12 T2: a
+    CNY-priced region on a USD project is rejected -- see test_17)."""
     rc = main(
-        ["evaluate", str(farm_yaml), "--cache", "weather_cache", "--tariff", "Beijing"]
+        ["evaluate", str(farm_yaml), "--cache", "weather_cache", "--tariff", "USA"]
     )
     out = capsys.readouterr()
     assert rc == 0
-    assert stub_engine["tariff"].hourly_prices[8] == pytest.approx(1.05)
-    assert stub_engine["tariff"].export_price == pytest.approx(0.4018)
+    assert stub_engine["tariff"].hourly_prices[8] == pytest.approx(0.13)
+    assert stub_engine["tariff"].export_price == pytest.approx(0.03)
     assert out.out.isascii()
 
 

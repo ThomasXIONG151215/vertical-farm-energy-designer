@@ -466,13 +466,13 @@ Do not double-click `index.html` directly (Web Workers cannot load under `file:/
 
 ## Troubleshooting
 
-The first line of defence is `vfed validate <project.yaml>`: it checks the YAML, `timestep_s`, `space.objective`, and sweep parameter ranges without running a simulation.
+The first line of defence is `vfed validate <project.yaml>`: it checks the YAML, `timestep_s`, `space.objective`, and sweep parameter ranges without running a simulation. The same config checks — including the hard limits below — run at load time in **every** entry point (`validate`, `evaluate`, `sweep`), so an out-of-band value fails fast with `[ERROR E001]` before any simulation.
 
 ### Error codes
 
 | Code | Meaning | Common triggers | Fix |
 |---|---|---|---|
-| **E001** | Config error | Missing file, broken/unknown/out-of-range YAML; illegal `parameter_ranges` (unknown name, non-`[min,max,step]` triple, non-integer step, out of hard limits) | Regenerate with `vfed design new <name> --preset 609`; locate with `vfed validate <yaml>` |
+| **E001** | Config error | Missing file, broken/unknown/out-of-range YAML; scalar field outside `HARD_LIMITS`; currency-mismatched `--tariff` region; illegal `parameter_ranges` (unknown name, non-`[min,max,step]` triple, non-integer step, out of hard limits) | Regenerate with `vfed design new <name> --preset 609`; locate with `vfed validate <yaml>` |
 | **E003** | Weather fetch failed | No network, no cache, missing `requests` package | See "Weather offline" below |
 | **E101** | Simulation failed | Engine / energy-system exception (illegal timestep, NaN weather, energy-system error) | Read the full stderr; `vfed validate`; check `timestep_s` and weather data integrity |
 | **E103** | Zero load | Annual load ≤ 0 | Check LED power (with `auto_deduce`: `ppfd_target` × `covered_area` ÷ `efficacy`), `equipment_power_w`, `setpoints` |
@@ -481,7 +481,7 @@ The first line of defence is `vfed validate <project.yaml>`: it checks the YAML,
 
 1. **`timestep_s` must divide 3600 s.** Rule: `sub=max(1,round(3600/dt))` and `|sub·dt−3600|≤1`. Valid values: 600, 900, 1200, 1800, 3600. `vfed validate` and `vfed evaluate` both reject non-divisors.
 
-2. **Sweep ranges outside `HARD_LIMITS`.** Scan ranges `[min,max,step]` must lie within:
+2. **Values outside `HARD_LIMITS` (config load fails with E001).** The hard-limit table lives in `vfed/design/project.py` and is enforced **uniformly at all three entry points** (`validate` / `evaluate` / `sweep`): every scalar config field listed below is checked when the YAML loads, and sweep ranges `[min,max,step]` must additionally lie inside the band with an integer `(max−min)/step`. A violation prints the field path, the offending value and the valid band — e.g. `led.ppfd_target: 9999` is rejected before any simulation instead of producing a meaningless result:
 
    | Parameter | Hard limit | Parameter | Hard limit |
    |---|---|---|---|
@@ -489,10 +489,10 @@ The first line of defence is `vfed validate <project.yaml>`: it checks the YAML,
    | `efficacy` | 1.5–4.0 µmol/J | `RH` | 40–90 % |
    | `photoperiod_hours` | 0–24 h/day | `co2_ppm` | 300–2000 ppm |
    | `light_start_hour` | 0–23 h | `crop_cycle_days` | 15–60 days |
-   | `T_light` | 15–30 °C | `pv_area` | 0–1000 m² |
-   | | | `battery` | 0–500 kWh |
+   | `T_light` | 15–30 °C | `pv_area` (`pv_area_m2`) | 0–1000 m² |
+   | | | `battery` (`battery_kwh`) | 0–500 kWh |
 
-   and `(max−min)/step` must be an integer.
+   The table keys are the `space.parameter_ranges` names; the scalar YAML fields they map to are `led.*` / `setpoints.*` / the top-level `pv_area_m2` / `battery_kwh`.
 
 3. **Weather offline (E003) — three fixes:**
    - Retry online: re-run on a networked machine; the fetch writes `weather_cache/` for later offline reuse.
@@ -502,6 +502,8 @@ The first line of defence is `vfed validate <project.yaml>`: it checks the YAML,
 4. **E103 zero load:** usually LED power derives to 0 (`auto_deduce` with `ppfd_target` / `covered_area` / `efficacy` missing) or `equipment_power_w=0`. Run `vfed validate` and check those fields.
 
 5. **LCOE semantics:** `lcoe` is the facility full cost per kWh of load — when comparing projects, note that each project may use a different `currency`.
+
+6. **Tariff currency mismatch (E001).** Every tariff-db region carries its currency (`vfed design tariffs` lists it). `vfed evaluate/sweep --tariff <REGION>` fails fast when the region's currency differs from the project's `currency` — e.g. feeding RMB-priced `Beijing` into a `currency: USD` project previously mislabelled LCOE by ~7x. Fix either side yourself: edit the project YAML `currency:` (then re-check `opex`/capital prices and `exchange_rate` against your currency — VFED never converts or rewrites them), or pick a region priced in the project's currency. A user-supplied `--tariff` YAML file is always assumed to be in the project's own currency. `vfed design new --tariff <REGION>` sets the new project's `currency` to the region's automatically (echoed at creation).
 
 ## Contributing
 

@@ -17,7 +17,7 @@ field (P5-14).
 """
 
 from dataclasses import dataclass, field, asdict
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import yaml
 
@@ -40,6 +40,9 @@ __all__ = [
     "DesignSpace",
     "DesignProject",
     "HARDWARE_ALIASES",
+    "HARD_LIMITS",
+    "PARAM_PATH_MAP",
+    "PARAM_TOPLEVEL_MAP",
 ]
 
 
@@ -63,6 +66,53 @@ HARDWARE_ALIASES = {
         "capacity_l_per_day": "M_deh_nom",  # dehumidification capacity, L/day
         "power_w": "P_ref_w",  # reference electrical input, W
     },
+}
+
+
+# ---------------------------------------------------------------------------
+# Hard limits — values outside these bounds raise a config error (E001).
+# Migrated here from sweep.py (user12 fix, T1): the table used to guard ONLY
+# sweep parameter_ranges, so a single-point evaluate with e.g.
+# led.ppfd_target: 9999 sailed through and produced an absurd result.
+# ``DesignProject.from_dict`` now enforces the same bands on every scalar
+# config field, so validate / evaluate / sweep all fail fast at load time.
+# ---------------------------------------------------------------------------
+HARD_LIMITS: Dict[str, Tuple[float, float]] = {
+    "ppfd_target": (50, 500),
+    "efficacy": (1.5, 4.0),
+    "photoperiod_hours": (0, 24),
+    "light_start_hour": (0, 23),
+    "T_light": (15, 30),
+    "T_dark": (10, 28),
+    "RH": (40, 90),
+    "co2_ppm": (300, 2000),
+    "crop_cycle_days": (15, 60),
+    "pv_area": (0, 1000),
+    "battery": (0, 500),
+}
+
+# Mapping: hard-limit name -> (project_dict_section, field_name) for the
+# building-side parameters.  Consumed by from_dict's scalar guard and by
+# sweep._override_project.
+PARAM_PATH_MAP: Dict[str, Tuple[str, str]] = {
+    "ppfd_target": ("led", "ppfd_target"),
+    "efficacy": ("led", "efficacy"),
+    "light_start_hour": ("led", "light_start_hour"),
+    "photoperiod_hours": ("led", "photoperiod_hours"),
+    "T_light": ("setpoints", "T_light"),
+    "T_dark": ("setpoints", "T_dark"),
+    "RH": ("setpoints", "RH"),
+    "co2_ppm": ("setpoints", "co2_ppm"),
+    "crop_cycle_days": ("setpoints", "crop_cycle_days"),
+}
+
+# PVBES sizing keys (pv_area / battery) have no nested section: their YAML
+# home is the top-level sizing fields pv_area_m2 / battery_kwh (same physical
+# quantity, different key name -- see DesignSpace's comment, P8-6/F7).  The
+# from_dict guard uses this map so no HARD_LIMITS entry is silently skipped.
+PARAM_TOPLEVEL_MAP: Dict[str, str] = {
+    "pv_area": "pv_area_m2",
+    "battery": "battery_kwh",
 }
 
 
@@ -581,7 +631,8 @@ class DesignSpace:
     # dict[param_name, [min, max, step]]
     # Parameters NOT listed here use their fixed value from the project.
     # Example: {"ppfd_target": [100, 300, 25], "pv_area": [0, 200, 10]}
-    # key 名 = vfed/design/sweep.py 注册表 (HARD_LIMITS/_PARAM_PATH_MAP) 的合法键:
+    # key 名 = 本模块 HARD_LIMITS/PARAM_PATH_MAP 注册表的合法键
+    # (sweep.py 自本模块 import; user12 T1 迁移后单一事实源在此):
     # 建筑参数 (ppfd_target/efficacy/photoperiod_hours/T_light/T_dark/RH/co2_ppm/
     # crop_cycle_days) + PVBES 键 'pv_area' (m²) / 'battery' (kWh) —— 注意顶层
     # 固定装机字段是 pv_area_m2/battery_kwh, 两者是独立概念 (P8-6)。
@@ -1222,6 +1273,39 @@ class DesignProject:
             **sub(CapitalCostConfig, d.get("pump_capital", {}), yaml_path="pump_capital")
         )
         validate_capital_config(_pump_cap, "pump", yaml_path="pump_capital")
+
+        # ── hard limits: scalar fields (E001, unified with sweep's range
+        # guard).  Enforced here so EVERY entry point that loads a project
+        # (validate / evaluate / sweep) rejects out-of-band values before any
+        # simulation -- e.g. led.ppfd_target: 9999 used to run to completion
+        # on the single-point path and produce a meaningless result.  Bands
+        # come from HARD_LIMITS (same table sweep ranges are checked against);
+        # missing keys and non-numeric values stay the business of the
+        # section-specific type guards above.
+        def _hard_limit_guard(param, yaml_path, value):
+            lo, hi = HARD_LIMITS[param]
+            if lo <= value <= hi:
+                return
+            raise ValueError(
+                f"{yaml_path} = {value} is outside the hard limit "
+                f"[{lo}, {hi}] -- clamp it to the valid band."
+            )
+
+        for _param, (_section, _field) in PARAM_PATH_MAP.items():
+            _sec_data = d.get(_section)
+            if not isinstance(_sec_data, dict) or _field not in _sec_data:
+                continue
+            _val = _sec_data[_field]
+            if isinstance(_val, bool) or not isinstance(_val, (int, float)):
+                continue  # type errors are reported by the guards above
+            _hard_limit_guard(_param, f"{_section}.{_field}", _val)
+        for _param, _field in PARAM_TOPLEVEL_MAP.items():
+            if _field not in d:
+                continue
+            _val = d[_field]
+            if isinstance(_val, bool) or not isinstance(_val, (int, float)):
+                continue
+            _hard_limit_guard(_param, _field, _val)
 
         # P1-7: flag = the opex section was not spelled out, so the built-in
         # defaults (labor 30000 + misc 5000 per year, USD-scale) are in

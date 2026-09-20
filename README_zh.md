@@ -382,13 +382,13 @@ python -m http.server 8000
 
 ## 故障排除
 
-第一道防线是 `vfed validate <project.yaml>`：不跑仿真即可校验 YAML、`timestep_s`、`space.objective` 与扫描参数范围。
+第一道防线是 `vfed validate <project.yaml>`：不跑仿真即可校验 YAML、`timestep_s`、`space.objective` 与扫描参数范围。同一套配置检查——包括下文硬限表——在**所有三个入口**（`validate` / `evaluate` / `sweep`）的配置加载阶段统一生效，越界值会在任何仿真开始前以 `[ERROR E001]` 快速失败。
 
 ### 错误码速查
 
 | 错误码 | 含义 | 常见触发 | 解决办法 |
 |---|---|---|---|
-| **E001** | 配置错误 | 文件缺失、YAML 损坏/未知字段/越界；`parameter_ranges` 非法（未知参数名、非 `[min,max,step]` 三元组、步数非整数、超出硬限） | `vfed design new <name> --preset 609` 重新生成，`vfed validate <yaml>` 定位 |
+| **E001** | 配置错误 | 文件缺失、YAML 损坏/未知字段/越界；标量字段超出 `HARD_LIMITS`；`--tariff` 地区币种与项目不一致；`parameter_ranges` 非法（未知参数名、非 `[min,max,step]` 三元组、步数非整数、超出硬限） | `vfed design new <name> --preset 609` 重新生成，`vfed validate <yaml>` 定位 |
 | **E003** | 天气获取失败 | 无网络、无缓存、缺 `requests` 包 | 见下文"天气离线"三种解法 |
 | **E101** | 仿真失败 | 引擎/能系统异常（timestep 非法、天气数据含 NaN、能系统评估抛错） | 读完整 stderr 报错；`vfed validate`；检查 `timestep_s`；核对天气数据完整性 |
 | **E103** | 零负荷 | 年负荷 ≤ 0 | 检查 LED 功率（`auto_deduce` 下 = `ppfd_target`×`covered_area`÷`efficacy`）、`equipment_power_w`、`setpoints` |
@@ -397,7 +397,7 @@ python -m http.server 8000
 
 1. **`timestep_s` 必须整除 3600**。校验规则：`sub=max(1,round(3600/dt))` 且 `|sub·dt−3600|≤1`。合法值如 600、900、1200、1800、3600。`vfed validate` 与 `vfed evaluate` 都会报错（"does not evenly divide 3600s"）。
 
-2. **sweep 参数越界 `HARD_LIMITS`**。扫描范围 `[min,max,step]` 必须位于下表内，且 `(max−min)/step` 为整数：
+2. **配置值超出 `HARD_LIMITS`（配置加载即报 E001）**。硬限表已迁移至 `vfed/design/project.py`，在**三个入口**（`validate` / `evaluate` / `sweep`）统一生效：下表每个标量配置字段在 YAML 加载时即被检查；扫描范围 `[min,max,step]` 额外要求整体落在带内且 `(max−min)/step` 为整数。越界报错包含字段路径、实际值与合法区间——例如 `led.ppfd_target: 9999` 会在仿真前被拒绝，而不是跑出一个无意义的结果：
 
    | 参数 | 硬限 | 参数 | 硬限 |
    |---|---|---|---|
@@ -405,8 +405,10 @@ python -m http.server 8000
    | `efficacy` | 1.5–4.0 µmol/J | `RH` | 40–90 % |
    | `photoperiod_hours` | 0–24 h/天 | `co2_ppm` | 300–2000 ppm |
    | `light_start_hour` | 0–23 h | `crop_cycle_days` | 15–60 天 |
-   | `T_light` | 15–30 °C | `pv_area` | 0–1000 m² |
-   | | | `battery` | 0–500 kWh |
+   | `T_light` | 15–30 °C | `pv_area`（`pv_area_m2`） | 0–1000 m² |
+   | | | `battery`（`battery_kwh`） | 0–500 kWh |
+
+   表中键名为 `space.parameter_ranges` 的参数名；对应的标量 YAML 字段为 `led.*` / `setpoints.*` 以及顶层 `pv_area_m2` / `battery_kwh`。
 
 3. **天气离线（E003）的三种解法**：
    - **联网重试**：联网环境重跑即可，成功后会写入 `weather_cache/` 供后续离线复用；
@@ -416,6 +418,8 @@ python -m http.server 8000
 4. **E103 零负荷**：多为 LED 功率推导为 0（`auto_deduce` 且 `ppfd_target`/`covered_area`/`efficacy` 配置缺失）或 `equipment_power_w=0`。用 `vfed validate` + 检查上述字段。
 
 5. **LCOE 口径**：`lcoe` 列是设施全成本/每 kWh 负荷，跨项目比较时注意各项目 `currency` 可能不同。
+
+6. **电价币种不一致（E001）**。tariff 库每个地区都带币种标注（`vfed design tariffs` 可查）。`vfed evaluate/sweep --tariff <地区>` 在地区币种与项目 `currency` 不一致时快速失败——例如把 RMB 计价的 `Beijing` 灌进 `currency: USD` 的项目，旧版会产出标签失真约 7 倍的 LCOE。两条出路自行选择：改项目 YAML 的 `currency:`（随后自行核对 `opex`/capital 价格与 `exchange_rate` 是否同币——VFED 不做换算也不改写），或换用与项目同币种的地区。用户自带的 `--tariff` YAML 文件一律视为项目自身币种，不做检查。`vfed design new --tariff <地区>` 是新建场景：新项目 `currency` 自动设为该地区币种（创建回显中明示）。
 
 ## 贡献
 

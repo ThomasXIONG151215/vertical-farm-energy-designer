@@ -21,6 +21,8 @@ from .project import (
     CAPITAL_MODES_BY_COMPONENT,
     CapitalCostConfig,
     DesignProject,
+    HARD_LIMITS,
+    PARAM_PATH_MAP,
     validate_capital_config,
 )
 from .engine import DesignEngine
@@ -28,36 +30,11 @@ from .engine import DesignEngine
 __all__ = ["sweep_design"]
 
 # ---------------------------------------------------------------------------
-# Hard limits — ranges outside these bounds raise an error.
+# Hard limits and the parameter -> config-path map now live in project.py
+# (single source of truth): from_dict enforces the same bands on scalar
+# config fields at every entry point.  Imported above -- sweep keeps only
+# its own sweep-specific registries below.
 # ---------------------------------------------------------------------------
-HARD_LIMITS: Dict[str, tuple] = {
-    "ppfd_target": (50, 500),
-    "efficacy": (1.5, 4.0),
-    "photoperiod_hours": (0, 24),
-    "light_start_hour": (0, 23),
-    "T_light": (15, 30),
-    "T_dark": (10, 28),
-    "RH": (40, 90),
-    "co2_ppm": (300, 2000),
-    "crop_cycle_days": (15, 60),
-    "pv_area": (0, 1000),
-    "battery": (0, 500),
-}
-
-# ---------------------------------------------------------------------------
-# Mapping: parameter_ranges key → (project_dict_section, field_name)
-# ---------------------------------------------------------------------------
-_PARAM_PATH_MAP: Dict[str, tuple] = {
-    "ppfd_target": ("led", "ppfd_target"),
-    "efficacy": ("led", "efficacy"),
-    "light_start_hour": ("led", "light_start_hour"),
-    "photoperiod_hours": ("led", "photoperiod_hours"),
-    "T_light": ("setpoints", "T_light"),
-    "T_dark": ("setpoints", "T_dark"),
-    "RH": ("setpoints", "RH"),
-    "co2_ppm": ("setpoints", "co2_ppm"),
-    "crop_cycle_days": ("setpoints", "crop_cycle_days"),
-}
 
 # params handled by EnergySystem (not project overrides)
 _PVBES_PARAMS = {"pv_area", "battery"}
@@ -439,7 +416,7 @@ def _override_project(project: DesignProject, overrides: dict) -> DesignProject:
     """
     d = project.to_dict()
     for key, value in overrides.items():
-        section, field = _PARAM_PATH_MAP[key]
+        section, field = PARAM_PATH_MAP[key]
         d[section][field] = value
     return DesignProject.from_dict(d)
 
