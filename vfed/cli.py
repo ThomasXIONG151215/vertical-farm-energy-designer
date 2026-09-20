@@ -19,7 +19,13 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .design.project import DesignProject, TariffConfig
+from .design.project import (
+    DEHConfig,
+    DesignProject,
+    HARDWARE_ALIASES,
+    HVACConfig,
+    TariffConfig,
+)
 from .design.presets import preset_default, preset_609
 from .design.engine import DesignEngine, full_load_warnings
 from .agent.evaluator import agent_evaluate
@@ -171,7 +177,8 @@ def _print_boundary_hints(best, results, indent: str) -> None:
         if key == "pv_area":
             name, shown = "pv_area", f"{bval:.1f} m2"
         elif key == "battery_kwh":
-            name, shown = "battery", f"{bval:.1f} kWh"
+            # user12 P2-6: same battery_kwh vocabulary as the CSV column.
+            name, shown = "battery_kwh", f"{bval:.1f} kWh"
         else:
             name, shown = key, f"{bval:g}"
         print(
@@ -230,6 +237,11 @@ _YAML_SECTION_COMMENTS = {
         "#                 higher = less latent removed by the coil\n"
         "#   datasheet aliases: cooling_capacity_kw (-> Q_cool_nom),\n"
         "#                      cop (-> cop_value), power_w (-> P_rated_w)\n"
+        "#   Placeholder canonical keys at their class defaults (e.g.\n"
+        "#   Q_cool_nom: 0.0, cop_value: 4.0) are OMITTED from this template:\n"
+        "#   add a datasheet alias (or the canonical key) and it applies\n"
+        "#   directly -- no placeholder line to delete, no ambiguous double\n"
+        "#   spec.  Setting both spellings to the SAME value is also fine.\n"
         "# ------------------------------------------------------------------\n"
     ),
     "deh": (
@@ -245,6 +257,11 @@ _YAML_SECTION_COMMENTS = {
         "#   M_deh_nom   - alternative spec: nominal removal (L/day)\n"
         "#   datasheet aliases: capacity_l_per_day (-> M_deh_nom),\n"
         "#                      power_w (-> P_ref_w)\n"
+        "#   Placeholder canonical keys at their class defaults (e.g.\n"
+        "#   M_deh_nom: 0.0, P_ref_w: 2233.0) are OMITTED from this template:\n"
+        "#   add a datasheet alias (or the canonical key) and it applies\n"
+        "#   directly -- no placeholder line to delete, no ambiguous double\n"
+        "#   spec.  Setting both spellings to the SAME value is also fine.\n"
         "# ------------------------------------------------------------------\n"
     ),
     "led": (
@@ -385,6 +402,39 @@ _YAML_SECTION_COMMENTS = {
 }
 
 
+def _strip_placeholder_alias_keys(d: dict) -> dict:
+    """user12 T4: drop 'placeholder' canonical sizing keys from the generated
+    template.
+
+    In sections that define datasheet aliases (``HARDWARE_ALIASES``: hvac,
+    deh), a canonical key left at its dataclass default (``M_deh_nom: 0.0``,
+    ``cop_value: 4.0``, ``Q_cool_nom: 0.0``, ``P_rated_w: 3000.0``,
+    ``P_ref_w: 2233.0``) is a placeholder, not a spec.  If the user then adds
+    the matching datasheet key from the README tutorial (e.g.
+    ``capacity_l_per_day: 30``), the two spellings carry DIFFERENT values and
+    from_dict rejects the config as Ambiguous -- a trap every cold-start user
+    hit.  Omitting the default-equal canonical keys makes the template
+    add-key-and-go: any key the user adds is then the ONLY source for that
+    quantity.  Real (non-default) values are kept as worked examples.
+    """
+    import dataclasses
+
+    section_classes = {"hvac": HVACConfig, "deh": DEHConfig}
+    for section, cfg_cls in section_classes.items():
+        sec = d.get(section)
+        if not isinstance(sec, dict):
+            continue
+        defaults = {
+            f.name: f.default
+            for f in dataclasses.fields(cfg_cls)
+            if f.default is not dataclasses.MISSING
+        }
+        for canon in set(HARDWARE_ALIASES.get(section, {}).values()):
+            if canon in sec and defaults.get(canon, object()) == sec[canon]:
+                del sec[canon]
+    return d
+
+
 def _commented_project_yaml(project) -> str:
     """Render *project* as commented YAML for prosumer-friendly editing.
 
@@ -402,6 +452,9 @@ def _commented_project_yaml(project) -> str:
     # opex section so that from_dict re-derives opex_was_defaulted.
     d = asdict(project)
     d.pop("opex_was_defaulted", None)
+    # user12 T4: omit placeholder canonical sizing keys (value == dataclass
+    # default) in aliased sections so adding a datasheet key cannot collide.
+    d = _strip_placeholder_alias_keys(d)
     yaml.safe_dump(d, buf, sort_keys=False, allow_unicode=True)
     lines = buf.getvalue().splitlines()
     out = [_YAML_HEADER.rstrip("\n")]
@@ -458,11 +511,21 @@ def _cmd_design_new(args):
             )
             sys.exit(1)
         if preset.site.city is not None:
+            # user12 T3: the warning now explains WHY the city is cleared
+            # (explicit coordinates take priority; the lat/lon cache key and
+            # the pre-downloaded city file describe different sites, so
+            # keeping the city would silently simulate the wrong climate)
+            # and HOW the coordinates will be used (cache key + live fetch).
             print(
-                f"[WARN] clearing preset city='{preset.site.city}'; "
-                "weather will follow the given lat/lon instead. "
-                "Remember tz_hours still uses the preset value "
-                f"({preset.site.tz_hours:+.1f} h) unless edited.",
+                f"[WARN] clearing preset city='{preset.site.city}': explicit "
+                "--lat/--lon coordinates take priority, and the lat/lon cache "
+                "key + Open-Meteo fetch describe a different site than the "
+                "pre-downloaded city file, so keeping the city would silently "
+                "simulate the city's climate instead of the given coordinates. "
+                "The coordinates will be used as the weather cache key "
+                "(weather_<lat>_<lon>_<year>_*.csv) and for the live Open-Meteo "
+                "fetch on first run. Note tz_hours still uses the preset value "
+                f"({preset.site.tz_hours:+.1f} h) unless edited in the YAML.",
                 file=sys.stderr,
             )
             preset.site.city = None
@@ -513,9 +576,18 @@ def _cmd_design_presets(args):
 
 
 def _cmd_cities(args):
-    print("Available cities for pre-downloaded weather (2025):")
+    # user12 P2-4: the list now carries each city's coordinates and UTC
+    # offset (the same authoritative values `--city` writes into a new
+    # project), so offline site selection is possible without guessing.
+    print("Pre-downloaded city weather (2025) with coordinates:")
+    print(f"  {'name':15s}  {'lat':>7s}  {'lon':>8s}  tz")
     for c in list_cities():
-        print(f"  {c['name']}")
+        coords = city_coords(c["name"])
+        if coords is None:
+            print(f"  {c['name']:15s}  (no coordinates on file)")
+            continue
+        lat, lon, tz = coords
+        print(f"  {c['name']:15s}  {lat:7.2f}  {lon:8.2f}  UTC{tz:+g}")
 
 
 def _cmd_tariffs(args):
@@ -696,8 +768,12 @@ def _cmd_evaluate(args):
     if tariff_override is not None:
         project.tariff = tariff_override
     engine = DesignEngine(cache_dir=args.cache)
+    # user12 P2-1: "Resolving" is accurate for every outcome -- the engine
+    # may hit the pre-downloaded city file or the weather cache (no network)
+    # or fall through to a live Open-Meteo fetch; "Fetching" suggested the
+    # network is always touched.
     print(
-        f"Fetching weather for ({project.site.lat:.1f}, {project.site.lon:.1f}) "
+        f"Resolving weather for ({project.site.lat:.1f}, {project.site.lon:.1f}) "
         f"year {project.site.year} (cache: '{args.cache}')...",
         file=sys.stderr,
     )
@@ -734,6 +810,19 @@ def _cmd_evaluate(args):
     water_m3 = summary.get("annual_water_m3")
     if water_m3 is not None:
         print(f"  Annual water     = {water_m3:.2f} m3/yr")
+    # user12 T6: RH compliance as a first-class console KPI (it used to live
+    # only in summary.csv).  Normal print style, not a warning -- it is a
+    # design metric like the annual load.  Silently skipped when the engine
+    # did not report the keys (stub results / caller-supplied weather).
+    rh_exceed_h = summary.get("rh_exceed_hours")
+    if summary.get("rh_setpoint_pct") is not None and rh_exceed_h is not None:
+        print(
+            f"  RH compliance    = {(1.0 - summary.get('rh_exceed_pct', 0.0)) * 100:.1f}% "
+            f"hours within setpoint (exceed {int(rh_exceed_h)} h, "
+            f"p95 {summary.get('rh_p95_pct', 0.0):.2f}%, "
+            f"max {summary.get('rh_max_pct', 0.0):.2f}%, "
+            f"setpoint {summary.get('rh_setpoint_pct', 0.0):g}%)"
+        )
     mc = summary.get("moisture_clamp_stats")
     if mc:
         print(
@@ -996,7 +1085,9 @@ def _cmd_sweep(args):
         elif key == "pv_area":
             print(f"    pv_area                 = {val:.1f} m2")
         elif key == "battery_kwh":
-            print(f"    battery                 = {val:.1f} kWh")
+            # user12 P2-6: print the CSV column name (battery_kwh), not the
+            # prose "battery", so console and results.csv use one vocabulary.
+            print(f"    battery_kwh             = {val:.1f} kWh")
         else:
             print(f"    {key:24s} = {val}")
 

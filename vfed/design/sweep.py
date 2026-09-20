@@ -7,7 +7,9 @@ Includes full-system capital costs (LED, HVAC, DEH, PV, battery, equipment,
 envelope) with per-component depreciation.  Objective: min(LCOE).
 """
 
+import calendar
 import itertools
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -424,6 +426,62 @@ def _override_project(project: DesignProject, overrides: dict) -> DesignProject:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+def _precheck_legacy_cache_notice(project: DesignProject, cache_dir) -> None:
+    """user12 T5: announce a legacy-format weather cache ONCE, up front.
+
+    A sweep of N configurations used to re-warn inside every fetch_weather
+    call.  This precheck mirrors the fetch-time condition cheaply (header
+    carries a poa_radiation column + aligned local-year window + exact row
+    count) and, when it matches, fires the shared once-per-process notice
+    BEFORE the loop -- the in-fetch call then stays silent, so a 100-row
+    sweep shows exactly one notice.  The cache-path helper creates the cache
+    directory, which the first real fetch would do anyway.
+
+    City-backed projects never consult the lat/lon cache, so they skip the
+    precheck entirely (same priority as fetch_weather).
+    """
+    if getattr(project.site, "city", None):
+        return
+    from ..weather.weather_bridge import (
+        _cache_path,
+        _legacy_cache_path,
+        _notify_legacy_cache_once,
+    )
+
+    cdir = Path(cache_dir) if cache_dir else Path("weather_cache")
+    cp = _cache_path(
+        cdir,
+        project.site.lat,
+        project.site.lon,
+        project.site.year,
+        project.site.tilt,
+        project.site.azimuth,
+        project.site.tz_hours,
+    )
+    lp = _legacy_cache_path(cdir, project.site.lat, project.site.lon, project.site.year)
+    if cp.exists() or not lp.exists():
+        return
+    expected_n = (365 + int(calendar.isleap(int(project.site.year)))) * 24
+    try:
+        with open(lp, "r", encoding="utf-8", errors="replace") as f:
+            header = f.readline()
+            first_data = f.readline()
+            n_rows = 1 + sum(1 for _ in f)
+    except OSError:
+        return
+    # No poa column -> fetch silently recomputes it, no notice fires there.
+    if "poa_radiation" not in header:
+        return
+    # Misaligned window -> fetch reports "stale cache" separately instead.
+    if not first_data.startswith(f"{int(project.site.year)}-01-01 00:00:00"):
+        return
+    if n_rows != expected_n:
+        return
+    _notify_legacy_cache_once(
+        lp, project.site.tilt, project.site.azimuth, project.site.tz_hours
+    )
+
+
 def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Dict:
     """Enumerate parameter_ranges → build sim per building combo → PVBES eval.
 
@@ -433,6 +491,8 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
     (dict or sim result for single-point).  Objective is taken from
     ``project.space.objective`` (default ``"lcoe"``).
     """
+    # user12 T5: one up-front legacy-cache notice instead of one per row.
+    _precheck_legacy_cache_notice(project, cache_dir)
     ranges = dict(project.space.parameter_ranges)
     # F7: normalize top-level config name aliases (pv_area_m2 / battery_kwh)
     # to the sweep parameter names (pv_area / battery) before validation.

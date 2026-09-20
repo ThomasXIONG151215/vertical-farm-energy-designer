@@ -407,7 +407,8 @@ def test_sweep_best_prints_annual_om_and_boundary_hints(cli_project_yaml, monkey
     assert "35000 USD/yr" in out.out
     assert out.out.count("optimum at grid boundary") == 2
     assert "pv_area = 200.0 m2 is at the scan range max" in out.out
-    assert "battery = 40.0 kWh is at the scan range max" in out.out
+    # user12 P2-6: the battery axis prints under its CSV column name.
+    assert "battery_kwh = 40.0 kWh is at the scan range max" in out.out
     assert "consider widening the scan range" in out.out
     # interior axis (T_light = 21 within [20, 22]) must NOT be flagged
     assert "T_light = 21 is at the scan range" not in out.out
@@ -465,6 +466,7 @@ def test_boundary_hint_flags_min_endpoint_and_skips_interior(capsys):
     )
     _print_boundary_hints({"battery_kwh": 0.0, "lcoe": 0.50}, results, "    ")
     out = capsys.readouterr().out
-    assert "battery = 0.0 kWh is at the scan range min" in out
+    # user12 P2-6: the axis is named battery_kwh (CSV column vocabulary).
+    assert "battery_kwh = 0.0 kWh is at the scan range min" in out
     _print_boundary_hints({"battery_kwh": 20.0, "lcoe": 0.60}, results, "    ")
     assert capsys.readouterr().out == ""

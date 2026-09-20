@@ -99,7 +99,7 @@ npm start       # 在 http://localhost:8000/ 启动本地服务
 2. **`weather_cache/`** — 之前拉取过的结果，按 lat/lon/year/tilt/azimuth/timezone 键复用。
 3. **Open-Meteo 在线** — 用于任意 (lat, lon, year) 组合。需要联网；失败时 CLI 以 `[ERROR E003]` 终止。断网时请使用已缓存的年份或 `--cache`。
 
-离线快速体验：使用内置城市 + `--year 2025` 即可。任意地点离线运行：先联网预取一次（`vfed evaluate <yaml> --cache weather_cache`），之后复用缓存。注意：`609` 预设自带 `site.city: Shanghai`，即使 `--lat/--lon` 覆盖了坐标，只要年份匹配，城市 CSV 仍会被优先使用 — 若想强制走 lat/lon（在线）路径，请在 YAML 中把 `site.city` 置为 null。示例扫描文件（`example_sweep.yaml` / `example_lcoe_full.yaml`）使用 2023 年 + 显式 lat/lon（不在预下载城市数据内），首次运行需联网（几秒，取决于网络），之后命中缓存即可离线。
+离线快速体验：使用内置城市 + `--year 2025` 即可。任意地点离线运行：先联网预取一次（`vfed evaluate <yaml> --cache weather_cache`），之后复用缓存。显式坐标优先于内置城市：`vfed design new --lat <度> --lon <度>` 会清除预设自带的 `site.city`（创建时打印 `[WARN] clearing preset city ...`）——lat/lon 缓存键与城市 CSV 描述的是两个不同地点，保留 city 会悄悄仿真错误的气候。生成的 YAML 随后以坐标作为天气缓存键（`weather_<lat>_<lon>_<year>_*.csv`），首次运行联网走 Open-Meteo 拉取（`tz_hours` 仍为预设值，除非自行修改）。反之，若在仍带 `site.city` 的 YAML 里手工修改 `lat`/`lon`，只要年份匹配，城市 CSV 依旧优先——想强制走 lat/lon（在线）路径，请在 YAML 中把 `site.city` 置为 null。示例扫描文件（`example_sweep.yaml` / `example_lcoe_full.yaml`）使用 2023 年 + 显式 lat/lon（不在预下载城市数据内），首次运行需联网（几秒，取决于网络），之后命中缓存即可离线。
 
 ## 架构
 
@@ -368,7 +368,7 @@ summary 中最常被问到的输出/警告键的白话解释：
 
 ```bash
 cd vfed-web
-python -m http.server 8000
+npm start        # 在 http://localhost:8000/ 启动本地服务（= python -m http.server 8000）
 # 浏览器打开 http://localhost:8000
 ```
 
@@ -388,9 +388,9 @@ python -m http.server 8000
 
 | 错误码 | 含义 | 常见触发 | 解决办法 |
 |---|---|---|---|
-| **E001** | 配置错误 | 文件缺失、YAML 损坏/未知字段/越界；标量字段超出 `HARD_LIMITS`；`--tariff` 地区币种与项目不一致；`parameter_ranges` 非法（未知参数名、非 `[min,max,step]` 三元组、步数非整数、超出硬限） | `vfed design new <name> --preset 609` 重新生成，`vfed validate <yaml>` 定位 |
+| **E001** | 配置错误 | 文件缺失、YAML 损坏/未知字段/越界；标量字段超出 `HARD_LIMITS`；`--tariff` 地区币种与项目不一致；`parameter_ranges` 非法（未知参数名、非 `[min,max,step]` 三元组、步数非整数、超出硬限）——由 `validate` 报出，`sweep` 入口的范围违规报 **E101** | `vfed design new <name> --preset 609` 重新生成，`vfed validate <yaml>` 定位 |
 | **E003** | 天气获取失败 | 无网络、无缓存、缺 `requests` 包 | 见下文"天气离线"三种解法 |
-| **E101** | 仿真失败 | 引擎/能系统异常（timestep 非法、天气数据含 NaN、能系统评估抛错） | 读完整 stderr 报错；`vfed validate`；检查 `timestep_s`；核对天气数据完整性 |
+| **E101** | 仿真失败 | 引擎/能系统异常（timestep 非法、天气数据含 NaN、能系统评估抛错）；经 `sweep` 入口触发的 `parameter_ranges` 违规（`validate` 对同一违规报 E001） | 读完整 stderr 报错；`vfed validate`；检查 `timestep_s`；核对天气数据完整性 |
 | **E103** | 零负荷 | 年负荷 ≤ 0 | 检查 LED 功率（`auto_deduce` 下 = `ppfd_target`×`covered_area`÷`efficacy`）、`equipment_power_w`、`setpoints` |
 
 ### 常见问题与解决
@@ -412,7 +412,7 @@ python -m http.server 8000
 
 3. **天气离线（E003）的三种解法**：
    - **联网重试**：联网环境重跑即可，成功后会写入 `weather_cache/` 供后续离线复用；
-   - **缓存/预取**：联网环境先执行一次 `vfed evaluate <yaml> --cache weather_cache` 填充缓存；旧格式缓存会自动回退复用（打印 warning，不中断）；
+   - **缓存/预取**：联网环境先执行一次 `vfed evaluate <yaml> --cache weather_cache` 填充缓存；旧格式缓存会自动回退复用（见第 7 条的一行通知）；
    - **离线 CSV**：手动放置缓存 CSV 到 `weather_cache/`（文件名含 lat/lon/year，tilt-aware 键含 tilt/azimuth/tz）。浏览器版则在联网构建时通过 `bundle.py` 内嵌。
 
 4. **E103 零负荷**：多为 LED 功率推导为 0（`auto_deduce` 且 `ppfd_target`/`covered_area`/`efficacy` 配置缺失）或 `equipment_power_w=0`。用 `vfed validate` + 检查上述字段。
@@ -420,6 +420,8 @@ python -m http.server 8000
 5. **LCOE 口径**：`lcoe` 列是设施全成本/每 kWh 负荷，跨项目比较时注意各项目 `currency` 可能不同。
 
 6. **电价币种不一致（E001）**。tariff 库每个地区都带币种标注（`vfed design tariffs` 可查）。`vfed evaluate/sweep --tariff <地区>` 在地区币种与项目 `currency` 不一致时快速失败——例如把 RMB 计价的 `Beijing` 灌进 `currency: USD` 的项目，旧版会产出标签失真约 7 倍的 LCOE。两条出路自行选择：改项目 YAML 的 `currency:`（随后自行核对 `opex`/capital 价格与 `exchange_rate` 是否同币——VFED 不做换算也不改写），或换用与项目同币种的地区。用户自带的 `--tariff` YAML 文件一律视为项目自身币种，不做检查。`vfed design new --tariff <地区>` 是新建场景：新项目 `currency` 自动设为该地区币种（创建回显中明示）。
+
+7. **旧格式天气缓存通知（每次运行至多一条）**。早于 tilt-aware 缓存键的缓存 CSV（`weather_<lat>_<lon>_<year>.csv`，文件名不含 tilt/azimuth/时区）不携带面板几何信息，读取时会从 GHI 重算 `poa_radiation`，并打印一条 ASCII 通知（含缓存文件名）。这是预期行为而非错误：仿真始终按项目请求的几何计算。要永久消除：删除该文件（如 `weather_cache/weather_31.230_121.470_2025.csv`）后联网重跑一次，即可重新取回带几何键的新缓存。sweep 全程只打印一条，不会逐行刷屏。
 
 ## 贡献
 

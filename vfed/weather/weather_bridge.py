@@ -55,6 +55,35 @@ class WeatherFetchError(Exception):
 __all__ = ["fetch_weather", "add_poa", "erbs_split", "WeatherFetchError"]
 
 
+# ---------------------------------------------------------------------------
+# user12 T5: legacy-cache POA-recompute notice -- issued at most ONCE per
+# process.  A 100-row sweep previously repeated the same UserWarning for
+# every enumerated configuration, each line attributed to the engine's
+# fetch call site (a filesystem path like "G:\\...\\engine.py:521").
+# warn_explicit keeps the attribution trailer free of any caller source
+# path; the message names the cache file and the exact refetch action.
+# ---------------------------------------------------------------------------
+_LEGACY_CACHE_NOTICE_KEY = "legacy-weather-cache-poa"
+_LEGACY_CACHE_NOTICE_SENT: set = set()
+
+
+def _notify_legacy_cache_once(path, tilt: float, azimuth: float, tz_hours: float) -> None:
+    """Warn once per process that *path* is a pre-P6-1 legacy cache whose
+    POA components are being recomputed for the requested geometry."""
+    if _LEGACY_CACHE_NOTICE_KEY in _LEGACY_CACHE_NOTICE_SENT:
+        return
+    _LEGACY_CACHE_NOTICE_SENT.add(_LEGACY_CACHE_NOTICE_KEY)
+    warnings.warn_explicit(
+        f"Legacy weather cache '{Path(path).name}' does not encode tilt/"
+        f"azimuth/tz; recomputing poa_radiation for tilt={tilt}, "
+        f"azimuth={azimuth}, tz_hours={tz_hours} from GHI. Shown once per "
+        f"run. Delete the file to refetch a geometry-aware cache.",
+        UserWarning,
+        "vfed.weather_bridge",
+        0,
+    )
+
+
 def _cache_path(
     cache_dir: Path,
     lat: float,
@@ -236,10 +265,13 @@ def fetch_weather(
     the local file is not found.
     """
     cache_dir = Path(cache_dir) if cache_dir else Path("weather_cache")
-    cp = _cache_path(cache_dir, lat, lon, year, tilt, azimuth, tz_hours)
-    lp = _legacy_cache_path(cache_dir, lat, lon, year)
 
     # ── City-based local CSV (no API) ──
+    # user12 P2-5: resolved BEFORE any lat/lon cache bookkeeping and returned
+    # immediately -- a city hit must not write a lat/lon cache entry behind
+    # the user's back.  The pre-downloaded city file IS the offline source;
+    # its provenance is allowed to diverge from the lat/lon cache (P1-3b),
+    # and silently materialising one would blur the two.
     if city:
         local = _find_city_csv(city, year)
         if local is not None:
@@ -285,13 +317,11 @@ def fetch_weather(
             # to_csv round-trips or the JSON result schema).
             df.attrs["weather_source"] = "pre-downloaded city file"
             df.attrs["weather_source_detail"] = local.name
-            # Also write to the standard cache so subsequent calls hit quickly
-            if not cp.exists():
-                cache_dir.mkdir(parents=True, exist_ok=True)
-                df.to_csv(cp)
             return df
 
     # ── Standard lat/lon cache (tilt-aware key with legacy fallback, P6-1) ──
+    cp = _cache_path(cache_dir, lat, lon, year, tilt, azimuth, tz_hours)
+    lp = _legacy_cache_path(cache_dir, lat, lon, year)
     if (cp.exists() or lp.exists()) and not force:
         legacy = not cp.exists()
         path = lp if legacy else cp
@@ -316,12 +346,8 @@ def fetch_weather(
                 # Recompute from GHI (Erbs split) so the returned POA honours
                 # the requested geometry; the API's original horizontal
                 # direct/diffuse are not recoverable from a POA-ised cache.
-                warnings.warn(
-                    f"Legacy weather cache {path} does not encode tilt/azimuth/"
-                    f"tz; recomputing poa_radiation for tilt={tilt}, "
-                    f"azimuth={azimuth}, tz_hours={tz_hours} from GHI.",
-                    stacklevel=2,
-                )
+                # user12 T5: once-per-process notice (see _notify_legacy_cache_once).
+                _notify_legacy_cache_once(path, tilt, azimuth, tz_hours)
                 df = df.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
                 df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
             # P2-2: provenance metadata (cache hit, legacy or geometry-aware).
