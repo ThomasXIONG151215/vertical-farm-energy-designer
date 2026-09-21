@@ -691,6 +691,10 @@
             <div class="climate-bar" id="climate-bar" style="display:none;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;font-size:0.78rem;color:var(--text-secondary);">
                 <span id="cb-city">--</span> · <span id="cb-year">--</span> · ☀️ <span id="cb-ghi">--</span> kWh/m²/yr · 🌡️ <span id="cb-tavg">--</span>°C
             </div>
+            <!-- Weather Source Provenance (P2-2): hidden unless result.weather_attrs present -->
+            <div id="weather-source-bar" style="display:none;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;margin-bottom:10px;font-size:0.78rem;color:var(--text-secondary);">
+                🌐 <span id="cb-wsource"></span>
+            </div>
             <!-- 6 KPI Cards (2×3) -->
             <div class="metrics-row" id="perf-metrics" style="margin-bottom:8px;">
                 <div class="metric-card"><div class="label">Annual Yield</div><div class="value" id="p-harvest">--</div><div class="unit">kg fresh/yr</div></div>
@@ -850,7 +854,7 @@ const _STR_ZH = {
     'PV Cap Mode':'光伏投资模式','PV Cap Cost':'光伏投资成本','PV Cap Rate':'光伏单位投资','PV Depr.':'光伏折旧年限',
     'Bat Cap Mode':'电池投资模式','Bat Cap Cost':'电池投资成本','Bat Cap Rate':'电池单位投资','Bat Depr.':'电池折旧年限',
     'Water Cost':'水费单价','Labor Cost':'人工成本','Maintenance %':'维护费比例','Misc OPEX':'其他运营费',
-    'PV Tilt':'光伏倾角','PV Azimuth':'光伏方位角','Weather Year':'气象年份',
+    'PV Tilt':'光伏倾角','PV Azimuth':'光伏方位角','Weather Year':'气象年份','Weather source':'天气来源',
     'Air Density':'空气密度','Air Specific Heat':'空气比热','Init Dry Wt':'初始干重','Dry Matter Frac':'干物质比',
     // Tooltips
     'Specific Moisture Extraction Rate':'单位除湿能耗比 (SMER)',
@@ -1070,13 +1074,13 @@ const SECTIONS = [
     fields:[
     { key:'transpiration.method',        label:'Transp Method',    type:'select', options:['van_henten','daily','per_plant','daily_per_period','per_plant_per_period'] },
     { key:'transpiration.stage_factor',  label:'Stage Factor',    unit:'',       step:0.05, default:1.0 },
-    { key:'transpiration.daily_water_L', label:'Daily Water',     unit:'L/day',   step:5,     visible:['daily'], visibleKey:'transpiration.method', default:40 },
+    { key:'transpiration.daily_water_L', label:'Daily Water',     unit:'L/day',   step:2.5,   visible:['daily'], visibleKey:'transpiration.method', default:67.5 },
     { key:'transpiration.plant_count',   label:'Plant Count',     unit:'',        step:10,    visible:['per_plant','per_plant_per_period'], visibleKey:'transpiration.method', default:0 },
-    { key:'transpiration.ml_per_plant_day',label:'mL/Plant/Day',  unit:'mL/day',  step:10,    visible:['per_plant'], visibleKey:'transpiration.method', default:80 },
+    { key:'transpiration.ml_per_plant_day',label:'mL/Plant/Day',  unit:'mL/day',  step:10,    visible:['per_plant'], visibleKey:'transpiration.method', default:60 },
     { key:'transpiration.k_van_henten',  label:'Van Henten Gain', unit:'1/(s·kPa)',    step:1e-4, visible:['van_henten'], visibleKey:'transpiration.method', default:1.0e-4 },
     { key:'transpiration.period_days',          label:'Period Days',        unit:'days',   step:5,  visible:['daily_per_period','per_plant_per_period'], visibleKey:'transpiration.method', default:'[10, 10, 10]' },
-    { key:'transpiration.daily_water_L_period', label:'Daily Water/Period',  unit:'L/day',  step:5,  visible:['daily_per_period'], visibleKey:'transpiration.method', default:'[30, 45, 60]' },
-    { key:'transpiration.ml_per_plant_day_period',label:'mL/Plant/Day/Period', unit:'mL/day', step:10, visible:['per_plant_per_period'], visibleKey:'transpiration.method', default:'[10, 30, 50]' },
+    { key:'transpiration.daily_water_L_period', label:'Daily Water/Period',  unit:'L/day',  step:2.5,  visible:['daily_per_period'], visibleKey:'transpiration.method', default:'[22.5, 45, 90]' },
+    { key:'transpiration.ml_per_plant_day_period',label:'mL/Plant/Day/Period', unit:'mL/day', step:10, visible:['per_plant_per_period'], visibleKey:'transpiration.method', default:'[20, 40, 80]' },
     { key:'setpoints.crop_cycle_days', label:'Cycle Days',  unit:'days',   step:5 },
     { key:'growth.c_alpha_beta', label:'Conversion Eff',   unit:'',       step:0.01 },
     { key:'growth.c_resp_d',     label:'Dark Resp @20°C',  unit:'s⁻¹',    step:1e-7 },
@@ -1095,7 +1099,6 @@ const SECTIONS = [
     { key:'pv.C_pv',    label:'PV Cost',   unit:'$/kWp', step:10, isCost:true },
     { key:'pv.degradation',    label:'Degradation',        unit:'/yr',  step:0.001 },
     { key:'pv.eta_inv',        label:'Inverter η',         unit:'',     step:0.005 },
-    { key:'pv.maintenance',    label:'Maintenance',        unit:'/yr',  step:0.005, default:0.005 },
     { key:'pv.NOCT',           label:'NOCT',               unit:'°C',   step:1, default:45 },
   ]},
   { id:'battery', icon:'🔋', label:'Battery', vals:['battery.c_energy','battery.c_rate','battery.cycle_life'],
@@ -1107,7 +1110,6 @@ const SECTIONS = [
     { key:'battery.soc_min',   label:'SOC Min',            unit:'',     step:0.05 },
     { key:'battery.soc_max',   label:'SOC Max',            unit:'',     step:0.05 },
     { key:'battery.cycle_life',label:'Cycle Life',          unit:'',     step:500 },
-    { key:'battery.maintenance',label:'Maintenance',       unit:'/yr',  step:0.005 },
   ]},
   { id:'economic', icon:'💰', label:'Economics', vals:['interest_rate','currency','opex.water_cost_per_m3'],
     fields:[
@@ -2035,6 +2037,20 @@ function onSinglePointComplete(data) {
     document.getElementById('cb-year').textContent = r.climate.year || '--';
     document.getElementById('cb-ghi').textContent = (r.climate.annual_ghi_kwh_m2 || 0).toFixed(0);
     document.getElementById('cb-tavg').textContent = (r.climate.annual_avg_temp_c || 0).toFixed(1);
+
+    // ── Weather source provenance (P2-2): skip silently when absent ──
+    const wa = r.weather_attrs || {};
+    const wsBar = document.getElementById('weather-source-bar');
+    if (wa.weather_source || wa.weather_source_detail) {
+        const wsLabel = T('Weather source');
+        const src = wa.weather_source || '';
+        const det = wa.weather_source_detail || '';
+        document.getElementById('cb-wsource').textContent =
+            `${wsLabel}: ${src}${(src && det) ? ' ' : ''}${det ? `(${det})` : ''}`;
+        wsBar.style.display = 'block';
+    } else {
+        wsBar.style.display = 'none';
+    }
 
     // ── 6 KPI Cards ──
     document.getElementById('p-harvest').textContent = s.annual_harvest_fw_kg ? Number(s.annual_harvest_fw_kg).toLocaleString() : '--';

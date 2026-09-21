@@ -86,9 +86,9 @@ class SimulationResult:
 
     # ── weather provenance (P2-2): copy of the weather DataFrame's ``attrs``
     #    set by ``weather_bridge.fetch_weather`` (``weather_source`` /
-    #    ``weather_source_detail``).  Process-local only -- deliberately NOT
-    #    serialized in to_dict() / from_dict(), mirroring DataFrame.attrs
-    #    semantics (no JSON / CSV schema change).
+    #    ``weather_source_detail``).  Serialized additively in to_dict() /
+    #    from_dict() (round 19) so the web frontend can display the source;
+    #    CSV export paths (save_*_csv) are unaffected.
     weather_attrs: Dict[str, Any] = field(default_factory=dict, repr=False)
 
     # -----------------------------------------------------------------
@@ -146,6 +146,7 @@ class SimulationResult:
             "monthly": _ensure_json_safe(self.monthly),
             "energy_breakdown": _ensure_json_safe(self.energy_breakdown),
             "typical_daily": _ensure_json_safe(self.typical_daily),
+            "weather_attrs": _ensure_json_safe(self.weather_attrs),
         }
         return raw
 
@@ -236,6 +237,7 @@ class SimulationResult:
             monthly=d.get("monthly", {}),
             energy_breakdown=d.get("energy_breakdown", {}),
             typical_daily=d.get("typical_daily", {}),
+            weather_attrs=d.get("weather_attrs", {}),
         )
 
 

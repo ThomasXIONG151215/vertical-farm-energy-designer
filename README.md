@@ -462,6 +462,7 @@ Do not double-click `index.html` directly (Web Workers cannot load under `file:/
 
 - **Built-in presets** `BUILTIN_PRESETS`: `609` (Fengxian Lettuce PFAL), `lettuce_standard` (Lettuce — Standard PFAL).
 - **Simulation path**: form → `generateYaml()` → `postMessage({type:'simulate', projectYaml})` → Pyodide in the Worker runs the vfed simulation → results post back → charts render.
+- **Weather provenance**: each single-point result displays `Weather source: <source> (<detail>)` from `weather_attrs` (天气来源溯源), hidden when absent.
 - **Rebundling**: after changing `vfed/` Python code or updating `weather_cache/`, re-run `python bundle.py` in `vfed-web/` to embed the sources and weather cache into `worker.js`.
 
 ## Troubleshooting
