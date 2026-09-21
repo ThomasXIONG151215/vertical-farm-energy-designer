@@ -50,7 +50,7 @@ pip install -e ".[dev]"
 vfed design new my_farm --preset 609 --city Shanghai --year 2025
 ```
 
-从奉贤生菜预设创建 `my_farm.yaml`。默认输出名为 `<name>.yaml` — 可用 `--out path.yaml` 更改。`--city` 会从内置城市表（`vfed design cities` 列出）填入纬度/经度/时区，并使用预下载的 `data/weather/Shanghai_2025.csv`，使整个快速体验**完全离线**。如需任意地点，改用 `--lat <度> --lon <度> [--year YYYY]`；此时首次运行需联网（见下文"天气数据"）。`--year` 默认 2025。
+从奉贤生菜预设创建 `my_farm.yaml`。默认输出名为 `<name>.yaml` — 可用 `--out path.yaml` 更改。`--city` 会从内置城市表（`vfed design cities` 列出）填入纬度/经度/时区，并使用预下载的 `data/weather/Shanghai_2025.csv`，使整个快速体验**完全离线**。如需任意地点，改用 `--lat <度> --lon <度> [--year YYYY]`；此时首次运行需联网（见下文"天气数据"）。`--year` 默认 2025。没有预设的个人用户（prosumer）？默认预设就是一个可**完全离线**运行的 ~10 m² 小型种植间——见下方《DIY / 个人用户指南》。
 
 ### 2. 校验配置
 
@@ -101,6 +101,86 @@ npm start       # 在 http://localhost:8000/ 启动本地服务
 
 离线快速体验：使用内置城市 + `--year 2025` 即可。任意地点离线运行：先联网预取一次（`vfed evaluate <yaml> --cache weather_cache`），之后复用缓存。显式坐标优先于内置城市：`vfed design new --lat <度> --lon <度>` 会清除预设自带的 `site.city`（创建时打印 `[WARN] clearing preset city ...`）——lat/lon 缓存键与城市 CSV 描述的是两个不同地点，保留 city 会悄悄仿真错误的气候。生成的 YAML 随后以坐标作为天气缓存键（`weather_<lat>_<lon>_<year>_*.csv`），首次运行联网走 Open-Meteo 拉取（`tz_hours` 仍为预设值，除非自行修改）。反之，若在仍带 `site.city` 的 YAML 里手工修改 `lat`/`lon`，只要年份匹配，城市 CSV 依旧优先——想强制走 lat/lon（在线）路径，请在 YAML 中把 `site.city` 置为 null。示例扫描文件（`example_sweep.yaml` / `example_lcoe_full.yaml`）使用 2023 年 + 显式 lat/lon（不在预下载城市数据内），首次运行需联网（几秒，取决于网络），之后命中缓存即可离线。
 
+## DIY / 个人用户指南
+
+VFED 是一个研究工具，但**默认预设**现在就是一个可直接上手的小型种植间起点：约 10 m² 光照冠层、40 m³ 房间，HVAC 与除湿机均为 `auto_size`，位于上海并附带 2025 年天气数据——下述全流程**完全离线**可用。
+
+### 1. 离线快速开始
+
+```bash
+vfed design new my_farm              # 默认预设：10 m² 房间，上海 2025
+vfed evaluate my_farm.yaml --cache weather_cache
+```
+
+无需 `--preset` 也无需 `--city`：默认预设已设 `site.city: Shanghai`，会自动使用预下载的 `data/weather/Shanghai_2025.csv`。生成的 YAML 带完整注释（每个小节都有单位与填写指引）。
+
+### 2. 按你的种植间调整规模
+
+打开 `my_farm.yaml`，把数字改成你的设施参数：
+
+| 你的硬件 | 修改字段 |
+|---|---|
+| 光照冠层面积 | `led.covered_area`（m²） |
+| 房间尺寸 / 保温 | `envelope.V_room`（m³）、`envelope.U_wall_A`（W/K） |
+| 灯具 | `led.ppfd_target`、`led.efficacy`、`led.photoperiod_hours` |
+| 气候目标 | `setpoints.T_light` / `setpoints.T_dark` / `setpoints.RH` |
+| 种植周期 | `growth.crop_cycle_days`、`transpiration.method` |
+
+`hvac.auto_size: true` 与 `deh.auto_size: true` 会根据设计负荷自动推导设备容量——除非你已确定具体机型，否则保持开启。
+
+### 3. 按 datasheet 术语填入真实设备参数
+
+VFED 接受真实设备说明书上印的参数。除了内部命名（`Q_cool_nom` kW、`P_rated_w` / `P_ref_w` W、`M_deh_nom` L/天），还可以直接写：
+
+```yaml
+hvac:
+  auto_size: false
+  cooling_capacity_kw: 3.5     # 说明书额定制冷量（kW）→ Q_cool_nom
+  cop: 3.2                     # 说明书 COP → cop_value
+  power_w: 1200                # 额定电功率（W）→ P_rated_w
+deh:
+  capacity_l_per_day: 12       # 说明书除湿量（L/天）→ M_deh_nom
+  power_w: 260                 # 额定电功率（W）→ P_ref_w
+  smer: 2.0                    # 比除湿率（kg 水/kWh）
+```
+
+完整别名表见 `vfed/design/project.py`（`HARDWARE_ALIASES`）。规范名始终可用；同一字段两种写法给了不同值时会被拒绝（歧义配置）。指定固定设备时请设置 `auto_size: false`——否则引擎会用自动选型值覆盖。
+
+### 4. 相信经济性结论前先填入真实成本
+
+`capital_total` 为 0 时 `vfed evaluate` 会给出警告——此时 LCOE 只含运营成本，不是设计级指标。请为各组件填入资本成本；**计价基准包含在模式名里**（LED / HVAC / DEH 按额定瓦数计价，光伏按 kWp，电池按 kWh）：
+
+```yaml
+led:      { capital: { mode: per_watt, rate_per_watt: 1.5 } }    # 每 W 额定功率
+hvac:     { capital: { mode: per_watt, rate_per_watt: 1.0 } }    # 每 W 额定功率
+deh:      { capital: { mode: per_watt, rate_per_watt: 2.0 } }    # 每 W 额定功率
+pv:       { capital: { mode: per_kwp,  rate_per_kwp: 3500 } }    # 每 kWp（= 3.5 /W）
+battery:  { capital: { mode: per_kwh,  rate_per_kwh: 500 } }     # 每 kWh
+```
+
+在 `pv` 或 `battery` 上使用 `per_watt` 会在加载时被拒绝并给出迁移提示：在 P0-1 修复之前，这种写法会悄悄把 **kWp** 当瓦数计（字段名偏差 1000 倍——46.5 kWp 阵列按"3.5/W"算出 162 而非 162,000），电池则是 **kWh**。组件没有 `capital:` 块时套用 legacy 回退计价（`pv.C_pv` 每 kWp，默认 500 为市场锚定；`battery.c_energy` 每 kWh）。
+
+`evaluate` 与 `sweep` 都会为每个计价组件打印单价自检行（如 `PV unit cost = 162792 RMB / 46.5 kWp = 3500.00 RMB/kWp (3.50 RMB/Wp)`），可手工验算计价基准。（`example_lcoe_full.yaml` 是完整成本模型示例。）然后调 `opex`——尤其是 `labor_cost_per_year` 与 `misc_opex_per_year`，它们主导小规模场景的经济性。
+
+### 5. 为你的选址配置光伏 + 电池
+
+```yaml
+space:
+  parameter_ranges:
+    pv_area: [0, 50, 10]      # m²
+    battery: [0, 20, 5]       # kWh
+```
+
+```bash
+vfed sweep my_farm.yaml --cache weather_cache --out results.csv
+```
+
+`results.csv` 按目标值排序（默认 LCOE），首行即最优光伏 × 电池组合。扫描范围同样支持别名（接受 `pv_area_m2` / `battery_kwh`）。换一个地点还想离线？从 51 座内置城市中选一个并设置 `site.city`——2025 年天气已全部内置。
+
+### 湿度与水分结果
+
+`vfed evaluate` 输出的不止是能耗：年用水量、RH 钳制事件、除湿机利用率，以及除湿机与 HVAC 表冷器各自除掉的水分（含义见"输出结果解读"下的 **Output Glossary**）。`vfed evaluate ... --export out/` 还会写出 `summary.csv`、`timeseries.csv`（8,760 行逐时数据）和 `monthly.csv` 供自行分析。
+
 ## 架构
 
 ```
@@ -141,6 +221,9 @@ vertical-farm-energy-designer/
 │   └── cli.py              # CLI 入口：vfed
 ├── research/               # 论文归档代码与数据（见下）
 ├── reference/              # 参考文献
+├── data/weather/           # 预下载城市天气 CSV（51 城 × 2025）
+├── scripts/                # 工具脚本（download_weather_db.py 刷新 data/weather/）
+├── tests/                  # Pytest 测试套件
 ├── weather_cache/          # 缓存的天气 CSV（自动生成）
 ├── pyproject.toml          # 项目元数据与依赖
 ├── vfed-web/               # 浏览器可视化（Pyodide Web Worker）
@@ -168,8 +251,8 @@ vertical-farm-energy-designer/
 | `vfed design cities` | 列出内置城市（预下载 2025 年天气） |
 | `vfed design tariffs` | 列出内置电价区域 |
 | `vfed validate <project.yaml>` | 校验项目 YAML（不运行仿真） |
-| `vfed evaluate <project.yaml> [--cache dir]` | 对单一配置运行建筑仿真 |
-| `vfed sweep <project.yaml> [--cache dir] [--out results.csv]` | 枚举 `space.parameter_ranges`（如光伏面积 × 电池容量）并输出 CSV；未声明 range 时评估单一固定配置 |
+| `vfed evaluate <project.yaml> [--cache dir] [--export dir] [--tariff region]` | 对单一配置运行建筑仿真；`--export` 将 `summary.csv` / `timeseries.csv` / `monthly.csv` 写入 `dir` |
+| `vfed sweep <project.yaml> [--cache dir] [--out results.csv] [--tariff region]` | 枚举 `space.parameter_ranges`（如光伏面积 × 电池容量）并输出 CSV；未声明 range 时评估单一固定配置 |
 
 ## 配置
 
@@ -180,8 +263,11 @@ vertical-farm-energy-designer/
 - **hvac** — 额定制冷量、COP 模式（carnot / constant / linear / table）、设定点
 - **deh** — 除湿机额定容量、相对湿度设定点、效率模型
 - **led** — PPFD、光效、光周期计划
-- **transpiration** — 方法（van_henten / daily / per_plant / daily_per_period / per_plant_per_period）
-- **growth** — Van Henten 生长模型参数（`c_rad_phot` 已按生菜标定至商业 PFAL 产量带 30-60 kg 鲜重/m²/年；见"输出结果解读"的产量标定说明）
+- **transpiration** — 方法（van_henten / daily / per_plant / daily_per_period / per_plant_per_period）。
+  直接设定法共用一个参考场景：成熟生菜 ≈ **1.5 L/m²/天 @ 25 株/m²**（文献区间 0.75-2.0 L/m²/天），即默认 45 m² 冠层 **67.5 L/天** 或 **60 mL/株/天**；阶梯默认值采用苗期→成苗 0.5/1.0/2.0 L/m²/天。按你的冠层换算：`daily_water_L = 速率 × led.covered_area`。
+  新增：`transpiration.plants_per_m2`（种植密度，株/m²，0-200）——per-plant 方法下当 `plant_count` 为 0 时自动推导 `plant_count = round(plants_per_m2 × led.covered_area)`（25 株/m² × 45 m² = 1125 株），可以直接用密度思考而不用逐株计数。
+- **growth** — Van Henten 生长模型参数（`c_rad_phot` 已按生菜标定至商业 PFAL 产量带 30-60 kg 鲜重/m²/年；见"输出结果解读"的产量标定说明）。
+  全部系数均为 SI 单位，馈入 `vfed/plants/van_henten.py` 的单状态碳平衡：`c_alpha_beta`（同化物→干物质转化，-）、`c_resp_d`（暗呼吸，1/s，Q10 = 2）、`c_pl_d`（光消光系数，m²/kg）、`c_co2_1/2/3` + `c_Gamma`（光合温度响应与 CO₂ 补偿点，kg/m³）、`initial_dry_weight`（移栽起始生物量，kg/m²——每次收割时 `X_d` 重置到此值）。除非对照自己的收获记录做标定，请保留默认值。
 - **pv** — 面板效率、NOCT、倾角、方位角
 - **battery** — 容量、C-rate、往返效率、SOC 限制
 - **tariff** — 电价：
@@ -189,7 +275,7 @@ vertical-farm-energy-designer/
   - legacy 格式（兼容）：`peak_price` / `normal_price` / `valley_price` + `peak_hours` / `valley_hours`，加载时展开为 24 值。
   - 参考电价：`vfed design tariffs` 列出区域；`vfed design new ... --tariff <region>` 直接载入。
 - **space** — 可选扫描参数范围与目标（`lcoe` / `kwh_per_kg_fresh` / `cost_per_kg_fresh`）
-- **opex / equipment_capital / envelope_capital / pump_capital** — 资本与运营成本输入
+- **opex / equipment_capital / envelope_capital / pump_capital** — 资本与运营成本输入（capital 模式：`per_watt` × 额定 W，光伏 `per_kwp` × kWp，电池 `per_kwh` × kWh；见 DIY 指南第 4 节）
 - **currency / exchange_rate** — 成本报告的货币设置
 
 ## 模型适用范围与已知局限
@@ -279,6 +365,8 @@ Van Henten 生物量只响应光照与温度 — 没有水分胁迫耦合：灌�
 | `annual_grid_import` | kWh/年 | 年购电 |
 | `annual_grid_export` | kWh/年 | 年售电 |
 | `battery_cycles` | 等效满循环/年 | 电池循环 |
+
+所有 `cost*` / `capital*` / `annual_*` 货币列均以项目的 `currency` 计价（见 `currency / exchange_rate`）。
 
 ### CSV 列字典
 
@@ -379,6 +467,7 @@ npm start        # 在 http://localhost:8000/ 启动本地服务（= python -m h
 - **内置预设** `BUILTIN_PRESETS`：`609`（Fengxian Lettuce PFAL，奉贤生菜）、`lettuce_standard`（Lettuce — Standard PFAL）。
 - **仿真链路**：表单 → `generateYaml()` 生成 YAML → `postMessage({type:'simulate', projectYaml})` → Worker 内 Pyodide 运行 vfed 仿真 → 结果回传 → 图表渲染。
 - **重新打包**：修改 `vfed/` Python 代码或更新 `weather_cache/` 后，需在 `vfed-web/` 目录重跑 `python bundle.py`，把源码与天气缓存重新内嵌进 `worker.js`。
+- **天气来源溯源**：单点结果页展示 `Weather source: <来源> (<详情>)`（来自 `weather_attrs`；缺省时隐藏）。
 
 ## 故障排除
 

@@ -11,14 +11,18 @@ Vertical Farm Energy Designer (VFED) is a parametric, config-driven design simul
 pip install -e .
 pip install -e ".[dev]"   # dev/test extras
 
-# Design
-vfed design new <name> --preset 609 --lat N --lon N --year YYYY
+# Design (options: --preset, --city, --lat/--lon, --year, --tariff, --out)
+vfed design new <name> --preset 609 --city Shanghai --year 2025
 vfed design presets
 vfed design cities
 vfed design tariffs
 
+# Validate (schema check without running a simulation)
+vfed validate <project.yaml>
+
 # Evaluate / Sweep (there is no separate `optimize` command — PVBES sizing is done via sweep)
-vfed evaluate <project.yaml> --cache weather_cache
+vfed --version
+vfed evaluate <project.yaml> --cache weather_cache [--export out/]
 vfed sweep <project.yaml> --cache weather_cache --out results.csv
 
 # Tests
@@ -37,6 +41,13 @@ pytest --cov=vfed
 | `vfed/weather/` | Open-Meteo fetch, geocoding | `engine.py` calls `fetch_weather` |
 | `vfed/plants/` | Transpiration (5 methods: van_henten model-coupled; daily/per_plant/daily_per_period/per_plant_per_period direct-set), Van Henten growth | `engine.py` steps each hour |
 | `vfed/agent/` | Evaluator (agent-cli contract) | Entry point for CLI |
+| `vfed-web/` | Browser frontend (Pyodide Web Worker, backend-free) | `bundle.py` re-embeds `vfed/` sources into `worker.js` |
+| `scripts/` | Utility scripts | `download_weather_db.py` refreshes `data/weather/` city CSVs |
+| `tests/` | Pytest suite | run with `pytest` |
+
+## Review Standard
+
+`REVIEW.md` is the simulation-architecture review checklist (heat & mass transfer + energy dispatch). Consult it when reviewing changes to `vfed/physics/`, `vfed/devices/`, `vfed/plants/`, or `vfed/pvbes/`.
 
 ## Constraints
 

@@ -221,6 +221,9 @@ vertical-farm-energy-designer/
 │   └── cli.py              # CLI entry point: vfed
 ├── research/               # Archived research paper code & data (see below)
 ├── reference/              # Reference literature
+├── data/weather/           # Pre-downloaded city weather CSVs (51 cities × 2025)
+├── scripts/                # Utility scripts (download_weather_db.py refreshes data/weather/)
+├── tests/                  # Pytest suite
 ├── weather_cache/          # Cached weather CSVs (auto-generated)
 ├── pyproject.toml          # Project metadata & dependencies
 ├── vfed-web/               # Browser visualisation (Pyodide Web Worker)
@@ -248,8 +251,8 @@ Each subfolder under `research/` has its own `README.md` with detailed documenta
 | `vfed design cities` | List built-in cities (pre-downloaded 2025 weather) |
 | `vfed design tariffs` | List built-in tariff regions |
 | `vfed validate <project.yaml>` | Validate a project YAML without running the simulation |
-| `vfed evaluate <project.yaml> [--cache dir] [--export dir]` | Run the building simulation for one configuration; `--export` writes `summary.csv` / `timeseries.csv` / `monthly.csv` into `dir` |
-| `vfed sweep <project.yaml> [--cache dir] [--out results.csv]` | Enumerate `space.parameter_ranges` (e.g. PV area × battery capacity) into a CSV; evaluate a single fixed configuration if no ranges are declared |
+| `vfed evaluate <project.yaml> [--cache dir] [--export dir] [--tariff region]` | Run the building simulation for one configuration; `--export` writes `summary.csv` / `timeseries.csv` / `monthly.csv` into `dir` |
+| `vfed sweep <project.yaml> [--cache dir] [--out results.csv] [--tariff region]` | Enumerate `space.parameter_ranges` (e.g. PV area × battery capacity) into a CSV; evaluate a single fixed configuration if no ranges are declared |
 
 ## Configuration
 
