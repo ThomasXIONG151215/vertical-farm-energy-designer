@@ -1091,20 +1091,25 @@ def _cmd_sweep(args):
         else:
             print(f"    {key:24s} = {val}")
 
-    # P1-2: investment metrics on the best row.
-    # * annual_savings / payback_period — legacy EnergySystem scope (bill
-    #   savings vs the all-grid baseline; legacy PV+battery unit pricing).
-    # * delta_* / npv_25yr / irr_pct — incremental (corrected) economics vs
+    # P1-2 / F1 (round 21): investment metrics on the best row.
+    # * annual_savings -- bill savings vs the all-grid baseline (excl. O&M).
+    # * payback_period -- F1: (PV+battery capital vs the no-PV/no-battery
+    #   baseline) / annual_savings (project capital config, not the legacy
+    #   hidden C_pv / c_energy unit prices).
+    # * delta_* / npv_25yr / irr_pct -- incremental (corrected) economics vs
     #   the no-PV/no-battery baseline; assumptions printed below.
     import math
 
     _sav = best.get("annual_savings")
     _pb = best.get("payback_period")
     if _sav is not None:
-        print(f"    annual_savings          = {_sav:.0f} {currency}/yr (legacy bill-savings scope)")
+        print(
+            f"    annual_savings          = {_sav:.0f} {currency}/yr "
+            "(bill savings vs all-grid baseline, excl O&M)"
+        )
     if _pb is not None:
         _pb_s = "inf" if math.isinf(_pb) else f"{_pb:.1f}"
-        print(f"    payback_period          = {_pb_s} yr (legacy scope)")
+        print(f"    payback_period          = {_pb_s} yr (delta capital / annual_savings)")
     _dc = best.get("delta_capital")
     _ds = best.get("delta_annual_savings")
     _npv = best.get("npv_25yr")
@@ -1121,9 +1126,9 @@ def _cmd_sweep(args):
             "(baseline grid bill - net grid bill - O&M on delta capital)"
         )
         if _ds is not None and _ds > 0:
-            print(f"    payback (incremental)   = {_dc / _ds:.1f} yr")
+            print(f"    payback (net of O&M)    = {_dc / _ds:.1f} yr")
         else:
-            print("    payback (incremental)   = inf (delta_annual_savings <= 0)")
+            print("    payback (net of O&M)    = inf (delta_annual_savings <= 0)")
         if _npv is not None and _npv == _npv:  # NaN-safe (NaN != NaN)
             print(f"    npv_25yr                = {_npv:.0f} {currency}")
         else:

@@ -153,7 +153,7 @@ def test_sweep_results_has_investment_columns(project_609):
 
 
 def test_sweep_zero_row_semantics(project_609):
-    """The [0,0] row IS the baseline: zero delta, legacy zeros, payback inf."""
+    """The [0,0] row IS the baseline: zero delta, zero savings, payback inf."""
     from vfed.design.sweep import sweep_design
 
     res = sweep_design(_sweep_project_609(project_609))
@@ -183,6 +183,16 @@ def test_sweep_pv_row_invariants(project_609):
     assert math.isfinite(row["payback_period"]) and row["payback_period"] > 0
     # delta capital = PV + battery capital (the other components cancel vs baseline)
     assert row["delta_capital"] == pytest.approx(row["capital_pv"] + row["capital_battery"])
+    # F1 (round 21): incremental payback identity -- payback x annual_savings
+    # == delta capital, so the column is recomputable from the CSV itself
+    # (preset 609 has no capital blocks -> legacy C_pv fallback pricing, so
+    # delta_capital == capital_pv + capital_battery == the payback numerator).
+    assert row["payback_period"] == pytest.approx(
+        row["delta_capital"] / row["annual_savings"], rel=1e-12
+    )
+    assert row["payback_period"] * row["annual_savings"] == pytest.approx(
+        row["delta_capital"], rel=1e-9
+    )
     # corrected delta savings = legacy bill savings - O&M on the delta capital
     assert row["delta_annual_savings"] == pytest.approx(
         row["annual_savings"] - p.opex.maintenance_pct * row["delta_capital"], rel=1e-9
@@ -204,6 +214,10 @@ def test_single_point_row_has_investment_columns(project_609):
         assert col in best, col
     assert best["delta_capital"] > 0.0
     assert math.isfinite(best["payback_period"])
+    # F1 (round 21): same incremental identity on the single-point row
+    assert best["payback_period"] == pytest.approx(
+        best["delta_capital"] / best["annual_savings"], rel=1e-12
+    )
     # grid-only single point: baseline == config → zero-delta semantics
     d2 = project_609.to_dict()
     d2["space"]["parameter_ranges"] = {}
@@ -212,6 +226,45 @@ def test_single_point_row_has_investment_columns(project_609):
     assert b2["annual_savings"] == pytest.approx(0.0, abs=1e-9)
     assert math.isinf(b2["payback_period"])
     assert math.isnan(b2["irr_pct"])
+
+
+def test_single_point_payback_user13_econ_scenario(project_609):
+    """user13 audit repro (round 21 F1): PV 100 m2 (23.2558 kWp) priced
+    per_kwp 3500 + battery 40 kWh priced per_kwh 500 -- the same sizing and
+    rates as ``user-gym/user13/u13_econ.yaml`` (annual load 62,444.5,
+    baseline grid bill 6,244.45).
+
+    The audit's FAIL item: the exported ``payback_period`` (6.4914 yr) used
+    the legacy hidden unit prices C_pv=500/kWp + c_energy=220/kWh
+    (capital 20,427.907) and matched no documented formula.  Under the F1
+    definition it becomes delta_capital / annual_savings = 101,395.349 /
+    3,146.920 = 32.2205 yr -- recomputable from the row's own columns."""
+    from vfed.design.presets import preset_609
+    from vfed.design.sweep import sweep_design
+
+    # fresh preset: the session-scoped project_609 fixture carries auto-sized
+    # HVAC/DEH nameplates written back by earlier engine runs (same pattern
+    # as test_09's column-set pin).
+    d = preset_609().to_dict()
+    d["pv"]["capital"] = {"mode": "per_kwp", "rate_per_kwp": 3500}
+    d["battery"]["capital"] = {"mode": "per_kwh", "rate_per_kwh": 500}
+    d["pv_area_m2"] = 100.0
+    d["battery_kwh"] = 40.0
+    d["space"]["parameter_ranges"] = {}
+    best = sweep_design(DesignProject.from_dict(d))["best"]
+
+    # user13's delta_capital: 3500 x (100/4.3) + 500 x 40 = 101,395.3488...
+    assert best["delta_capital"] == pytest.approx(3500.0 * 100.0 / 4.3 + 500.0 * 40.0, rel=1e-9)
+    # same savings regime as the audit (3,146.92 currency/yr)
+    assert best["annual_savings"] == pytest.approx(3146.92, abs=0.02)
+    # F1 identity: payback x annual_savings == delta capital
+    assert best["payback_period"] == pytest.approx(
+        best["delta_capital"] / best["annual_savings"], rel=1e-12
+    )
+    # the audited value under the corrected definition (user13 hand-check:
+    # 101,395.3488 / 3,146.9201 = 32.2205), NOT the legacy 6.4914
+    assert best["payback_period"] == pytest.approx(32.2205, abs=5e-3)
+    assert not math.isclose(best["payback_period"], 6.4914, abs_tol=0.5)
 
 
 # ---------------------------------------------------------------------------

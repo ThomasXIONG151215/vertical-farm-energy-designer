@@ -131,10 +131,17 @@ class CapitalCostConfig:
     enforced at load time and at pricing time; ``per_watt`` on pv/battery is
     rejected with a migration message instead of being silently re-interpreted.
     ``depreciation_years`` controls the CRF term in LCOE.
+
+    F2 (round 21): ``cost`` defaults to ``None`` — the "unspecified" sentinel.
+    ``None`` (capital block absent, or the block present but the ``cost`` key
+    omitted / null) selects the legacy fallback pricing (``pv.C_pv`` per kWp,
+    ``battery.c_energy`` per kWh; 0 for components without a legacy price).
+    An explicit ``cost: 0.0`` is a literal zero-cost component and never
+    falls back; negative values are rejected at load time.
     """
 
     mode: str = "direct"
-    cost: float = 0.0
+    cost: Optional[float] = None
     rate_per_watt: float = 1.0  # currency per rated W (LED/HVAC/DEH)
     rate_per_kwp: Optional[float] = None  # currency per rated kWp (PV only)
     rate_per_kwh: Optional[float] = None  # currency per rated kWh (battery only)
@@ -204,6 +211,15 @@ def validate_capital_config(cfg: CapitalCostConfig, component: str, yaml_path: s
     if cfg.mode == "per_kwh" and cfg.rate_per_kwh is None:
         raise ValueError(
             f"{where}: mode 'per_kwh' requires rate_per_kwh " f"(currency/kWh) to be set."
+        )
+    # F2 (round 21): cost=None means "unspecified" (legacy fallback) and is
+    # exempt from the negativity check; an explicit negative cost is a config
+    # error, not something to silently fall back from.
+    if cfg.cost is not None and cfg.cost < 0:
+        raise ValueError(
+            f"{where}: cost must be >= 0, got {cfg.cost}. Omit 'cost' (or the "
+            f"whole capital block) for legacy fallback pricing, or write an "
+            f"explicit cost: 0.0 for a zero-cost component."
         )
 
 
@@ -695,6 +711,19 @@ class DesignProject:
         d.pop("opex_was_defaulted", None)
         if self.opex_was_defaulted:
             d.pop("opex", None)
+        # F2 (round 21): a None capital cost means "unspecified -> legacy
+        # fallback".  Serializing it as ``cost: null`` would roundtrip as the
+        # same None, but omitting the key keeps templates clean and makes the
+        # serialized YAML say exactly what from_dict re-derives (roundtrip
+        # stays lossless either way; explicit 0.0 / positive values are kept).
+        for _sec in ("hvac", "deh", "led", "pv", "battery"):
+            _cap = d.get(_sec, {}).get("capital")
+            if isinstance(_cap, dict) and _cap.get("cost") is None:
+                _cap.pop("cost", None)
+        for _key in ("equipment_capital", "envelope_capital", "pump_capital"):
+            _cap = d.get(_key)
+            if isinstance(_cap, dict) and _cap.get("cost") is None:
+                _cap.pop("cost", None)
         return d
 
     def save(self, path) -> None:

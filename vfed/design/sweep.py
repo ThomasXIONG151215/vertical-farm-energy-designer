@@ -82,8 +82,9 @@ def _resolve_capital(
         cfg: CapitalCostConfig from the project.
         rated_value: rated value in the component's pricing basis
             (W for LED/HVAC/DEH; kWp for PV; kWh for battery).
-        legacy_fallback: cost from old config field (C_pv, c_energy) if capital
-            resolves to nothing (mode 'direct' with cost <= 0).
+        legacy_fallback: cost from the old config field (C_pv, c_energy) when
+            the capital block — or its ``cost`` key — is absent
+            (``cost is None``, the F2 round-21 "unspecified" sentinel).
         component: component key (led/hvac/deh/pv/battery/equipment/envelope/
             pump).  The mode must match the component's pricing basis
             (``CAPITAL_MODES_BY_COMPONENT``, P0-1) -- 'per_watt' on pv/battery
@@ -102,10 +103,13 @@ def _resolve_capital(
         return cfg.rate_per_kwp * rated_value
     if cfg.mode == "per_kwh":
         return cfg.rate_per_kwh * rated_value
-    # mode == "direct"
-    if cfg.cost > 0:
-        return cfg.cost
-    return legacy_fallback
+    # mode == "direct" -- F2 (round 21): the None sentinel separates
+    # "unspecified" (block or cost key absent -> legacy fallback pricing,
+    # README: "no capital: block -> legacy fallback") from an explicit zero
+    # (cost: 0.0 = literal zero-cost component, never falls back).
+    if cfg.cost is None:
+        return legacy_fallback
+    return cfg.cost
 
 
 def _total_capital(project: DesignProject, pv_area: float, battery_kwh: float) -> Dict[str, float]:
@@ -538,25 +542,30 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
         _load = np.asarray(sim["load"], dtype=float)
         _hours = np.asarray(sim["weather"]["hour"], dtype=int)
         _es = _build_energy_system(project)
-        # Legacy scope (EnergySystem.calculate_metrics): bill savings vs the
-        # all-grid baseline; payback = legacy PV+battery capital / savings.
+        # annual_savings: bill savings vs the all-grid baseline (excludes O&M).
         # NOTE: engine's summary annual_grid_cost_net is rounded to 2 dp, so
-        # for an enabled system the legacy savings carry that (±0.005)
-        # rounding; when the config IS the baseline (pv=0 & battery=0) the
-        # savings are exactly zero by construction.
+        # for an enabled system the savings carry that (±0.005) rounding;
+        # when the config IS the baseline (pv=0 & battery=0) the savings are
+        # exactly zero by construction.
         _baseline = float(np.sum(_load * _es.tariff.price_array(_hours)))
         _grid_only = float(project.pv_area_m2) <= 0.0 and float(project.battery_kwh) <= 0.0
         _sav = 0.0 if _grid_only else _baseline - s.get("annual_grid_cost_net", 0.0)
-        _leg_cap = (
-            _es.pv.calculate_costs(float(project.pv_area_m2))["capital_cost"]
-            + _es.battery.calculate_costs(float(project.battery_kwh))["capital_cost"]
-        )
-        best["annual_savings"] = _sav
-        best["payback_period"] = (_leg_cap / _sav) if _sav > 0 else float("inf")
         # P1-2 incremental economics vs the no-PV/no-battery baseline (see
         # the assumptions block above _annuity_factor).
         _cap0 = _total_capital(project, float(project.pv_area_m2), float(project.battery_kwh))
         _dcap = _cap0["PV"] + _cap0["Battery"]
+        # F1 (round 21): payback = incremental capital vs the no-PV/no-battery
+        # baseline / bill savings — computed from the project capital config,
+        # replacing the legacy hidden-unit-price capital (C_pv/c_energy) that
+        # user13 could not reconcile with any CSV column (6.49 yr vs 32.2 yr).
+        # The baseline PV+battery capital at zero size is 0 for all
+        # size-proportional modes; a fixed direct cost cancels against itself.
+        _cap_base = _total_capital(project, 0.0, 0.0)
+        _dcap_base = _cap_base["PV"] + _cap_base["Battery"]
+        best["annual_savings"] = _sav
+        best["payback_period"] = (
+            (_dcap - _dcap_base) / _sav if _sav > 0 else float("inf")
+        )
         _dsav = (
             0.0
             if _grid_only
@@ -635,6 +644,14 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
         baseline_grid_cost = _tariff.annual_cost(_load_arr, np.zeros_like(_load_arr), _hours_arr)[
             "net_grid_cost"
         ]
+        # F1 (round 21): payback baseline capital for this building combo —
+        # the same config priced at pv=0 / battery=0.  Pure config arithmetic
+        # (no simulation), so it works whether or not the scan grid contains
+        # a (0, 0) row.  With size-proportional pricing (per_kwp / per_kwh /
+        # legacy fallback) this is exactly 0; a fixed direct-mode cost cancels
+        # against itself in the delta.
+        _cap_base = _total_capital(p, 0.0, 0.0)
+        _dcap_base = _cap_base["PV"] + _cap_base["Battery"]
 
         if pvb_names:
             for A_pv in pv_areas:
@@ -709,11 +726,19 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
                             (1.0 - m["annual_grid_import"] / max(annual_load, 1e-6)) * 100.0, 1
                         ),
                         "pv_self_consumption_rate": round(float(m["pv_self_consumption_rate"]), 4),
-                        # Legacy EnergySystem scope: bill savings vs the
-                        # all-grid baseline (excludes O&M); payback uses the
-                        # legacy PV+battery unit pricing (C_pv / c_energy).
+                        # annual_savings: bill savings vs the all-grid
+                        # baseline (excludes O&M; legacy EnergySystem scope).
+                        # F1 (round 21): payback_period is now the INCREMENTAL
+                        # definition (PV+battery capital vs the same at
+                        # pv=0/battery=0) / annual_savings — replacing the
+                        # legacy passthrough that priced the numerator with
+                        # the hidden unit prices C_pv / c_energy.
                         "annual_savings": m["annual_savings"],
-                        "payback_period": m["payback_period"],
+                        "payback_period": (
+                            (delta_capital - _dcap_base) / m["annual_savings"]
+                            if m["annual_savings"] > 0
+                            else float("inf")
+                        ),
                         # P1-2 ②: incremental (corrected) investment metrics.
                         "delta_capital": delta_capital,
                         "delta_annual_savings": delta_savings,
@@ -786,6 +811,10 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
             delta_capital = cap["PV"] + cap["Battery"]
             delta_savings = baseline_grid_cost - (net_grid + p.opex.maintenance_pct * delta_capital)
             _repl = _battery_replacement_pv(cap["Battery"], _life, _years, p.interest_rate)
+            # F1 (round 21): incremental payback (see the pvb branch above);
+            # _dcap_base was computed per building combo next to
+            # baseline_grid_cost.
+            _row_sav = m["annual_savings"] if m is not None else 0.0
 
             row = {
                 **base,
@@ -817,7 +846,11 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
                     round(float(m["pv_self_consumption_rate"]), 4) if m is not None else 0.0
                 ),
                 "annual_savings": m["annual_savings"] if m is not None else 0.0,
-                "payback_period": m["payback_period"] if m is not None else float("inf"),
+                # F1 (round 21): incremental payback = (PV+battery capital vs
+                # the same at pv=0/battery=0) / annual_savings.
+                "payback_period": (
+                    (delta_capital - _dcap_base) / _row_sav if _row_sav > 0 else float("inf")
+                ),
                 "delta_capital": delta_capital,
                 "delta_annual_savings": delta_savings,
                 "npv_25yr": _incremental_npv(

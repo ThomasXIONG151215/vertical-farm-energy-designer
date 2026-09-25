@@ -402,6 +402,79 @@ class TestCapitalUnitModes:
 
 
 # ---------------------------------------------------------------------------
+# 4.4b  Capital cost None sentinel (F2, round 21)
+# ---------------------------------------------------------------------------
+class TestCapitalCostSentinel:
+    """F2 (round 21): ``cost=None`` is the "unspecified" sentinel — legacy
+    fallback pricing applies only when the capital block (or its ``cost``
+    key) is absent. Before round 21 the default was ``cost=0.0`` with a
+    ``cost <= 0 -> fallback`` condition, so an explicit ``cost: 0.0`` was
+    indistinguishable from "no block" and silently re-priced PV/battery at
+    the legacy hidden unit prices (user13: 11,627.91 inserted into a
+    zero-cost PV config, ~3% LCOE distortion)."""
+
+    def test_block_missing_is_none_and_falls_back(self):
+        from vfed.design.sweep import _total_capital
+
+        p = DesignProject()  # all defaults
+        assert p.pv.capital.cost is None
+        assert p.battery.capital.cost is None
+        cap = _total_capital(p, 43.0, 40.0)  # 43 m2 / 4.3 = 10 kWp
+        assert cap["PV"] == pytest.approx(500.0 * 10.0)
+        assert cap["Battery"] == pytest.approx(220.0 * 40.0)
+
+    def test_cost_key_missing_inside_block_falls_back(self):
+        from vfed.design.sweep import _total_capital
+
+        p = DesignProject.from_dict({"pv": {"capital": {"mode": "direct"}}})
+        assert p.pv.capital.cost is None
+        assert _total_capital(p, 43.0, 0.0)["PV"] == pytest.approx(5000.0)
+
+    def test_explicit_zero_cost_is_literal_zero(self):
+        from vfed.design.sweep import _total_capital
+
+        p = DesignProject.from_dict(
+            {
+                "pv": {"capital": {"mode": "direct", "cost": 0.0}},
+                "battery": {"capital": {"mode": "direct", "cost": 0.0}},
+            }
+        )
+        cap = _total_capital(p, 100.0, 40.0)
+        # user13 pv100 repro: was 500 x 100/4.3 = 11,627.91 via fallback
+        assert cap["PV"] == 0.0
+        assert cap["Battery"] == 0.0
+
+    def test_explicit_positive_direct_cost_used_as_is(self):
+        from vfed.design.sweep import _total_capital
+
+        p = DesignProject.from_dict({"pv": {"capital": {"mode": "direct", "cost": 1234.0}}})
+        # direct mode: absolute cost, independent of the rated value
+        assert _total_capital(p, 100.0, 0.0)["PV"] == 1234.0
+
+    def test_negative_cost_rejected_at_load(self):
+        with pytest.raises(ValueError, match="cost must be >= 0"):
+            DesignProject.from_dict({"pv": {"capital": {"mode": "direct", "cost": -5.0}}})
+
+    def test_to_dict_omits_none_cost_and_roundtrips(self):
+        p = DesignProject.from_dict(
+            {"pv": {"capital": {"mode": "per_kwp", "rate_per_kwp": 3500}}}
+        )
+        d = p.to_dict()
+        assert "cost" not in d["pv"]["capital"]  # None omitted, not `cost: null`
+        assert "cost" not in d["battery"]["capital"]
+        assert "cost" not in d["equipment_capital"]
+        p2 = DesignProject.from_dict(d)
+        assert p2.pv.capital.cost is None
+        assert p2.pv.capital.rate_per_kwp == 3500.0
+
+    def test_to_dict_keeps_explicit_zero_cost(self):
+        p = DesignProject.from_dict({"pv": {"capital": {"mode": "direct", "cost": 0.0}}})
+        d = p.to_dict()
+        assert d["pv"]["capital"]["cost"] == 0.0
+        assert DesignProject.from_dict(d).pv.capital.cost == 0.0
+
+
+# ---------------------------------------------------------------------------
 # 4.5  Capital pricing arithmetic (P0-1)
 # ---------------------------------------------------------------------------
 class TestCapitalUnitArithmetic:
