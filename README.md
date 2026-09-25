@@ -292,6 +292,10 @@ Van Henten biomass responds to light and temperature only — there is no water-
 
 The simulation uses a single weather year (default 2025) — there is no inter-annual variability. PV output likewise reflects a lifespan-median year: no degradation and no year-to-year spread.
 
+### Weather data (ERA5) known bias
+
+Weather comes from the Open-Meteo archive API, whose ERA5 reanalysis is known to **overestimate surface solar irradiance over eastern China by ~+15-25%** (Atmosphere 2026: PBIAS 57.4% at daily scale, ME +124 W/m² vs 160 CMA stations; cloud and aerosol extinction are under-represented). For Shanghai 2025 the bundled data yields GHI ≈ 1570 kWh/m²/yr vs NASA POWER 1367 and CMA ground-truth 1250-1300. PV generation and specific yield inherit this bias proportionally (the implied performance ratio stays normal at 0.78-0.87), so treat absolute PV/electricity-saving numbers as optimistic when sourced from ERA5. Check your own annual figure via `summary.annual_ghi_kwh_m2`; a data-source switch or bias-correction option is planned.
+
 ### HVAC COP winter ceiling
 
 Heating COP is capped at 4.5 by a hard limit, not by physics — uncapped Carnot values can exceed 17 in winter. The parameter pair (η_II = 0.35, ΔT_cond = 15 K) is not uniquely identifiable: several pairs reproduce the same COP, so treat the cap as an engineering envelope rather than a calibrated physical result.
