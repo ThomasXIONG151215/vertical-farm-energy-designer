@@ -4,7 +4,34 @@ All notable changes to VFED are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is best-effort
 semantic — behaviour changes are called out explicitly under **Changed**.
 
+## [2.1.1] - 2026-09-25
+
+Accuracy-audit release (user13 + whitebox/GHI deep checks, round 21).
+
+### Fixed
+- **`payback_period` now recomputable**: sweep column switched from the
+  legacy `capital_cost/annual_savings` formula (hidden C_pv=500/kWp +
+  c_energy=220/kWh pricing; produced a plausible-but-wrong 6.49 yr on the
+  audit case) to `delta_capital / annual_savings` — every row reproduces
+  from exported columns to 1e-9. Console prints both gross and net-of-O&M
+  payback with explicit labels.
+- **Explicit `capital cost: 0.0` is honoured literally** (was silently
+  falling back to legacy unit-price estimation, inflating LCOE ~3%); the
+  fallback now requires the key/block to be absent (`null` counts as
+  absent). Negative costs are rejected.
+
+### Added
+- `summary.annual_capital` (capital x CRF), `summary.annual_ghi_kwh_m2`,`
+  `battery_charge_kwh` / `battery_recon_grid_kwh` — the battery energy
+  balance (+17.6 kWh residual) and apparent RTE overshoot (0.8303 vs 0.8281)
+  are now exactly explainable from exports; README documents the
+  year-end SOC reconciliation and cycles accounting convention.
+- README: ERA5 eastern-China GHI bias (+15-25% vs NASA POWER/CMA) declared
+  under Model Scope & Limitations.
+- Web worker rebundled with the new capital semantics.
+
 ## [2.1.0] - 2026-09-21
+
 
 Full repair-and-verification cycle driven by 11 simulated cold-start user
 audits (personas user1-user12, reports under `user-gym/`), executed in 18

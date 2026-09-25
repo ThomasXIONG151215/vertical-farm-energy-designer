@@ -83,14 +83,14 @@ def stub_engine(monkeypatch):
 # T1  --version
 # ---------------------------------------------------------------------------
 def test_dunder_version_matches_pyproject():
-    assert vfed.__version__ == "2.1.0"
+    assert vfed.__version__ == "2.1.1"
 
 
 def test_version_flag_prints_and_exits_zero(capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--version"])
     assert exc.value.code == 0
-    assert capsys.readouterr().out.strip() == "vfed 2.1.0"
+    assert capsys.readouterr().out.strip() == "vfed 2.1.1"
 
 
 def test_version_flag_position_independent(capsys):

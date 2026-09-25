@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vertical-farm-energy-designer"
-version = "2.1.0"
+version = "2.1.1"
 description = "Parametric, config-driven design simulator for vertical farms: digital-twin (ODE) building model + PV-Battery-Grid (PVBES) energy system"
 readme = "README.md"
 license = "MIT"
@@ -65,7 +65,7 @@ Discussions = "https://github.com/ThomasXIONG151215/vertical-farm-energy-designe
 vfed = "vfed.cli:main"
 
 [tool.hatch.version]
-fallback-version = "2.1.0"
+fallback-version = "2.1.1"
 
 [tool.hatch.build.targets.sdist]
 include = [
