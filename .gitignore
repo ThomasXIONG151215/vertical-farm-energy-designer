@@ -25,3 +25,22 @@ weather_cache/
 
 # UX persona test sandbox (user-gym)
 user-gym/
+
+# Local gadget projects (promo / animation / games / 3d-studio)
+gadget/
+
+# Local scratchpads (no longer tracked; history kept)
+.scratchpad/
+
+# IDE / tooling
+.pytest_cache/
+*.code-workspace
+
+# research/: keep sources (.py/.ipynb/.idf/.json) tracked,
+# ignore heavy EnergyPlus outputs (local copies retained)
+research/**/*.html
+research/**/*.png
+research/**/*.csv
+research/**/*.epw
+research/**/*.zip
+research/**/*.xlsm
