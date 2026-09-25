@@ -89,6 +89,10 @@ class EnergySystem:
             "battery_charge": battery_charge,
             "battery_soc": bat["battery_soc"],
             "battery_cycles": bat["battery_cycles"],
+            # Round 21 F4: the P4-18 reconciliation energy (kWh, signed:
+            # + grid top-up / import, - dump / export) exported alongside the
+            # arrays so annual bookkeeping identities close from summary.csv.
+            "battery_recon_grid_kwh": float(bat.get("recon_grid_kwh", 0.0)),
             "grid_import": grid_import,
             "grid_export": grid_export,
             "load": load,

@@ -963,6 +963,11 @@ class DesignEngine:
             "harvest_per_month_avg_kg": round(float(np.mean(monthly_harvest)), 2),
             "dry_matter_fraction": dry_fraction,
             "annual_water_m3": round(annual_water_m3, 2),
+            # Round 21 F3: annual GHI insolation (kWh/m²/yr) as a summary
+            # scalar.  Same value as climate.annual_ghi_kwh_m2 (hourly
+            # shortwave_radiation summed over the aligned window ÷ 1000),
+            # flattened here so it actually reaches summary.csv.
+            "annual_ghi_kwh_m2": round(float(np.sum(GHI) / 1000.0), 2),
             # P1-3a: annual LED / HVAC totals (previously only derivable by
             # summing the hourly timeseries) and the energy_breakdown shares
             # flattened into summary scalars so they reach summary.csv.
@@ -1279,6 +1284,16 @@ class DesignEngine:
                     summary["pv_self_consumed_kwh"] = round(pv_self_consumed, 2)
                     summary["pv_self_consumption_rate"] = round(float(self_consumption_rate), 4)
                     summary["battery_discharge_kwh"] = round(bat_total_discharge, 2)
+                    # Round 21 F4: battery bookkeeping (additive).  Charge is
+                    # the TERMINAL-side annual throughput (sum of the hourly
+                    # battery_charge array, which already contains the P4-18
+                    # year-end reconciliation top-up), so the round-trip and
+                    # annual-balance identities close from summary.csv alone.
+                    bat_total_charge = float(np.sum(perf["battery_charge"]))
+                    summary["battery_charge_kwh"] = round(bat_total_charge, 2)
+                    summary["battery_recon_grid_kwh"] = round(
+                        float(perf.get("battery_recon_grid_kwh", 0.0)), 2
+                    )
                     summary["free_energy_kwh"] = round(free_energy_kwh, 2)
                     summary["grid_independence_pct"] = round(float(grid_independence) * 100, 1)
                 except Exception as e2:
@@ -1292,6 +1307,11 @@ class DesignEngine:
                     4,
                 )
                 summary["capital_total"] = round(float(capital_cost), 2)
+                # Round 21 F3: the annualised capital was already computed
+                # (CRF per component depreciation life, same value folded
+                # into lcoe / specific_cost_per_kg) but never exported —
+                # README promised the column.  Additive summary key.
+                summary["annual_capital"] = round(float(annual_cap), 2)
                 summary["annual_om"] = round(float(annual_om), 2)
                 summary["annual_grid_cost_net"] = round(float(net_grid_cost), 2)
                 # ── P1-7: OPEX transparency scalars (additive, summary only;
@@ -1360,6 +1380,9 @@ class DesignEngine:
                 4,
             )
             summary["capital_total"] = round(float(cap["total"]), 2)
+            # Round 21 F3: same annualised-capital export as the PV branch
+            # (identical _annualized_capital call); zero capital → 0.
+            summary["annual_capital"] = round(float(annual_cap), 2)
             summary["annual_om"] = round(float(annual_om), 2)
             summary["annual_grid_cost_net"] = round(float(net_grid_cost), 2)
             # ── P1-7: OPEX transparency scalars (additive, summary only;
@@ -1378,6 +1401,10 @@ class DesignEngine:
             summary["pv_self_consumed_kwh"] = 0.0
             summary["pv_self_consumption_rate"] = 0.0
             summary["battery_discharge_kwh"] = 0.0
+            # Round 21 F4: no battery → zero bookkeeping (same convention as
+            # the other battery_* keys above).
+            summary["battery_charge_kwh"] = 0.0
+            summary["battery_recon_grid_kwh"] = 0.0
             summary["free_energy_kwh"] = 0.0
             summary["grid_independence_pct"] = 0.0
 

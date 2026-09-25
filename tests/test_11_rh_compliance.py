@@ -104,7 +104,16 @@ def sim_shanghai_2025():
 def test_summary_additive_keys(sim_shanghai_2025):
     s = sim_shanghai_2025.summary
     assert OLD_SUMMARY_KEYS <= set(s), f"pre-existing summary keys lost: {OLD_SUMMARY_KEYS - set(s)}"
-    assert set(s) == OLD_SUMMARY_KEYS | set(RH_KPIS) | set(OPEX_KPIS)
+    # Round 21 commit B (F3+F4): annual_capital / annual_ghi_kwh_m2 /
+    # battery_charge_kwh / battery_recon_grid_kwh join the additive set
+    # (see tests/test_19_round21_export_keys.py for their identities).
+    ROUND21_B_KEYS = {
+        "annual_capital",
+        "annual_ghi_kwh_m2",
+        "battery_charge_kwh",
+        "battery_recon_grid_kwh",
+    }
+    assert set(s) == OLD_SUMMARY_KEYS | set(RH_KPIS) | set(OPEX_KPIS) | ROUND21_B_KEYS
 
 
 # ── 609@Shanghai2025 aligned-window KPI pins (self-test measured) ──────────

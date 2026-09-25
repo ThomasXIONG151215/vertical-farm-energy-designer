@@ -331,10 +331,13 @@ Van Henten 生物量只响应光照与温度 — 没有水分胁迫耦合：灌�
 | 光伏年发电量 | `pv_generation_kwh` | kWh/年 | 年化 PV 发电（按寿命中期年份计，配合 CRF 年化口径） |
 | 电网购电量 | `grid_import_kwh` | kWh/年 | 年电网购入 |
 | 电网售电量 | `grid_export_kwh` | kWh/年 | 年电网卖出 |
-| 电池循环 | `battery_cycles` | 等效满循环/年 | 全年充放吞吐 ÷（2×电池容量） |
+| 电池循环 | `battery_cycles` | 等效满循环/年 | 储能侧吞吐 ÷（2×电池容量）：(`battery_charge_kwh`×η_ch + `battery_discharge_kwh`÷η_dis) ÷ (2×`battery_kwh`)。若按端侧吞吐 (充+放)÷(2×容量) 复算会偏高 1 − 2η/(1+η²) ≈ 0.44%（η=0.91，见下方电池簿记） |
 | 光伏自用量 | `pv_self_consumed_kwh` | kWh/年 | PV 直接供给负荷的部分 |
 | 光伏自用率 | `pv_self_consumption_rate` | 0–1 | 自用 ÷ 总发电 |
 | 电池放电量 | `battery_discharge_kwh` | kWh/年 | 年电池放电 |
+| 电池充电量 | `battery_charge_kwh` | kWh/年 | 年电池充电（端侧口径，**已含**年末对账补电 `battery_recon_grid_kwh`） |
+| 电池对账电量 | `battery_recon_grid_kwh` | kWh/年 | 年末 SOC 对账跨电网接口的电量（带符号：+ 电网补电计入 `grid_import_kwh`，− 泵出计入 `grid_export_kwh`；见下方电池簿记） |
+| 年总辐照 | `annual_ghi_kwh_m2` | kWh/m²/年 | 年累计水平面总辐照（对齐窗口内逐时 `GHI` 求和 ÷ 1000；与 `climate.annual_ghi_kwh_m2` 同值） |
 | 免费能源 | `free_energy_kwh` | kWh/年 | PV 自用 + 电池放电 |
 | 电网独立率 | `grid_independence_pct` | % | （1 − 电网购入 ÷ 负荷）× 100；**电网依赖率 = 100 − 该值** |
 
@@ -388,10 +391,11 @@ summary.csv（单行 — 标量 KPI）：
 | `dry_matter_fraction` | — | 干→鲜换算系数（默认 0.05） |
 | `annual_water_m3` | m³/年 | 全年蒸腾耗水 |
 | `lcoe` | currency/kWh | （年化资本 + 运营 + 净购电）÷ 年负荷 — 设施全成本口径，非发电 LCOE |
-| `capital_total` / `annual_om` | currency、currency/年 | 总资本 / 年运营 |
+| `capital_total` / `annual_capital` / `annual_om` | currency、currency/年、currency/年 | 总资本 / 按各组件折旧年限 CRF 年化的资本（即折入 `lcoe` 的那个值）/ 年运营 |
 | `total_electricity_cost` = `annual_grid_cost_net` | currency/年 | 净电费：Σ(`grid_import` × 逐时电价) − Σ(`grid_export` × `export_price`)。始终计价 — 没有"禁用电价"模式；yaml 无 `tariff` 节时用默认值（平价 0.10/kWh、上网 0.05） |
 | `grid_import_kwh` / `grid_export_kwh` / `pv_generation_kwh` | kWh/年 | 年购电 / 售电 / 光伏发电（纯电网运行为 0，此时购电 = 负荷） |
-| `battery_cycles` / `battery_discharge_kwh` / `pv_self_consumed_kwh` / `pv_self_consumption_rate` / `free_energy_kwh` / `grid_independence_pct` | 混合 | 电池吞吐、光伏自用、电网独立率（见上方 KPI 表） |
+| `battery_cycles` / `battery_discharge_kwh` / `battery_charge_kwh` / `battery_recon_grid_kwh` / `pv_self_consumed_kwh` / `pv_self_consumption_rate` / `free_energy_kwh` / `grid_independence_pct` | 混合 | 电池吞吐与簿记 KPI（见下方**电池簿记**）、光伏自用、电网独立率（见上方 KPI 表） |
+| `annual_ghi_kwh_m2` | kWh/m²/年 | 仿真窗口的年 GHI 总辐照（round 21）：对齐本地自然年内 `Σ GHI ÷ 1000` — 使太阳能资源可直接从 summary.csv 审计 |
 | `moisture_clamp_stats` / `temperature_clamp_stats` | dict | 湿度积分器削顶事件（饱和上限 / 零下限）与温度削顶事件 |
 | `dehumidifier_performance` | dict | 名义 vs 实际（受室内湿存水限制）除湿量；`removal_limited_*` |
 | `deh_smer` | dict | 有效/送达/额定 SMER（kg/kWh，压缩机输入口径，不含风机）；`deh_comp_energy_kwh` 不含风机，`deh_total_energy_kwh` 含风机 |
@@ -429,6 +433,18 @@ monthly.csv（12 行，`month` 为 1-12 不含年份 — 每个桶即天气年�
 | `grid_import_kwh` | kWh | 月度购电（纯电网运行 = `energy_kwh__total`） |
 | `electricity_cost` | currency | 月度净电费：Σ(`grid_import` × 逐时电价) − Σ(`grid_export` × `export_price`)；12 个月合计与 `annual_grid_cost_net` 闭合（差 < 0.01）。始终计价（见上方电价说明） |
 | `pv_generation_kwh` / `grid_export_kwh` / `battery_net_kwh` | kWh | 仅 PV/电池启用时输出：月度光伏发电 / 售电 / 电池净电量（放电 − 充电） |
+
+### 电池簿记：年末 SOC 对账与吞吐恒等式
+
+电池调度从 `soc0`（默认 0.5）起步，但年末不保证回到该值，年能量平衡因此需要一笔对账分录才能精确闭合。以下三条规则使所有电池导出量都可以只凭 `summary.csv` 审计：
+
+1. **年末 SOC 对账（P4-18）。** 最后一个时步把 SOC 恢复到周期边界（`soc0` 并夹到 [soc_min, soc_max]）。若年末低于目标（如电池被抽到 `soc_min`），差额 `容量 × (soc0 − soc_end)` 由**电网补足**：端侧电量 `容量 × (soc0 − soc_end) ÷ η_ch` 同时计入最后一小时的 `grid_import` 与 `battery_charge` — **进 import、不进 load**。若年末高于目标，多余电量泵出并计入 `grid_export` / `battery_discharge`。该带符号电量导出为 `battery_recon_grid_kwh`（+ = 购电补电，− = 泵出售电）。
+   - 年平衡因此在**含充电项**时精确闭合：`光伏发电 + 电网购入 + 电池放电 = 负荷 + 电池充电 + 电网售出`（精确）。
+   - 部分审计使用的免充电项检验 `电网购入 + 电池放电 + 光伏自用 − 负荷` 残差恰为 `battery_recon_grid_kwh` — 那就是对账补电，不是能量凭空消失。
+2. **`battery_cycles` 按储能侧吞吐计。** 公式 `(充电 × η_ch + 放电 ÷ η_dis) ÷ (2 × 容量)` — 两段都折算成进出电芯的电量。若按端侧吞吐 `(充电 + 放电) ÷ (2 × 容量)` 复算，结果会偏高 `1 − 2η/(1+η²)` ≈ **0.443%**（默认 η_ch = η_dis = 0.91）— 这是定义口径差，不是误差。
+3. **实测往返效率恒等式。** `battery_discharge_kwh ÷ battery_charge_kwh = η_ch × η_dis`（默认 0.8281）精确成立，因为 `battery_charge_kwh` 已含对账补电。若只用光伏列推充电分母（`pv_generation − pv_self_consumed − grid_export`），必须再加上 `battery_recon_grid_kwh` 才是完整分母 — 漏掉它正是"实测 RTE 0.8303 而非 0.8281"的成因。
+
+纯电网运行（或 `battery_kwh = 0`）时三个电池簿记键均为 0。
 
 ### 输出术语与警告解释（Output Glossary）
 

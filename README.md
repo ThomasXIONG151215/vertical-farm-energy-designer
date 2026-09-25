@@ -331,9 +331,12 @@ These bounds are documented, not accepted as fixed — future versions may tight
 | PV generation | `pv_generation_kwh` | kWh/yr | Annual PV output |
 | Grid import | `grid_import_kwh` | kWh/yr | Annual grid purchases |
 | Grid export | `grid_export_kwh` | kWh/yr | Annual grid sales |
-| Battery cycles | `battery_cycles` | full cycles/yr | Annual throughput ÷ (2 × capacity) |
+| Battery cycles | `battery_cycles` | full cycles/yr | Storage-side throughput ÷ (2 × capacity): (`battery_charge_kwh` × η_ch + `battery_discharge_kwh` ÷ η_dis) ÷ (2 × `battery_kwh`). Terminal-side throughput gives a value higher by 1 − 2η/(1+η²) ≈ 0.44% at η=0.91 (see battery bookkeeping below) |
 | PV self-consumption | `pv_self_consumed_kwh` / `pv_self_consumption_rate` | kWh/yr / 0-1 | PV directly serving the load / share of generation |
 | Battery discharge | `battery_discharge_kwh` | kWh/yr | Annual battery discharge |
+| Battery charge | `battery_charge_kwh` | kWh/yr | Annual battery charge (terminal side, **includes** the year-end reconciliation top-up `battery_recon_grid_kwh`) |
+| Battery reconciliation | `battery_recon_grid_kwh` | kWh/yr | Year-end SOC reconciliation energy crossing the grid interface (signed: + grid top-up counted in `grid_import_kwh`, − dump counted in `grid_export_kwh`; see battery bookkeeping below) |
+| Annual GHI | `annual_ghi_kwh_m2` | kWh/m²/yr | Annual global horizontal irradiation (hourly `GHI` summed over the aligned year ÷ 1000; same value as `climate.annual_ghi_kwh_m2`) |
 | Free energy | `free_energy_kwh` | kWh/yr | PV self-consumed + battery discharge |
 | Grid independence | `grid_independence_pct` | % | (1 − grid import ÷ load) × 100; **grid dependency = 100 − this value** |
 
@@ -395,10 +398,11 @@ summary.csv (single row — scalar KPIs):
 | `dry_matter_fraction` | — | dry→fresh conversion (default 0.05) |
 | `annual_water_m3` | m³/yr | Annual transpiration water |
 | `lcoe` | currency/kWh | (annualised capital + O&M + net grid cost) ÷ annual load — facility full cost per kWh, not a generation LCOE |
-| `capital_total` / `annual_om` | currency, currency/yr | Installed capital / annual O&M |
+| `capital_total` / `annual_capital` / `annual_om` | currency, currency/yr, currency/yr | Installed capital / CRF-annualised capital (per component depreciation life; the value folded into `lcoe`) / annual O&M |
 | `total_electricity_cost` = `annual_grid_cost_net` | currency/yr | Net grid bill: Σ(`grid_import` × hourly price) − Σ(`grid_export` × `export_price`). Always priced — there is no disabled-tariff mode; a yaml without a `tariff` section uses the defaults (0.10/kWh flat, 0.05 feed-in) |
 | `grid_import_kwh` / `grid_export_kwh` / `pv_generation_kwh` | kWh/yr | Grid purchases / sales / PV output (0 on a grid-only run, where import = load) |
-| `battery_cycles` / `battery_discharge_kwh` / `pv_self_consumed_kwh` / `pv_self_consumption_rate` / `free_energy_kwh` / `grid_independence_pct` | mixed | Battery throughput KPIs, PV self-consumption, grid independence (see KPI table above) |
+| `battery_cycles` / `battery_discharge_kwh` / `battery_charge_kwh` / `battery_recon_grid_kwh` / `pv_self_consumed_kwh` / `pv_self_consumption_rate` / `free_energy_kwh` / `grid_independence_pct` | mixed | Battery throughput & bookkeeping KPIs (see **Battery bookkeeping** below), PV self-consumption, grid independence (see KPI table above) |
+| `annual_ghi_kwh_m2` | kWh/m²/yr | Annual GHI insolation of the simulation window (round 21): `Σ GHI ÷ 1000` over the aligned local calendar year — makes the solar resource auditable from summary.csv itself |
 | `moisture_clamp_stats` / `temperature_clamp_stats` | dict | Humidity-integrator clip events (saturation cap / zero floor) and temperature clip events |
 | `dehumidifier_performance` | dict | Nominal vs actual (inventory-capped) moisture removal; `removal_limited_*` |
 | `deh_smer` | dict | Effective / delivered / rated SMER (kg/kWh, compressor input, fan excluded); `deh_comp_energy_kwh` excludes the fan, `deh_total_energy_kwh` includes it |
@@ -436,6 +440,18 @@ monthly.csv (12 rows, `month` 1-12 without a year — each bucket is one natural
 | `grid_import_kwh` | kWh | Monthly grid purchases (= `energy_kwh__total` on a grid-only run) |
 | `electricity_cost` | currency | Monthly net bill: Σ(`grid_import` × hourly tariff price) − Σ(`grid_export` × `export_price`); the 12 values close against `annual_grid_cost_net` (diff < 0.01). Always priced (see tariff note above) |
 | `pv_generation_kwh` / `grid_export_kwh` / `battery_net_kwh` | kWh | Only when PV or battery is enabled: monthly PV output / grid sales / net battery energy (discharge − charge) |
+
+### Battery bookkeeping: year-end SOC reconciliation & throughput identities
+
+The battery dispatch starts the year at `soc0` (default 0.5) but is not guaranteed to end there, so the annual energy balance needs one reconciliation entry to close exactly. Three rules make every exported battery number auditable from `summary.csv` alone:
+
+1. **Year-end SOC reconciliation (P4-18).** At the last timestep the SOC is restored to the periodic boundary (`soc0` clamped to [soc_min, soc_max]). If the year ends below the target (e.g. the battery was drawn down to `soc_min`), the deficit `capacity × (soc0 − soc_end)` is topped up **from the grid**: the terminal-side energy `capacity × (soc0 − soc_end) ÷ η_ch` is added to the last hour of both `grid_import` and `battery_charge` — it enters **import, not load**. If the year ends above the target, the surplus is dumped and enters `grid_export` / `battery_discharge` instead. The signed quantity is exported as `battery_recon_grid_kwh` (+ = import, − = export).
+   - The annual balance therefore closes **with** the charge term: `pv_generation + grid_import + battery_discharge = load + battery_charge + grid_export` (exact).
+   - The charge-free check `grid_import + battery_discharge + pv_self_consumed − load` that some audits use carries a residual of exactly `battery_recon_grid_kwh` — that is the reconciliation top-up, not lost energy.
+2. **`battery_cycles` counts storage-side throughput.** `(charge × η_ch + discharge ÷ η_dis) ÷ (2 × capacity)` — both legs converted to energy crossing the cell. If you instead divide terminal-side throughput `(charge + discharge) ÷ (2 × capacity)`, you get a value higher by `1 − 2η/(1+η²)` ≈ **0.443%** at the default η_ch = η_dis = 0.91 — a definitional difference, not an error.
+3. **Measured round-trip efficiency identity.** `battery_discharge_kwh ÷ battery_charge_kwh = η_ch × η_dis` (= 0.8281 at the defaults) exactly, because `battery_charge_kwh` already includes the reconciliation top-up. If you derive the charge denominator from the PV columns only (`pv_generation − pv_self_consumed − grid_export`), you must add `battery_recon_grid_kwh` to recover the full denominator — omitting it is what makes a measured RTE look like 0.8303 instead of 0.8281.
+
+On a grid-only run (or `battery_kwh = 0`) all three battery bookkeeping keys are 0.
 
 ### Output Glossary (warnings & special outputs)
 
