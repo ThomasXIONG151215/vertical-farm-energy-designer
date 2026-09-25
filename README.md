@@ -158,7 +158,7 @@ pv:       { capital: { mode: per_kwp,  rate_per_kwp: 3500 } }    # currency per 
 battery:  { capital: { mode: per_kwh,  rate_per_kwh: 500 } }     # currency per kWh
 ```
 
-A `per_watt` mode on `pv` or `battery` is rejected at load time with a migration message: before the P0-1 fix that spelling silently multiplied **kWp** for PV (1000x off the field name — a 46.5 kWp array at "3.5/W" priced out at 162 instead of 162,000) and **kWh** for battery. When a component has no `capital:` block, legacy fallback pricing applies (`pv.C_pv` per kWp, default 500 = market-anchored; `battery.c_energy` per kWh).
+A `per_watt` mode on `pv` or `battery` is rejected at load time with a migration message: before the P0-1 fix that spelling silently multiplied **kWp** for PV (1000x off the field name — a 46.5 kWp array at "3.5/W" priced out at 162 instead of 162,000) and **kWh** for battery. When a component has no `capital:` block — or the block omits its `cost` key (`cost: null`) — legacy fallback pricing applies (`pv.C_pv` per kWp, default 500 = market-anchored; `battery.c_energy` per kWh). An **explicit `cost: 0.0`** in a `direct` block is a *literal zero-cost component* (round 21, F2): it never falls back, so a project whose capital blocks are all explicit zeros reports `capital_total = 0` and an OPEX-only LCOE — exactly what the template NOTE promises. Negative `cost` values are rejected at load time.
 
 Both `evaluate` and `sweep` print a unit-price self-check line per capitalised component (e.g. `PV unit cost = 162792 RMB / 46.5 kWp = 3500.00 RMB/kWp (3.50 RMB/Wp)`) so the pricing basis can be verified by hand. (`example_lcoe_full.yaml` shows a complete cost model.) Then tune `opex` — especially `labor_cost_per_year` and `misc_opex_per_year`, which dominate small-scale economics.
 
@@ -222,13 +222,11 @@ vertical-farm-energy-designer/
 ├── research/               # Archived research paper code & data (see below)
 ├── reference/              # Reference literature
 ├── data/weather/           # Pre-downloaded city weather CSVs (51 cities × 2025)
-├── scripts/                # Utility scripts (download_weather_db.py refreshes data/weather/)
-├── tests/                  # Pytest suite
+├── scripts/                # Utility scripts (download_weather_db.py refreshes data/weather/; test_web_yaml.py checks the web YAML contract)
+├── tests/                  # Pytest suite (incl. test_project.yaml minimal fixture)
 ├── weather_cache/          # Cached weather CSVs (auto-generated)
 ├── pyproject.toml          # Project metadata & dependencies
 ├── vfed-web/               # Browser visualisation (Pyodide Web Worker)
-├── test_project.yaml       # Minimal fixture YAML — tests/ only, not a template
-├── test_web_yaml.py        # vfed-web end-to-end contract script — run: python test_web_yaml.py
 └── README.md
 ```
 
@@ -364,6 +362,14 @@ Additional outputs: `energy_breakdown` (`hvac_pct` / `led_pct` / `deh_pct` / `mi
 | `annual_grid_import` | kWh/yr | Annual grid purchases |
 | `annual_grid_export` | kWh/yr | Annual grid sales |
 | `battery_cycles` | full cycles/yr | Battery cycles |
+| `grid_independence_pct` | % | (1 − grid import ÷ load) × 100 |
+| `pv_self_consumption_rate` | 0-1 | PV directly serving the load ÷ generation |
+| `annual_savings` | currency/yr | Baseline grid bill (all-grid, same load) − net grid bill; **excludes O&M** |
+| `payback_period` | yr | **Round 21 (F1) definition change**: (PV+battery capital of the row − the same at pv=0/battery=0) ÷ `annual_savings`. Recomputable from the CSV as `delta_capital ÷ annual_savings` (size-proportional pricing). Before round 21 the numerator used the legacy hidden unit prices `pv.C_pv` + `battery.c_energy`, a value derivable from no other column |
+| `delta_capital` | currency | PV + battery capital (all other components cancel vs the no-PV/no-battery baseline) |
+| `delta_annual_savings` | currency/yr | `annual_savings` − O&M on `delta_capital` |
+| `npv_25yr` | currency | 25-yr NPV of the incremental cash flow (battery replacement discounted at its cycle-life year) |
+| `irr_pct` | % | IRR of the same stream (NaN = never pays back) |
 
 All `cost*` / `capital*` / `annual_*` monetary columns are in the project's `currency` (see `currency / exchange_rate`).
 

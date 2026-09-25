@@ -6,11 +6,11 @@ Utility scripts for maintaining repository data. / 维护仓库数据的实用�
 
 One-shot script: downloads **2025 hourly weather for every city** in the city DB from the Open-Meteo archive API and writes CSVs to `data/weather/`. Run it once and commit the resulting files; `fetch_weather(city=...)` then consumes them at design time **without any API call**.
 
-> Note: the web frontend does **not** read `vfed-web/data/weather/` (a legacy leftover — the worker uses the bundled `weather_cache/` instead; the script's `WEB_DIR` copy can be safely deleted).
+> Note: the script writes **only** to `data/weather/`. The web frontend does not read `vfed-web/data/weather/` (a legacy leftover — the worker uses the bundled `weather_cache/` instead); the script's former `WEB_DIR` mirror copy has been removed.
 
 一次性脚本：从 Open-Meteo archive API 下载城市库中**所有城市的 2025 年逐时天气**，写入 `data/weather/`。运行一次并提交生成的文件；之后 `fetch_weather(city=...)` 在设计时直接使用这些文件，**无需任何 API 调用**。
 
-> 注意：网页前端**不读取** `vfed-web/data/weather/`（该目录是历史遗留，worker 使用的是 bundle 打包的 `weather_cache/`；脚本中的 `WEB_DIR` 副本可安全删除）。
+> 注意：脚本现在**只**写入 `data/weather/`。网页前端不读取 `vfed-web/data/weather/`（该目录是历史遗留，worker 使用的是 bundle 打包的 `weather_cache/`）；脚本原有的 `WEB_DIR` 镜像副本已移除。
 
 ### Usage / 用法
 

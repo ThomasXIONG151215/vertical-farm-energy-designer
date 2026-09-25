@@ -25,7 +25,6 @@ from vfed.weather.city_db import AVAILABLE_CITIES, _COORDS
 OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
 YEAR = 2025
 OUT_DIR = Path(__file__).resolve().parent.parent / "data" / "weather"
-WEB_DIR = Path(__file__).resolve().parent.parent / "vfed-web" / "data" / "weather"
 
 
 def download_city(city: str, force: bool = False) -> bool:
@@ -79,10 +78,8 @@ def download_city(city: str, force: bool = False) -> bool:
         df = df.fillna(0.0)
 
         OUT_DIR.mkdir(parents=True, exist_ok=True)
-        WEB_DIR.mkdir(parents=True, exist_ok=True)
 
         df.to_csv(out_path)
-        df.to_csv(WEB_DIR / f"{city}_{YEAR}.csv")
 
         print(f"OK ({len(df)} rows)")
         return True

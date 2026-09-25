@@ -452,9 +452,13 @@ def test_sample_yaml_transpiration_matches_code_default():
     import yaml
 
     root = Path(__file__).resolve().parents[1]
-    for fname in ("test_project.yaml", "example_lcoe_full.yaml",
-                  "example_sweep.yaml"):
-        with open(root / fname, encoding="utf-8") as fh:
+    fixtures = {
+        "test_project.yaml": Path(__file__).resolve().parent,
+        "example_lcoe_full.yaml": root,
+        "example_sweep.yaml": root,
+    }
+    for fname, base in fixtures.items():
+        with open(base / fname, encoding="utf-8") as fh:
             cfg = yaml.safe_load(fh)
         t = cfg["transpiration"]
         assert t["method"] == "van_henten", fname
@@ -473,9 +477,13 @@ def test_sample_yaml_pv_params_match_code_default():
     import yaml
 
     root = Path(__file__).resolve().parents[1]
-    for fname in ("test_project.yaml", "example_lcoe_full.yaml",
-                  "example_sweep.yaml"):
-        with open(root / fname, encoding="utf-8") as fh:
+    fixtures = {
+        "test_project.yaml": Path(__file__).resolve().parent,
+        "example_lcoe_full.yaml": root,
+        "example_sweep.yaml": root,
+    }
+    for fname, base in fixtures.items():
+        with open(base / fname, encoding="utf-8") as fh:
             cfg = yaml.safe_load(fh)
         pv = cfg["pv"]
         assert pv["alpha_sc"] == pytest.approx(0.00045), fname

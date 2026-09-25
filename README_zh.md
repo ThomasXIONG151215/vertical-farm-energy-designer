@@ -222,13 +222,11 @@ vertical-farm-energy-designer/
 ├── research/               # 论文归档代码与数据（见下）
 ├── reference/              # 参考文献
 ├── data/weather/           # 预下载城市天气 CSV（51 城 × 2025）
-├── scripts/                # 工具脚本（download_weather_db.py 刷新 data/weather/）
-├── tests/                  # Pytest 测试套件
+├── scripts/                # 工具脚本（download_weather_db.py 刷新 data/weather/；test_web_yaml.py 校验 web YAML 契约）
+├── tests/                  # Pytest 测试套件（含 test_project.yaml 最小夹具）
 ├── weather_cache/          # 缓存的天气 CSV（自动生成）
 ├── pyproject.toml          # 项目元数据与依赖
 ├── vfed-web/               # 浏览器可视化（Pyodide Web Worker）
-├── test_project.yaml       # 最小夹具 YAML — 仅供 tests/ 使用，非模板
-├── test_web_yaml.py        # vfed-web 端到端契约脚本 — 用法：python test_web_yaml.py
 └── README.md
 ```
 
