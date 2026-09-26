@@ -123,6 +123,9 @@ def test_warn_helper_threshold_and_suppression(monkeypatch):
     assert "USD" in msg
     assert "84.9%" in msg
     assert "add an explicit opex section to your YAML" in msg
+    # round 25: warn_explicit attribution -- no caller source path trailer
+    assert rec[0].filename == "vfed.engine"
+    assert rec[0].lineno == 0
 
     # explicit opex section (same values): silent even at 90%
     with warnings.catch_warnings(record=True) as rec:

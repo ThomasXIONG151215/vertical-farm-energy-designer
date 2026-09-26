@@ -56,7 +56,11 @@ def _warn_opex_dominance(project, annual_om: float, pct_of_cost: float) -> None:
     if _OPEX_DEFAULT_WARNED or not project.opex_was_defaulted or pct_of_cost <= 0.5:
         return
     _OPEX_DEFAULT_WARNED = True
-    warnings.warn(
+    # warn_explicit (round 25): plain warnings.warn attached a caller
+    # source-path trailer (e.g. "engine.py:1400") to every console line.
+    # Same treatment as the round-18 legacy-cache notice: attribute to the
+    # module-level virtual location so no filesystem path is printed.
+    warnings.warn_explicit(
         f"default OPEX in effect: annual_om {annual_om:.2f} "
         f"{project.currency}/yr is {pct_of_cost * 100:.1f}% of the annual "
         f"cost total (labor 30000 + misc 5000 per year are built-in "
@@ -64,7 +68,8 @@ def _warn_opex_dominance(project, annual_om: float, pct_of_cost: float) -> None:
         f"opex section to your YAML and verify the amounts are in YOUR "
         f"currency.",
         UserWarning,
-        stacklevel=2,
+        "vfed.engine",
+        0,
     )
 
 
