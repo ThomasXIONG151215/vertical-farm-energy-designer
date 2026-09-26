@@ -516,14 +516,21 @@ class TestCapitalUnitArithmetic:
 
     def test_legacy_pv_fallback_uses_market_c_pv(self):
         """No pv.capital block -> C_pv x kWp with the market-anchored default
-        (500 currency/kWp; the pre-P0-1 default of 110 was 4-8x below
-        market)."""
+        (USD baseline 500 currency/kWp; the pre-P0-1 default of 110 was 4-8x
+        below market).  R26: raw construction keeps the ``None`` sentinel;
+        the USD baseline is materialized by from_dict (or, as here, by the
+        capital resolver's defense) and scales with exchange_rate."""
         from vfed.design.sweep import _total_capital
 
         p = DesignProject()  # all defaults
-        assert p.pv.C_pv == pytest.approx(500.0)
+        assert p.pv.C_pv is None  # R26 sentinel (from_dict would materialize 500 x fx)
         cap = _total_capital(p, 43.0, 0.0)  # 43 m2 / 4.3 = 10 kWp
         assert cap["PV"] == pytest.approx(500.0 * 10.0)
+
+        from vfed.design.project import DesignProject as _DP
+
+        p_loaded = _DP.from_dict({"site": {"lat": 31.2, "lon": 121.5}})
+        assert p_loaded.pv.C_pv == pytest.approx(500.0)  # USD -> baseline literal
 
     def test_example_lcoe_full_capital_blocks_use_explicit_units(self):
         """The official example must price PV per kWp (3500 RMB/kWp = 3.5

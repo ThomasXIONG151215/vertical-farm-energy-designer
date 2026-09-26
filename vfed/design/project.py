@@ -21,6 +21,18 @@ from typing import Dict, List, Optional, Tuple
 
 import yaml
 
+from .fx import (
+    USD_C_ENERGY,
+    USD_C_PV,
+    USD_EXPORT,
+    USD_LABOR,
+    USD_MISC,
+    USD_RATE_PER_WATT,
+    USD_TARIFF,
+    USD_WATER,
+    usd_base_to_project,
+)
+
 __all__ = [
     "CapitalCostConfig",
     "CAPITAL_MODES_BY_COMPONENT",
@@ -182,11 +194,17 @@ class CapitalCostConfig:
     ``battery.c_energy`` per kWh; 0 for components without a legacy price).
     An explicit ``cost: 0.0`` is a literal zero-cost component and never
     falls back; negative values are rejected at load time.
+
+    R26 (currency engine): ``rate_per_watt`` uses the same sentinel pattern.
+    ``None`` (key omitted / null) means the built-in USD-baseline default
+    (1.0 currency/W), which ``from_dict`` materializes into the project
+    currency via ``exchange_rate``; an explicit value is a literal in the
+    project currency and is never converted.
     """
 
     mode: str = "direct"
     cost: Optional[float] = None
-    rate_per_watt: float = 1.0  # currency per rated W (LED/HVAC/DEH)
+    rate_per_watt: Optional[float] = None  # None -> USD baseline 1.0 x exchange_rate
     rate_per_kwp: Optional[float] = None  # currency per rated kWp (PV only)
     rate_per_kwh: Optional[float] = None  # currency per rated kWh (battery only)
     depreciation_years: float = 15.0
@@ -272,37 +290,42 @@ class OpexConfig:
     """Annual operating expenditure for the farm.
 
     All costs are in the project's currency unit (see ``DesignProject.currency``
-    and ``exchange_rate`` for conversion).  Currency-magnitude consistency:
-    labor / water / misc OPEX, tariff prices and capital costs must all be
-    written in the SAME currency that ``currency`` claims.  The defaults
-    below are USD-scale preset figures -- an RMB project that omits this
-    section silently inherits USD magnitudes under an RMB label.
+    and ``exchange_rate``).  Currency-magnitude consistency: labor / water /
+    misc OPEX, tariff prices and capital costs must all be written in the
+    SAME currency that ``currency`` claims.
 
-    P1-7 transparency: if the YAML omits the whole ``opex`` section, these
-    defaults apply SILENTLY (labor 30000 + misc 5000 per year, about 72-96%
-    of LCOE's numerator on the bundled presets).  ``DesignProject`` then
-    sets ``opex_was_defaulted`` and the engine reports
-    ``annual_om_pct_of_cost`` plus a WARNING when OPEX dominates.
+    R26 (currency engine): the three price fields below are USD-baseline
+    defaults behind the ``None`` sentinel (same pattern as
+    ``CapitalCostConfig.cost``, F2).  Omitting a field (or writing ``null``)
+    selects the built-in USD-baseline default, which ``from_dict``
+    materializes into the project currency via ``exchange_rate``; writing an
+    explicit value means "this many units of MY currency" and is never
+    converted.  ``maintenance_pct`` is a capital fraction (unitless) -- not
+    part of the currency engine.
+
+    P1-7 transparency: when the YAML omits the whole ``opex`` section (or any
+    of the three price fields), ``DesignProject`` sets ``opex_was_defaulted``
+    and the engine reports ``annual_om_pct_of_cost`` plus a WARNING when OPEX
+    dominates.
 
     * ``water_cost_per_m3``: water price (irrigation + makeup).
-      Default 2.0 currency/m3.
+      Default (USD baseline) 2.0 currency/m3.
     * ``labor_cost_per_year``: total annual labor cost.
-      Default 30000.0 currency/yr -- USD-scale preset; NOT rescaled to your
-      currency or farm size.
+      Default (USD baseline) 30000.0 currency/yr; NOT rescaled to farm size.
     * ``maintenance_pct``: annual maintenance as fraction of total CAPEX.
       Default 0.02 (2%/yr).
     * ``misc_opex_per_year``: other operating costs (seeds, nutrients, etc.).
-      Default 5000.0 currency/yr -- USD-scale preset.
+      Default (USD baseline) 5000.0 currency/yr.
     """
 
-    water_cost_per_m3: float = 2.0  # currency/m3 irrigation + makeup water
-    labor_cost_per_year: float = 30000.0
-    #   currency/yr; USD-scale default -- applies silently if the opex
-    #   section is omitted (P1-7); verify against YOUR currency.
+    water_cost_per_m3: Optional[float] = None  # None -> USD baseline 2.0 x exchange_rate
+    labor_cost_per_year: Optional[float] = None
+    #   None -> USD baseline 30000/yr x exchange_rate; applies silently if
+    #   unspecified (P1-7); verify against YOUR currency.
     maintenance_pct: float = 0.02  # fraction of total CAPEX per year
-    misc_opex_per_year: float = 5000.0
-    #   currency/yr (seeds, nutrients, ...); USD-scale default -- applies
-    #   silently if the opex section is omitted (P1-7).
+    misc_opex_per_year: Optional[float] = None
+    #   None -> USD baseline 5000/yr x exchange_rate; applies silently if
+    #   unspecified (P1-7).
 
 
 @dataclass
@@ -666,10 +689,12 @@ class PVConfig:
     NOCT: float = 45.0  # 标称工作电池温度 (°C)
     eta_inv: float = 0.97  # 逆变器效率 (−)
     eta_system: float = 0.95  # 系统综合折减 (积灰/直流线损/失配, −); P6-7
-    C_pv: float = 500.0  # 光伏系统单价 (项目货币/kWp)——是单价不是容量!
+    C_pv: Optional[float] = None  # 光伏系统单价 (USD 基准缺省 500/kWp)——是单价不是容量!
     #   P0-1: 旧默认 110 低于市场 4-8 倍, 已提到市场区间: 中国工商业分布式
     #   2025 组件+安装 ≈ 3-3.5 RMB/W ≈ 3000-3500 RMB/kWp ≈ 420-490 USD/kWp
-    #   (按 7.2 汇率), 取整 500 (USD 锚定; 其他货币项目请显式覆盖)。
+    #   (按 7.2 汇率), 取整 500 (USD 锚定)。
+    #   R26 哨兵: None (缺省/null) = USD 基准 500/kWp × exchange_rate 自动
+    #   换算 (from_dict 物化); 显式值 = 项目货币字面值, 绝不换算。
     #   仅作 capital 块缺省时的 legacy 回退计价 (sweep._total_capital)。
     degradation: float = 0.004  # 年衰减率 (1/年, 0.4 %/年)
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
@@ -677,8 +702,10 @@ class PVConfig:
 
 @dataclass
 class BatteryConfig:
-    c_energy: float = 220.0  # 电池储能单价 (项目货币/kWh)——注意: 这是"单价"不是容量!
-    # 容量见顶层 battery_kwh (kWh)
+    c_energy: Optional[float] = None  # 电池储能单价 (USD 基准缺省 220/kWh)——这是"单价"不是容量!
+    #   R26 哨兵: None (缺省/null) = USD 基准 220/kWh × exchange_rate 自动
+    #   换算 (from_dict 物化); 显式值 = 项目货币字面值, 绝不换算。
+    #   容量见顶层 battery_kwh (kWh)
     c_rate: float = 1.0  # 最大充放电倍率 C-rate (1/h)
     eta_ch: float = 0.91  # 充电效率 (−)
     eta_dis: float = 0.91  # 放电效率 (−)
@@ -699,10 +726,19 @@ class TariffConfig:
 
     All prices are in the project's currency (see ``DesignProject.currency``).
     ``export_price`` is the feed-in tariff (grid buy-back rate).
+
+    R26 (currency engine): both fields are USD-baseline defaults behind the
+    ``None`` sentinel (same pattern as ``CapitalCostConfig.cost``, F2).
+    Omitting a field (or writing ``null``) selects the built-in USD-baseline
+    default (flat 0.10/kWh, export 0.05/kWh), which ``from_dict``
+    materializes into the project currency via ``exchange_rate``; an
+    explicit value is a literal in the project currency and is never
+    converted.  The 24-length / numeric validation applies to explicit
+    lists only (there is nothing to validate on the sentinel).
     """
 
-    hourly_prices: list = field(default_factory=lambda: [0.10] * 24)
-    export_price: float = 0.05
+    hourly_prices: Optional[List[float]] = None  # None -> USD baseline [0.10]*24 x exchange_rate
+    export_price: Optional[float] = None  # None -> USD baseline 0.05 x exchange_rate
 
 
 @dataclass
@@ -748,15 +784,28 @@ class DesignProject:
     # no project-level pump rated power exists, so per_watt resolves to 0).
     # Aggregated in sweep._total_capital under "Pump".
     opex: OpexConfig = field(default_factory=OpexConfig)
-    # P1-7: internal provenance flag -- True when the source dict/YAML had
-    # no explicit 'opex' section, so the built-in USD-scale defaults (labor
-    # 30000 + misc 5000 per year) are silently in effect.  Set only by
-    # ``from_dict``; never emitted by ``to_dict`` (a user YAML that spells
-    # it out is rejected).  Consumed by the engine's OPEX-dominance warning.
+    # P1-7: internal provenance flag -- True when at least one of the three
+    # USD-baseline default prices (labor / misc / water) is in effect, i.e.
+    # the source dict/YAML had no 'opex' section or left one of them
+    # unspecified.  Set only by ``from_dict``; never emitted by ``to_dict``
+    # (a user YAML that spells it out is rejected).  Consumed by the engine's
+    # OPEX-dominance warning.
     opex_was_defaulted: bool = False
+    # R26: internal provenance -- which opex fields the source YAML spelled
+    # out with a non-null value.  ``to_dict`` emits exactly these keys (a
+    # defaulted field re-derives from its USD-baseline default on reload);
+    # an empty tuple drops the whole section.  Set only by ``from_dict``;
+    # never emitted / rejected as a user key like ``opex_was_defaulted``.
+    opex_explicit_keys: Tuple[str, ...] = ()
     interest_rate: float = 0.06  # annual discount rate (fraction)
     currency: str = "USD"  # monetary unit for all costs
-    exchange_rate: float = 1.0  # conversion factor to USD (7.2 for RMB)
+    exchange_rate: float = 1.0  # project-currency units per 1 USD (7.2 = CNY)
+    #   R26: scales the built-in USD-baseline DEFAULT prices (tariff 0.10,
+    #   export 0.05, PV 500/kWp, battery 220/kWh, opex labor/misc/water,
+    #   rate_per_watt 1.0) into the project currency.  Values written
+    #   explicitly in the YAML are never converted.  User-set for
+    #   reproducibility (offline); 'vfed design fx' shows a reference
+    #   snapshot.
 
     # ── sizing decisions (energy system) ──
     pv_area_m2: float = 0.0  # PV array area (m²); 0 = skip energy system
@@ -767,26 +816,59 @@ class DesignProject:
         # P1-7: ``opex_was_defaulted`` is runtime provenance, not schema --
         # strip it so serialized projects never carry an internal key (and
         # ``from_dict``'s internal-key rejection cannot fire on a
-        # roundtrip).  When the opex section was defaulted, ``opex`` is
-        # omitted as well so ``from_dict`` re-derives the flag (absent
-        # section -> True) and the roundtrip stays lossless.
+        # roundtrip).
         d = asdict(self)
         d.pop("opex_was_defaulted", None)
-        if self.opex_was_defaulted:
-            d.pop("opex", None)
+        # R26: ``opex_explicit_keys`` is internal in the same way.  The opex
+        # section is emitted as EXACTLY the keys the source YAML spelled out
+        # (a defaulted field re-derives from its USD-baseline default on
+        # reload, keeping the roundtrip lossless even for a partially
+        # explicit section); with nothing spelled out the whole section is
+        # dropped so ``from_dict`` re-derives the defaulted flag.
+        d.pop("opex_explicit_keys", None)
+        _opex = d.get("opex")
+        if isinstance(_opex, dict):
+            _keep = set(self.opex_explicit_keys)
+            for _k in list(_opex):
+                if _k not in _keep:
+                    _opex.pop(_k, None)
+            if not _opex:
+                d.pop("opex", None)
         # F2 (round 21): a None capital cost means "unspecified -> legacy
         # fallback".  Serializing it as ``cost: null`` would roundtrip as the
         # same None, but omitting the key keeps templates clean and makes the
         # serialized YAML say exactly what from_dict re-derives (roundtrip
         # stays lossless either way; explicit 0.0 / positive values are kept).
+        # R26: the same omission rule now covers every None sentinel that
+        # from_dict would re-materialize (rate_per_watt, tariff prices).
         for _sec in ("hvac", "deh", "led", "pv", "battery"):
             _cap = d.get(_sec, {}).get("capital")
-            if isinstance(_cap, dict) and _cap.get("cost") is None:
-                _cap.pop("cost", None)
+            if isinstance(_cap, dict):
+                if _cap.get("cost") is None:
+                    _cap.pop("cost", None)
+                if _cap.get("rate_per_watt") is None:
+                    _cap.pop("rate_per_watt", None)
         for _key in ("equipment_capital", "envelope_capital", "pump_capital"):
             _cap = d.get(_key)
-            if isinstance(_cap, dict) and _cap.get("cost") is None:
-                _cap.pop("cost", None)
+            if isinstance(_cap, dict):
+                if _cap.get("cost") is None:
+                    _cap.pop("cost", None)
+                if _cap.get("rate_per_watt") is None:
+                    _cap.pop("rate_per_watt", None)
+        # R26: sentinel legacy unit prices -- omitted key == USD baseline
+        # (re-materialized on reload); explicit values are kept verbatim.
+        if d.get("pv", {}).get("C_pv") is None:
+            d.get("pv", {}).pop("C_pv", None)
+        if d.get("battery", {}).get("c_energy") is None:
+            d.get("battery", {}).pop("c_energy", None)
+        _tar = d.get("tariff")
+        if isinstance(_tar, dict):
+            if _tar.get("hourly_prices") is None:
+                _tar.pop("hourly_prices", None)
+            if _tar.get("export_price") is None:
+                _tar.pop("export_price", None)
+            if not _tar:
+                d.pop("tariff", None)
         return d
 
     def save(self, path) -> None:
@@ -796,16 +878,18 @@ class DesignProject:
     @classmethod
     def from_dict(cls, d: dict) -> "DesignProject":
         # P1-7: 'opex_was_defaulted' is an internal flag that from_dict sets
-        # itself (raw dict has no 'opex' key).  It is never a user config
-        # key -- reject it with a dedicated message instead of the generic
+        # itself (raw dict has no 'opex' key).  R26 adds the sibling
+        # 'opex_explicit_keys' provenance.  Neither is ever a user config
+        # key -- reject with a dedicated message instead of the generic
         # unknown-key error so the fix is obvious.
-        if "opex_was_defaulted" in d:
-            raise ValueError(
-                "'opex_was_defaulted' is an internal VFED field, not a user "
-                "config key: it is set automatically when the YAML has no "
-                "explicit 'opex' section. Remove it from the YAML; to take "
-                "control of OPEX, write an explicit 'opex' section instead."
-            )
+        for _internal in ("opex_was_defaulted", "opex_explicit_keys"):
+            if _internal in d:
+                raise ValueError(
+                    f"'{_internal}' is an internal VFED field, not a user "
+                    f"config key: it is derived automatically from the YAML. "
+                    f"Remove it; to take control of OPEX, write an explicit "
+                    f"'opex' section instead."
+                )
         # Build sub-dataclasses; raise on unrecognised keys.
         _TOP_KEYS = {
             "name",
@@ -878,7 +962,11 @@ class DesignProject:
 
         def _tariff(d: dict) -> TariffConfig:
             # backward compat: old peak/normal/valley → hourly_prices
-            if "hourly_prices" in d:
+            # R26: an explicit ``hourly_prices: null`` is the unspecified
+            # sentinel (same rule as capital ``cost: null``, F2) -- only an
+            # actual list is shape-validated here; the sentinel is
+            # materialized from the USD baseline after construction.
+            if "hourly_prices" in d and d["hourly_prices"] is not None:
                 _hp = d["hourly_prices"]
                 if not isinstance(_hp, list) or len(_hp) != 24:
                     raise ValueError(
@@ -1413,12 +1501,21 @@ class DesignProject:
                 continue
             _hard_limit_guard(_param, _field, _val)
 
-        # P1-7: flag = the opex section was not spelled out, so the built-in
-        # defaults (labor 30000 + misc 5000 per year, USD-scale) are in
-        # effect.  Pure provenance -- never touches any numeric result.
-        _opex_was_defaulted = "opex" not in d
+        # P1-7: flag = at least one of the three USD-baseline default prices
+        # (labor / misc / water) is in effect -- the opex section was absent
+        # OR one of them was left unspecified (R26 sentinel semantics:
+        # "warn when a default was used").  Pure provenance -- never touches
+        # any numeric result.  The sibling tuple records which fields the
+        # YAML DID spell out, so to_dict can roundtrip a partially explicit
+        # section without losing the explicit values.
+        _opex_sub = sub(OpexConfig, d.get("opex", {}), yaml_path="opex")
+        _opex_explicit_keys = tuple(k for k, v in _opex_sub.items() if v is not None)
+        _opex_was_defaulted = ("opex" not in d) or any(
+            _opex_sub.get(k) is None
+            for k in ("labor_cost_per_year", "misc_opex_per_year", "water_cost_per_m3")
+        )
 
-        return cls(
+        project = cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**site_cfg),
             envelope=EnvelopeConfig(
@@ -1438,14 +1535,54 @@ class DesignProject:
             equipment_capital=_equipment_cap,
             envelope_capital=_envelope_cap,
             pump_capital=_pump_cap,
-            opex=OpexConfig(**sub(OpexConfig, d.get("opex", {}), yaml_path="opex")),
+            opex=OpexConfig(**_opex_sub),
             opex_was_defaulted=_opex_was_defaulted,
+            opex_explicit_keys=_opex_explicit_keys,
             interest_rate=d.get("interest_rate", 0.06),
             currency=d.get("currency", "USD"),
             exchange_rate=d.get("exchange_rate", 1.0),
             pv_area_m2=d.get("pv_area_m2", 0.0),
             battery_kwh=d.get("battery_kwh", 0.0),
         )
+
+        # ── R26 currency engine: materialize USD-baseline default prices ──
+        # Every None sentinel (omitted key / explicit null) becomes the
+        # built-in USD-baseline default converted into the project currency
+        # (fx.usd_base_to_project).  Explicit values are NEVER touched:
+        # they are already literals in the project currency.  USD projects
+        # (or exchange_rate == 1.0) get the raw constants back, so the
+        # bundled baselines stay bitwise identical.
+        _cur = d.get("currency", "USD") or "USD"
+        _fx = d.get("exchange_rate", 1.0)
+        if project.tariff.hourly_prices is None:
+            project.tariff.hourly_prices = [usd_base_to_project(USD_TARIFF, _cur, _fx)] * 24
+        if project.tariff.export_price is None:
+            project.tariff.export_price = usd_base_to_project(USD_EXPORT, _cur, _fx)
+        for _fname, _base in (
+            ("labor_cost_per_year", USD_LABOR),
+            ("misc_opex_per_year", USD_MISC),
+            ("water_cost_per_m3", USD_WATER),
+        ):
+            if getattr(project.opex, _fname) is None:
+                setattr(project.opex, _fname, usd_base_to_project(_base, _cur, _fx))
+        # Legacy unit prices (pv.C_pv / battery.c_energy): same sentinel rule.
+        if project.pv.C_pv is None:
+            project.pv.C_pv = usd_base_to_project(USD_C_PV, _cur, _fx)
+        if project.battery.c_energy is None:
+            project.battery.c_energy = usd_base_to_project(USD_C_ENERGY, _cur, _fx)
+        for _cap in (
+            project.led.capital,
+            project.hvac.capital,
+            project.deh.capital,
+            project.pv.capital,
+            project.battery.capital,
+            project.equipment_capital,
+            project.envelope_capital,
+            project.pump_capital,
+        ):
+            if _cap.rate_per_watt is None:
+                _cap.rate_per_watt = usd_base_to_project(USD_RATE_PER_WATT, _cur, _fx)
+        return project
 
     @classmethod
     def load(cls, path) -> "DesignProject":

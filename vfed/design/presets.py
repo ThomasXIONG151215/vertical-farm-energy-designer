@@ -4,17 +4,16 @@ Design presets.
 ``preset_609`` reproduces the Fengxian lettuce PFAL (the "609 project") physics
 so the new simulator can be validated against the archived digital twin. Other
 presets provide convenient starting points.
+
+R26 (currency engine): presets are built through ``DesignProject.from_dict``
+(not raw dataclass construction) so every omitted price is materialized from
+the USD-baseline defaults with the project's ``exchange_rate`` — a preset is
+numerically identical to an equivalent YAML, and programmatic consumers
+(engine, template writer) always see concrete project-currency values instead
+of the ``None`` sentinels.
 """
 
-from .project import (
-    DEHConfig,
-    DesignProject,
-    EnvelopeConfig,
-    HVACConfig,
-    LEDConfig,
-    SetpointConfig,
-    SiteConfig,
-)
+from .project import DesignProject
 
 __all__ = ["preset_default", "preset_609", "PRESETS"]
 
@@ -31,32 +30,34 @@ def preset_default() -> DesignProject:
     - ``hvac.auto_size`` / ``deh.auto_size`` = True so capacities are sized
       from the design load instead of inheriting 609-custom fixed powers.
     """
-    return DesignProject(
-        name="default",
-        # T5 (P2-3): coords are the authoritative city_db["Shanghai"] values
-        # (vfed/weather/city_db.py) so the preset cache key matches the city
-        # it simulates (was 31.2/121.5).
-        # Round 22: weather_provider/ghi_scale stay at their SiteConfig
-        # defaults ("open-meteo", 1.0) — presets do not pin the weather
-        # source, so every baseline is bitwise unchanged by the provider
-        # switch.
-        site=SiteConfig(lat=31.23, lon=121.47, tz_hours=8.0, city="Shanghai"),
-        envelope=EnvelopeConfig(
-            U_wall_A=20.0,  # W/K — insulated small room (~10 m² footprint)
-            A_window=0.0,
-            eta_solar=0.15,
-            ach=0.001,
-            permeance=0.0,
-            V_room=40.0,  # m³
-            C_z=40000.0,  # Wh/K
-        ),
-        led=LEDConfig(covered_area=10.0),  # 10 m² canopy → auto power ~1600 W
-        # T6 (P2-3): led.power_w keeps the LEDConfig 1300 W class default,
-        # which is a PLACEHOLDER example only -- size it from your actual
-        # fixture schedule (or keep auto_deduce=true, which recomputes
-        # power_w = ppfd_target * covered_area / efficacy and ignores it).
-        hvac=HVACConfig(auto_size=True),
-        deh=DEHConfig(auto_size=True),
+    return DesignProject.from_dict(
+        {
+            "name": "default",
+            # T5 (P2-3): coords are the authoritative city_db["Shanghai"] values
+            # (vfed/weather/city_db.py) so the preset cache key matches the city
+            # it simulates (was 31.2/121.5).
+            # Round 22: weather_provider/ghi_scale stay at their SiteConfig
+            # defaults ("open-meteo", 1.0) — presets do not pin the weather
+            # source, so every baseline is bitwise unchanged by the provider
+            # switch.
+            "site": {"lat": 31.23, "lon": 121.47, "tz_hours": 8.0, "city": "Shanghai"},
+            "envelope": {
+                "U_wall_A": 20.0,  # W/K — insulated small room (~10 m² footprint)
+                "A_window": 0.0,
+                "eta_solar": 0.15,
+                "ach": 0.001,
+                "permeance": 0.0,
+                "V_room": 40.0,  # m³
+                "C_z": 40000.0,  # Wh/K
+            },
+            "led": {"covered_area": 10.0},  # 10 m² canopy → auto power ~1600 W
+            # T6 (P2-3): led.power_w keeps the LEDConfig 1300 W class default,
+            # which is a PLACEHOLDER example only -- size it from your actual
+            # fixture schedule (or keep auto_deduce=true, which recomputes
+            # power_w = ppfd_target * covered_area / efficacy and ignores it).
+            "hvac": {"auto_size": True},
+            "deh": {"auto_size": True},
+        }
     )
 
 
@@ -93,29 +94,31 @@ def preset_609() -> DesignProject:
     heat pump would engage ~93 h/yr at night to hold a setpoint above the
     natural float, swapping cooling waste for heating waste.
     """
-    return DesignProject(
-        name="fengxian_lettuce_609",
-        # T5 (P2-3): coords are the authoritative city_db["Shanghai"] values
-        # (vfed/weather/city_db.py) so the preset cache key matches the city
-        # it simulates (was 30.9/121.5).
-        site=SiteConfig(lat=31.23, lon=121.47, tz_hours=8.0, city="Shanghai"),
-        envelope=EnvelopeConfig(
-            U_wall_A=125.3,
-            A_window=0.0,
-            eta_solar=0.15,
-            ach=0.001,
-            permeance=0.0,
-            V_room=200.0,
-            C_z=200000.0,  # Wh/K (200 kWh/K) — see P4-5: ~3x room-air capacity
-        ),
-        led=LEDConfig(light_start_hour=6, photoperiod_hours=16, heat_fraction=1.0),
-        # T6 (P2-3): led.power_w keeps the LEDConfig 1300 W class default,
-        # which is a PLACEHOLDER example only -- size it from the real
-        # fixture schedule (auto_deduce=true here recomputes it from
-        # ppfd_target * covered_area / efficacy and ignores power_w).
-        # P0-4: explicit dark-period setpoint (see docstring) — the 18 C class
-        # default is unreachable against this room's night balance.
-        setpoints=SetpointConfig(T_dark=21.0),
+    return DesignProject.from_dict(
+        {
+            "name": "fengxian_lettuce_609",
+            # T5 (P2-3): coords are the authoritative city_db["Shanghai"] values
+            # (vfed/weather/city_db.py) so the preset cache key matches the city
+            # it simulates (was 30.9/121.5).
+            "site": {"lat": 31.23, "lon": 121.47, "tz_hours": 8.0, "city": "Shanghai"},
+            "envelope": {
+                "U_wall_A": 125.3,
+                "A_window": 0.0,
+                "eta_solar": 0.15,
+                "ach": 0.001,
+                "permeance": 0.0,
+                "V_room": 200.0,
+                "C_z": 200000.0,  # Wh/K (200 kWh/K) — see P4-5: ~3x room-air capacity
+            },
+            "led": {"light_start_hour": 6, "photoperiod_hours": 16, "heat_fraction": 1.0},
+            # T6 (P2-3): led.power_w keeps the LEDConfig 1300 W class default,
+            # which is a PLACEHOLDER example only -- size it from the real
+            # fixture schedule (auto_deduce=true here recomputes it from
+            # ppfd_target * covered_area / efficacy and ignores power_w).
+            # P0-4: explicit dark-period setpoint (see docstring) — the 18 C class
+            # default is unreachable against this room's night balance.
+            "setpoints": {"T_dark": 21.0},
+        }
     )
 
 

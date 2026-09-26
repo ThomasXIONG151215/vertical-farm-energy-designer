@@ -27,6 +27,7 @@ from .project import (
     PARAM_PATH_MAP,
     validate_capital_config,
 )
+from .fx import USD_C_ENERGY, USD_C_PV, USD_RATE_PER_WATT, resolve_unit_price, usd_base_to_project
 from .engine import DesignEngine
 
 __all__ = ["sweep_design"]
@@ -75,6 +76,8 @@ def _resolve_capital(
     rated_value: float,
     legacy_fallback: float = 0.0,
     component: str = "equipment",
+    currency: str = "USD",
+    exchange_rate: float = 1.0,
 ) -> float:
     """Resolve a single component's capital cost.
 
@@ -85,11 +88,18 @@ def _resolve_capital(
         legacy_fallback: cost from the old config field (C_pv, c_energy) when
             the capital block — or its ``cost`` key — is absent
             (``cost is None``, the F2 round-21 "unspecified" sentinel).
+            Callers pass it already converted to the project currency
+            (``usd_base_to_project``).
         component: component key (led/hvac/deh/pv/battery/equipment/envelope/
             pump).  The mode must match the component's pricing basis
             (``CAPITAL_MODES_BY_COMPONENT``, P0-1) -- 'per_watt' on pv/battery
             is rejected with a migration message instead of being silently
             multiplied by kWp / kWh as before.
+        currency / exchange_rate: project currency settings, used ONLY to
+            materialize an unspecified ``rate_per_watt`` (R26 sentinel ->
+            USD baseline 1.0/W x exchange_rate).  from_dict already
+            materializes it; this is defense in depth for programmatically
+            constructed CapitalCostConfig objects.
 
     Returns:
         capital cost in project currency.
@@ -98,7 +108,10 @@ def _resolve_capital(
     # programmatically constructed DesignProjects with a stale spelling.
     validate_capital_config(cfg, component)
     if cfg.mode == "per_watt":
-        return cfg.rate_per_watt * rated_value
+        rate = cfg.rate_per_watt
+        if rate is None:  # R26 sentinel: USD-baseline default, fx-converted
+            rate = usd_base_to_project(USD_RATE_PER_WATT, currency, exchange_rate)
+        return rate * rated_value
     if cfg.mode == "per_kwp":
         return cfg.rate_per_kwp * rated_value
     if cfg.mode == "per_kwh":
@@ -118,31 +131,64 @@ def _total_capital(project: DesignProject, pv_area: float, battery_kwh: float) -
     P0-1: PV is priced per kWp (``pv.capital`` mode ``per_kwp`` or the legacy
     ``C_pv`` fallback), battery per kWh (mode ``per_kwh`` or ``c_energy``
     fallback), electrical equipment per rated W (mode ``per_watt``).
+    R26: the legacy ``C_pv`` / ``c_energy`` fallback unit prices are already
+    in the project currency -- from_dict materializes the USD-baseline
+    defaults (500/kWp, 220/kWh) with ``exchange_rate`` and passes explicit
+    values through literally.
     """
     led_w = _derived_led_power(project)
     # PV peak kWp = pv_area (m²) / area_to_power (m²/kWp)
     pv_kwp = pv_area / project.pv.area_to_power
+    _cur = getattr(project, "currency", "USD")
+    _fx = getattr(project, "exchange_rate", 1.0)
 
     breakdown = {
-        "LED": _resolve_capital(project.led.capital, led_w, component="led"),
-        "HVAC": _resolve_capital(project.hvac.capital, project.hvac.P_rated_w, component="hvac"),
-        "DEH": _resolve_capital(project.deh.capital, project.deh.P_ref_w, component="deh"),
+        "LED": _resolve_capital(
+            project.led.capital, led_w, component="led", currency=_cur, exchange_rate=_fx
+        ),
+        "HVAC": _resolve_capital(
+            project.hvac.capital,
+            project.hvac.P_rated_w,
+            component="hvac",
+            currency=_cur,
+            exchange_rate=_fx,
+        ),
+        "DEH": _resolve_capital(
+            project.deh.capital,
+            project.deh.P_ref_w,
+            component="deh",
+            currency=_cur,
+            exchange_rate=_fx,
+        ),
         "PV": _resolve_capital(
             project.pv.capital,
             pv_kwp,
-            legacy_fallback=project.pv.C_pv * pv_kwp,
+            legacy_fallback=resolve_unit_price(project.pv.C_pv, USD_C_PV, _cur, _fx) * pv_kwp,
             component="pv",
+            currency=_cur,
+            exchange_rate=_fx,
         ),
         "Battery": _resolve_capital(
             project.battery.capital,
             battery_kwh,
-            legacy_fallback=project.battery.c_energy * battery_kwh,
+            legacy_fallback=resolve_unit_price(project.battery.c_energy, USD_C_ENERGY, _cur, _fx)
+            * battery_kwh,
             component="battery",
+            currency=_cur,
+            exchange_rate=_fx,
         ),
-        "Equipment": _resolve_capital(project.equipment_capital, 0, component="equipment"),
-        "Envelope": _resolve_capital(project.envelope_capital, 0, component="envelope"),
+        "Equipment": _resolve_capital(
+            project.equipment_capital, 0, component="equipment", currency=_cur, exchange_rate=_fx
+        ),
+        "Envelope": _resolve_capital(
+            project.envelope_capital, 0, component="envelope", currency=_cur, exchange_rate=_fx
+        ),
         "Pump": _resolve_capital(
-            project.pump_capital, 0, component="pump"
+            project.pump_capital,
+            0,
+            component="pump",
+            currency=_cur,
+            exchange_rate=_fx,
         ),  # P5-1: pump capital was never counted
     }
     breakdown["total"] = sum(breakdown.values())
@@ -341,7 +387,11 @@ def _incremental_irr(
 # Builders
 # ---------------------------------------------------------------------------
 def _build_energy_system(project: DesignProject) -> EnergySystem:
-    """Re-use project PV / battery / tariff defaults for EnergySystem."""
+    """Re-use project PV / battery / tariff defaults for EnergySystem.
+
+    R26: the legacy unit prices are resolved through ``resolve_unit_price``
+    (project-currency values; from_dict already materialized them, this
+    covers raw programmatic constructions)."""
     pv = PVSystem(
         eta_pv=project.pv.eta_pv,
         area_to_power=project.pv.area_to_power,
@@ -354,12 +404,16 @@ def _build_energy_system(project: DesignProject) -> EnergySystem:
         beta_voc=project.pv.beta_voc,
         NOCT=project.pv.NOCT,
         eta_inv=project.pv.eta_inv,
-        C_pv=project.pv.C_pv,
+        C_pv=resolve_unit_price(
+            project.pv.C_pv, USD_C_PV, project.currency, project.exchange_rate
+        ),
         degradation=project.pv.degradation,
         eta_system=project.pv.eta_system,  # P6-7
     )
     battery = BatterySystem(
-        c_energy=project.battery.c_energy,
+        c_energy=resolve_unit_price(
+            project.battery.c_energy, USD_C_ENERGY, project.currency, project.exchange_rate
+        ),
         c_rate=project.battery.c_rate,
         eta_ch=project.battery.eta_ch,
         eta_dis=project.battery.eta_dis,

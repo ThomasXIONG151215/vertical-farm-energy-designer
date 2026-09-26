@@ -6,6 +6,7 @@ Commands:
     vfed design presets
     vfed design cities
     vfed design tariffs
+    vfed design fx
     vfed validate <project.yaml>
     vfed evaluate <project.yaml> [--cache weather_cache] [--tariff NAME|PATH]
                   [--provider {open-meteo,nasa-power}] [--ghi-scale FLOAT]
@@ -337,8 +338,10 @@ _YAML_SECTION_COMMENTS = {
         "# pv: solar array\n"
         "#   area_to_power - m2 per kWp (typical 4.3)\n"
         "#   eta_pv / degradation - panel efficiency / annual loss (fraction)\n"
-        "#   C_pv - legacy fallback unit price (currency/kWp, default 500,\n"
-        "#          market-anchored; used when no pv.capital block is given)\n"
+        "#   C_pv - legacy fallback unit price (default USD-baseline 500/kWp,\n"
+        "#          auto-converted by exchange_rate; an explicit value is a\n"
+        "#          literal in YOUR currency); used when no pv.capital block\n"
+        "#          is given\n"
         "#   capital - use mode 'per_kwp' with rate_per_kwp (currency/kWp):\n"
         "#     e.g. rate_per_kwp: 3500 (RMB) = 3.5 RMB/W (China C&I 2025)\n"
         "# ------------------------------------------------------------------\n"
@@ -346,7 +349,9 @@ _YAML_SECTION_COMMENTS = {
     "battery": (
         "# ------------------------------------------------------------------\n"
         "# battery: storage\n"
-        "#   c_energy - legacy unit price (currency/kWh)\n"
+        "#   c_energy - legacy unit price (default USD-baseline 220/kWh,\n"
+        "#              auto-converted by exchange_rate; an explicit value is\n"
+        "#              a literal in YOUR currency)\n"
         "#   capital - use mode 'per_kwh' with rate_per_kwh (currency/kWh)\n"
         "#   c_rate, eta_ch/eta_dis, soc_min/soc_max, cycle_life\n"
         "#   allow_grid_charging - true: buy grid power in valley-price hours\n"
@@ -359,6 +364,9 @@ _YAML_SECTION_COMMENTS = {
         "# ------------------------------------------------------------------\n"
         "# tariff: grid prices (24 hourly values, project currency/kWh)\n"
         "#   export_price - feed-in / buy-back rate\n"
+        "#   R26: omitting hourly_prices/export_price selects the built-in\n"
+        "#   USD-baseline defaults (0.10/kWh, export 0.05/kWh) auto-converted\n"
+        "#   by exchange_rate; explicit values are literals in YOUR currency.\n"
         "# ------------------------------------------------------------------\n"
     ),
     "space": (
@@ -391,15 +399,25 @@ _YAML_SECTION_COMMENTS = {
         "# ------------------------------------------------------------------\n"
         "# opex: annual operating costs (project currency/yr)\n"
         "#   WARNING: defaults apply silently if this section is omitted --\n"
-        "#   labor 30000 + misc 5000 per year (USD-scale preset values),\n"
-        "#   typically 72-96% of LCOE's numerator. Keep these amounts in the\n"
-        "#   SAME currency as tariff/capital/currency below.\n"
+        "#   labor 30000 + misc 5000 per year (built-in USD-baseline values,\n"
+        "#   auto-converted by exchange_rate), typically 72-96% of LCOE's\n"
+        "#   numerator. Keep these amounts in the SAME currency as\n"
+        "#   tariff/capital/currency below.\n"
         "#   labor_cost_per_year / misc_opex_per_year (currency/yr)\n"
         "#   water_cost_per_m3 (currency/m3), maintenance_pct (fraction of capital)\n"
         "# ------------------------------------------------------------------\n"
     ),
     "interest_rate": ("# interest_rate: discount rate (fraction, e.g. 0.06 = 6%)\n"),
-    "currency": ("# currency / exchange_rate: monetary units (exchange_rate = currency per USD)\n"),
+    "currency": (
+        "# currency / exchange_rate: monetary unit + project-currency units\n"
+        "# per 1 USD (e.g. 7.2 for CNY).  Built-in USD-baseline default prices\n"
+        "# (tariff 0.10/kWh, export 0.05/kWh, PV 500/kWp, battery 220/kWh,\n"
+        "# opex labor 30000/yr, misc 5000/yr, water 2.0/m3, rate_per_watt\n"
+        "# 1.0/W) are converted to YOUR currency with this rate.  Any value\n"
+        "# you write explicitly is treated as already being in YOUR currency\n"
+        "# and is NEVER converted.  'vfed design fx' shows the built-in\n"
+        "# reference rates (set exchange_rate yourself for reproducibility).\n"
+    ),
     "exchange_rate": None,
     "pv_area_m2": (
         "# ------------------------------------------------------------------\n"
@@ -458,10 +476,12 @@ def _commented_project_yaml(project) -> str:
     buf = io.StringIO()
     # P1-7: the editable template must spell the opex section out explicitly
     # (defaults become visible/editable), so build the dict from asdict()
-    # minus the internal flag -- NOT from to_dict(), which drops a defaulted
+    # minus the internal flags -- NOT from to_dict(), which drops a defaulted
     # opex section so that from_dict re-derives opex_was_defaulted.
+    # R26: 'opex_explicit_keys' is internal provenance in the same way.
     d = asdict(project)
     d.pop("opex_was_defaulted", None)
+    d.pop("opex_explicit_keys", None)
     # user12 T4: omit placeholder canonical sizing keys (value == dataclass
     # default) in aliased sections so adding a datasheet key cannot collide.
     d = _strip_placeholder_alias_keys(d)
@@ -560,17 +580,19 @@ def _cmd_design_new(args):
         # so the currency can safely follow the tariff region (unlike the
         # evaluate/sweep override, which must fail fast instead of silently
         # rewriting an existing project's currency).  exchange_rate is left
-        # untouched on purpose: no automatic FX conversion is performed, and
-        # from_dict's currency/exchange_rate soft guard still reminds the
-        # user to set it (e.g. 7.2 for RMB) if USD-equivalent reporting is
-        # wanted.  Note the built-in opex/capital defaults stay USD-scale.
+        # untouched on purpose: no automatic FX lookup is performed (the
+        # user sets it for reproducibility), and from_dict's P8-14 soft
+        # guard still reminds the user to set it (e.g. 7.2 for RMB).
+        # R26: with a rate set, the built-in USD-baseline default prices
+        # auto-convert; explicit values in the template stay as written.
         region_cur = rec.get("currency")
         if region_cur:
             preset.currency = region_cur
             print(
                 f"Currency set to {region_cur} to match tariff region "
-                f"'{args.tariff}' (opex/capital defaults remain USD-scale; "
-                f"review them for your currency)."
+                f"'{args.tariff}' (built-in USD-baseline default prices "
+                f"auto-convert once you set exchange_rate; review explicit "
+                f"values)."
             )
     out = Path(args.out) if args.out else Path(args.name + ".yaml")
     if out.exists():
@@ -604,6 +626,24 @@ def _cmd_tariffs(args):
     print("Available electricity tariff regions (prices in the listed currency):")
     for r in list_regions():
         print(f"  {r['id']:15s}  {str(r.get('currency', '?')):4s}  {r['label']}")
+
+
+def _cmd_design_fx(args):
+    """R26: print the built-in FX reference snapshot (project-currency units
+    per 1 USD).  Purely informational -- exchange_rate is always user-set in
+    the YAML so runs stay reproducible and offline.  Pure ASCII (GBK safe)."""
+    from .design.fx import FX_SNAPSHOT, FX_SNAPSHOT_DATE, FX_SOURCE_NOTE
+
+    print(f"Built-in FX reference snapshot ({FX_SNAPSHOT_DATE})")
+    print(f"  {FX_SOURCE_NOTE}")
+    print("Set currency + exchange_rate in your project YAML to use one;")
+    print("built-in USD-baseline default prices are converted with it")
+    print("(values you write explicitly are never converted).")
+    print()
+    print(f"  {'currency':10s}{'per 1 USD':>12s}")
+    for cur in sorted(FX_SNAPSHOT):
+        print(f"  {cur:10s}{FX_SNAPSHOT[cur]:>12g}")
+    return 0
 
 
 def _cmd_validate(args):
@@ -895,6 +935,16 @@ def _cmd_evaluate(args):
         print(
             f"  LCOE             = {summary['lcoe']:.4f} {getattr(project, 'currency', 'USD')}/kWh"
         )
+        # R26: when the project currency is not 1:1 USD, show the USD
+        # equivalent of the headline LCOE so cross-site comparisons stay
+        # honest (defaults were converted, so the LCOE is in the project
+        # currency).  Pure ASCII; skipped for USD / rate 1.0 (zero drift).
+        _fx = getattr(project, "exchange_rate", 1.0)
+        if abs(_fx - 1.0) > 1e-12:
+            print(
+                f"  USD equivalent   = LCOE {summary['lcoe'] / _fx:.4f} USD/kWh "
+                f"(at 1 USD = {_fx:g} {getattr(project, 'currency', 'USD')})"
+            )
     capital_total = summary.get("capital_total")
     if capital_total is not None:
         print(f"  Capital total    = {capital_total:.0f} {getattr(project, 'currency', 'USD')}")
@@ -1251,6 +1301,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     dc2 = dsub.add_parser("tariffs", help="list electricity tariff regions")
     dc2.set_defaults(func=_cmd_tariffs)
+
+    dfx = dsub.add_parser(
+        "fx",
+        help="show the built-in FX reference snapshot (CNY/USD/EUR and more)",
+    )
+    dfx.set_defaults(func=_cmd_design_fx)
 
     v = sub.add_parser("validate", help="validate a project YAML without running it")
     v.add_argument("project", help="path to the project YAML file")

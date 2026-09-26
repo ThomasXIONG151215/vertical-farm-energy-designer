@@ -275,6 +275,7 @@ vertical-farm-energy-designer/
 | `vfed design presets` | 列出可用预设 |
 | `vfed design cities` | 列出内置城市（预下载 2025 年天气） |
 | `vfed design tariffs` | 列出内置电价区域 |
+| `vfed design fx` | 显示内置汇率参考快照（每 1 USD 兑项目货币 units；含 CNY/USD/EUR 等，标注快照日期） |
 | `vfed validate <project.yaml>` | 校验项目 YAML（不运行仿真） |
 | `vfed evaluate <project.yaml> [--cache dir] [--export dir] [--tariff region]` | 对单一配置运行建筑仿真；`--export` 将 `summary.csv` / `timeseries.csv` / `monthly.csv` 写入 `dir` |
 | `vfed sweep <project.yaml> [--cache dir] [--out results.csv] [--tariff region]` | 枚举 `space.parameter_ranges`（如光伏面积 × 电池容量）并输出 CSV；未声明 range 时评估单一固定配置 |
@@ -301,7 +302,29 @@ vertical-farm-energy-designer/
   - 参考电价：`vfed design tariffs` 列出区域；`vfed design new ... --tariff <region>` 直接载入。
 - **space** — 可选扫描参数范围与目标（`lcoe` / `kwh_per_kg_fresh` / `cost_per_kg_fresh`）
 - **opex / equipment_capital / envelope_capital / pump_capital** — 资本与运营成本输入（capital 模式：`per_watt` × 额定 W，光伏 `per_kwp` × kWp，电池 `per_kwh` × kWh；见 DIY 指南第 4 节）
-- **currency / exchange_rate** — 成本报告的货币设置
+- **currency / exchange_rate** — 货币设置；见下方[货币模型](#货币模型round-26)
+
+### 货币模型（round 26）
+
+一条规则，无例外：
+
+- **你显式写出的价格 = 项目货币字面值，绝不换算。**
+- **未指定（键缺省或写 `null`）= 选用内置 USD 基准默认单价，并按 `exchange_rate` 自动换算成项目货币。**
+
+`exchange_rate` = 每 1 USD 兑多少项目货币单位（如 CNY 填 `7.2`）。由你在 YAML 中手填，保证可复现、离线可用；`vfed design fx` 打印内置参考快照（标注快照日期，仅供参考）。非 USD 货币 + `exchange_rate: 1.0` 表示 1:1 记账（加载时有软警告提醒）。
+
+| 未指定（USD 基准，自动换算） | 显式写出（字面直通，绝不换算） |
+|------------------------------|--------------------------------|
+| `tariff.hourly_prices` → 平价 0.10/kWh | 你自己的 24 个逐时电价 |
+| `tariff.export_price` → 0.05/kWh | 你的上网电价 |
+| `opex.labor_cost_per_year` → 30000/年 | 你的人工成本 |
+| `opex.misc_opex_per_year` → 5000/年 | 你的杂项成本 |
+| `opex.water_cost_per_m3` → 2.0/m³ | 你的水价 |
+| `pv.C_pv`（无 `pv.capital` 块）→ 500/kWp | 你的 legacy 单价 |
+| `battery.c_energy`（无 `battery.capital` 块）→ 220/kWh | 你的 legacy 单价 |
+| `*.capital.rate_per_watt`（per_watt 模式）→ 1.0/W | 你的单价 |
+
+`maintenance_pct` 是资本比例（无量纲），永不换算。示例：`currency: CNY` + `exchange_rate: 7.2` 且省略 `opex` 与 `tariff` 的项目，按 人工 30000 × 7.2 = 216000 元/年、平价电 0.10 × 7.2 = 0.72 元/kWh 运行；若你显式写 `labor_cost_per_year: 216000` 与 `hourly_prices: [...]`，则无论货币标签如何都按这些字面值运行。所有货币输出（LCOE、资本、电网成本）均以项目货币报告；`exchange_rate ≠ 1` 时 `vfed evaluate` 会为 headline LCOE 追加一行 `USD equivalent` 对照。
 
 ## 模型适用范围与已知局限
 
@@ -335,11 +358,11 @@ Van Henten 生物量只响应光照与温度 — 没有水分胁迫耦合：灌�
 
 ## 输出结果解读
 
-`vfed evaluate` 与 `vfed sweep` 输出同一套经济/能耗 KPI。所有货币值均以项目配置的 `currency`（默认 USD）报告；`exchange_rate` 仅用于显示标注（如 "1 USD = 7.2 CNY"），**不改变数值**。
+`vfed evaluate` 与 `vfed sweep` 输出同一套经济/能耗 KPI。所有货币值均以项目配置的 `currency` 报告；自 round 26 起，内置 USD 基准**默认**单价按 `exchange_rate` 自动换算成该货币（显式值绝不换算——见[货币模型](#货币模型round-26)），且 `exchange_rate ≠ 1` 时 `vfed evaluate` 会为 headline LCOE 打印 `USD equivalent` 对照行。
 
 > **产量模型标定说明 — 引用绝对 KPI 前必读**：Van Henten 生长系数 `c_rad_phot` 已按 PFAL 生菜标定（P0-3R）：默认 `3.5e-9 kg/J` 将 609 preset 锚定到商业 PFAL 生菜产量带 **30-60 kg 鲜重/m²/年** 的中值附近（约 45 kg/m²/年；30 天茬期、400 µmol/m²/s、800 ppm CO₂），替换此前偏乐观 2-4 倍的文献默认值。推导与交叉校验（量子产额上限、单茬鲜重、整茬光能利用效率）见 `vfed/plants/van_henten.py`。残余不确定性：这是**单参数标定**——与外部设施数据对比 `kwh_per_kg_fresh` / `cost_per_kg_fresh` 前，请先用贵方设施收获记录校验（调整 `growth.c_rad_phot`）；这些 KPI 在 VFED 设计变体之间横向比较仍然有效。
 
-> **默认 OPEX 与货币量级（P1-7）**：若项目 yaml 省略整个 `opex` 节，USD 量级的默认值将**静默生效**：`labor_cost_per_year = 30000` + `misc_opex_per_year = 5000`（currency/年）——在自带 preset 上约占 LCOE 分子的 72-96%。因此 summary 始终报告 `opex_labor_per_year` / `opex_misc_per_year` / `annual_om_pct_of_cost`（= `annual_om` ÷（年化资本 + `annual_om` + 净购电成本）），`vfed evaluate` 控制台会打印 OPEX 占比行；当 opex 节缺省**且** OPEX 占年成本总额超过 50% 时触发一条 WARNING（每次运行至多一条）。请保持量级一致：`opex` 金额、`tariff.hourly_prices` 与所有资本单价都应与 `currency` 声明**同币种**——内置 OPEX 默认值是 USD 量级预设，人民币项目若省略该节，会得到贴着 RMB 标签的 USD 量级数字。
+> **默认 OPEX 与货币量级（P1-7）**：若项目 yaml 省略 `opex` 节（或三个价格字段任一未指定），USD 基准默认值将**静默生效**——人工 `30000`/年 + 杂项 `5000`/年 + 水 `2.0`/m³，并按 `exchange_rate` 自动换算（在自带 preset 上约占 LCOE 分子的 72-96%）。因此 summary 始终报告 `opex_labor_per_year` / `opex_misc_per_year` / `annual_om_pct_of_cost`（= `annual_om` ÷（年化资本 + `annual_om` + 净购电成本）），`vfed evaluate` 控制台会打印 OPEX 占比行；当**任一缺省价生效**且 OPEX 占年成本总额超过 50% 时触发一条 WARNING（每次运行至多一条）。请保持量级一致：`opex` 金额、`tariff.hourly_prices` 与所有资本单价都应与 `currency` 声明**同币种**（或者省略它们，直接使用换算后的 USD 基准缺省值）。
 
 ### evaluate 输出（核心 KPI）
 
@@ -553,7 +576,7 @@ npm start        # 在 http://localhost:8000/ 启动本地服务（= python -m h
 
 5. **LCOE 口径**：`lcoe` 列是设施全成本/每 kWh 负荷，跨项目比较时注意各项目 `currency` 可能不同。
 
-6. **电价币种不一致（E001）**。tariff 库每个地区都带币种标注（`vfed design tariffs` 可查）。`vfed evaluate/sweep --tariff <地区>` 在地区币种与项目 `currency` 不一致时快速失败——例如把 RMB 计价的 `Beijing` 灌进 `currency: USD` 的项目，旧版会产出标签失真约 7 倍的 LCOE。两条出路自行选择：改项目 YAML 的 `currency:`（随后自行核对 `opex`/capital 价格与 `exchange_rate` 是否同币——VFED 不做换算也不改写），或换用与项目同币种的地区。用户自带的 `--tariff` YAML 文件一律视为项目自身币种，不做检查。`vfed design new --tariff <地区>` 是新建场景：新项目 `currency` 自动设为该地区币种（创建回显中明示）。
+6. **电价币种不一致（E001）**。tariff 库每个地区都带币种标注（`vfed design tariffs` 可查）。`vfed evaluate/sweep --tariff <地区>` 在地区币种与项目 `currency` 不一致时快速失败——例如把 RMB 计价的 `Beijing` 灌进 `currency: USD` 的项目，旧版会产出标签失真约 7 倍的 LCOE。两条出路自行选择：改项目 YAML 的 `currency:`（随后自行核对 `opex`/capital 价格与 `exchange_rate` 是否同币——VFED 绝不换算或改写**显式值**；只有未指定的价格才会取用按汇率换算后的 USD 基准缺省值，见[货币模型](#货币模型round-26)），或换用与项目同币种的地区。用户自带的 `--tariff` YAML 文件一律视为项目自身币种，不做检查。`vfed design new --tariff <地区>` 是新建场景：新项目 `currency` 自动设为该地区币种（创建回显中明示）。
 
 7. **旧格式天气缓存通知（每次运行至多一条）**。早于 tilt-aware 缓存键的缓存 CSV（`weather_<lat>_<lon>_<year>.csv`，文件名不含 tilt/azimuth/时区）不携带面板几何信息，读取时会从 GHI 重算 `poa_radiation`，并打印一条 ASCII 通知（含缓存文件名）。这是预期行为而非错误：仿真始终按项目请求的几何计算。要永久消除：删除该文件（如 `weather_cache/weather_31.230_121.470_2025.csv`）后联网重跑一次，即可重新取回带几何键的新缓存。sweep 全程只打印一条，不会逐行刷屏。
 

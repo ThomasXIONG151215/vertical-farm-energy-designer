@@ -4,6 +4,45 @@ All notable changes to VFED are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning is best-effort
 semantic — behaviour changes are called out explicitly under **Changed**.
 
+## [Unreleased]
+
+### Changed
+
+- **Currency conversion engine (round 26).** VFED now distinguishes
+  *explicit* from *default* prices everywhere:
+  - A price written in the project YAML is a **literal in the project
+    currency and is never converted** (unchanged principle, now enforced
+    without exceptions).
+  - A price left out (`null` counts as omitted) selects the built-in
+    **USD-baseline default**, automatically converted into the project
+    currency with `exchange_rate` (project-currency units per 1 USD,
+    user-set for reproducibility). USD projects and `exchange_rate: 1.0`
+    keep bitwise-identical numbers. Previously the omitted defaults applied
+    at USD magnitude under ANY currency label (e.g. an RMB project silently
+    got USD-magnitude opex/tariff).
+  - Converted defaults: `tariff.hourly_prices` (0.10/kWh) and
+    `tariff.export_price` (0.05/kWh), `opex.labor_cost_per_year` (30000/yr),
+    `opex.misc_opex_per_year` (5000/yr), `opex.water_cost_per_m3` (2.0/m3),
+    `pv.C_pv` (500/kWp), `battery.c_energy` (220/kWh) and
+    `*.capital.rate_per_watt` (1.0/W — now behind the same `None` sentinel
+    as `capital.cost`). `maintenance_pct` (a fraction) is never converted.
+  - `opex_was_defaulted` now means "at least one default OPEX price is in
+    effect" (a partially explicit `opex` section keeps the flag), so the
+    P1-7 OPEX-dominance warning fires exactly when a default is used.
+    A partially explicit section roundtrips losslessly (explicit values are
+    preserved through `to_dict`/`from_dict`, including sweep overrides).
+  - Presets are built through `from_dict`, so `preset_609()` /
+    `preset_default()` now report `opex_was_defaulted = True` (they do use
+    the default OPEX); numbers are unchanged.
+
+### Added
+
+- `vfed design fx` — prints the built-in FX reference snapshot (CNY/USD/EUR
+  and more, per 1 USD, snapshot date annotated, reference values only).
+- `vfed evaluate` prints a `USD equivalent` line for the headline LCOE when
+  `exchange_rate != 1` (project currency is the reporting currency; the
+  extra line keeps cross-site comparisons honest).
+
 ## [2.1.1] - 2026-09-25
 
 Accuracy-audit release (user13 + whitebox/GHI deep checks, round 21).

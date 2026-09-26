@@ -47,8 +47,12 @@ def _explicit_opex_project():
 # 13.1  flag semantics (no simulation needed)
 # ---------------------------------------------------------------------------
 def test_direct_construction_flag_false():
-    """Direct dataclass construction (presets) is not a yaml default case."""
-    assert preset_609().opex_was_defaulted is False
+    """R26: presets load through from_dict, so their omitted opex section is
+    a genuine default case: flag True, USD-baseline values materialized."""
+    p = preset_609()
+    assert p.opex_was_defaulted is True
+    assert p.opex.labor_cost_per_year == 30000.0
+    assert p.opex.misc_opex_per_year == 5000.0
 
 
 def test_missing_opex_section_sets_flag():
@@ -59,11 +63,27 @@ def test_missing_opex_section_sets_flag():
 
 
 def test_explicit_opex_section_clears_flag():
+    """R26: the flag means "at least one USD-baseline default price is in
+    effect".  A fully explicit section (all three price fields) clears it;
+    a PARTIALLY explicit section keeps it (the unspecified fields still use
+    defaults) -- exactly the "warn when a default was used" semantics."""
     d = preset_609().to_dict()
-    d["opex"] = {"labor_cost_per_year": 12345.0}
+    d["opex"] = {
+        "labor_cost_per_year": 12345.0,
+        "misc_opex_per_year": 678.0,
+        "water_cost_per_m3": 1.5,
+    }
     p = DesignProject.from_dict(d)
     assert p.opex_was_defaulted is False
     assert p.opex.labor_cost_per_year == 12345.0
+
+    # partial section: labor explicit, misc/water defaulted -> flag True
+    d2 = preset_609().to_dict()
+    d2["opex"] = {"labor_cost_per_year": 12345.0}
+    p2 = DesignProject.from_dict(d2)
+    assert p2.opex_was_defaulted is True
+    assert p2.opex.labor_cost_per_year == 12345.0  # explicit value kept
+    assert p2.opex.misc_opex_per_year == 5000.0  # default materialized
 
 
 def test_flag_roundtrip_defaulted():
@@ -79,17 +99,22 @@ def test_flag_roundtrip_defaulted():
 
 
 def test_flag_roundtrip_explicit():
-    """to_dict -> from_dict preserves flag=False and the user's values."""
+    """to_dict -> from_dict preserves the user's explicit opex values (and
+    the flag implied by them).  R26: a partially explicit section keeps the
+    flag True (defaults still in effect for the unspecified fields), while
+    the explicit values themselves roundtrip losslessly."""
     d = preset_609().to_dict()
     d["opex"] = {"labor_cost_per_year": 12345.0, "misc_opex_per_year": 678.0}
     p1 = DesignProject.from_dict(d)
+    assert p1.opex_was_defaulted is True  # water_cost_per_m3 still defaulted
     d1 = p1.to_dict()
     assert "opex_was_defaulted" not in d1
-    assert "opex" in d1
+    assert d1["opex"] == {"labor_cost_per_year": 12345.0, "misc_opex_per_year": 678.0}
     p2 = DesignProject.from_dict(d1)
-    assert p2.opex_was_defaulted is False
+    assert p2.opex_was_defaulted is True
     assert p2.opex.labor_cost_per_year == 12345.0
     assert p2.opex.misc_opex_per_year == 678.0
+    assert p2.opex.water_cost_per_m3 == 2.0  # default re-derived
 
 
 def test_user_cannot_write_internal_flag():

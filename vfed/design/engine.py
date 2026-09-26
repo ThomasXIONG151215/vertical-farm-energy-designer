@@ -28,6 +28,7 @@ from ..devices.led import LEDDevice
 from ..plants.transpiration import TranspirationModel
 from ..plants.van_henten import VanHenten
 from ..weather.weather_bridge import fetch_weather
+from .fx import USD_C_ENERGY, USD_C_PV, resolve_unit_price
 from .result import SimulationResult
 
 __all__ = ["DesignEngine", "run_project", "full_load_warnings"]
@@ -1179,12 +1180,14 @@ class DesignEngine:
                     beta_voc=p.pv.beta_voc,
                     NOCT=p.pv.NOCT,
                     eta_inv=p.pv.eta_inv,
-                    C_pv=p.pv.C_pv,
+                    C_pv=resolve_unit_price(p.pv.C_pv, USD_C_PV, p.currency, p.exchange_rate),
                     degradation=p.pv.degradation,
                     eta_system=p.pv.eta_system,  # P6-7
                 )
                 bat_sys = BatterySystem(
-                    c_energy=p.battery.c_energy,
+                    c_energy=resolve_unit_price(
+                        p.battery.c_energy, USD_C_ENERGY, p.currency, p.exchange_rate
+                    ),
                     c_rate=p.battery.c_rate,
                     eta_ch=p.battery.eta_ch,
                     eta_dis=p.battery.eta_dis,
