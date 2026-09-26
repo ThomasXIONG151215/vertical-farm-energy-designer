@@ -16,6 +16,7 @@ configured tilt, while ``shortwave_radiation`` remains the horizontal GHI
 """
 
 import calendar
+import io
 import warnings
 from datetime import date, timedelta, timezone
 from pathlib import Path
@@ -41,6 +42,17 @@ except ImportError:
 
 OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
 OPEN_METEO_FCST = "https://api.open-meteo.com/v1/forecast"
+
+# Round 22: NASA POWER hourly point API (keyless, no quota).  The four
+# parameters map 1:1 onto the weather contract columns; ALLSKY_SFC_SW_DWN
+# is hourly Wh/m^2, numerically equal to the mean W/m^2 over the hour, and
+# is used as shortwave_radiation WITHOUT any x3600 conversion.
+NASA_POWER_URL = "https://power.larc.nasa.gov/api/temporal/hourly/point"
+NASA_POWER_PARAMS = "T2M,RH2M,WS10M,ALLSKY_SFC_SW_DWN"
+
+# Provider vocabulary (single source of truth for the fetcher, the config
+# guard and the CLI override).
+WEATHER_PROVIDERS = ("open-meteo", "nasa-power")
 
 
 class WeatherFetchError(Exception):
@@ -92,11 +104,19 @@ def _cache_path(
     tilt: float = 20.0,
     azimuth: float = 180.0,
     tz_hours: float = 8.0,
+    provider: str = "open-meteo",
 ) -> Path:
-    """Tilt-aware cache key — POA depends on (tilt, azimuth, tz_hours)."""
+    """Tilt-aware cache key — POA depends on (tilt, azimuth, tz_hours).
+
+    Round 22: non-default providers append a source tag (``_power``) so the
+    same coordinates never mix ERA5 and POWER data in one file — the two
+    reanalyses differ by a few W/m^2/W/K everywhere, and a silent cross-hit
+    would be invisible in every downstream KPI.
+    """
     cache_dir.mkdir(parents=True, exist_ok=True)
+    suffix = "" if provider == "open-meteo" else "_power"
     return cache_dir / (
-        f"weather_{lat:.3f}_{lon:.3f}_{year}" f"_t{tilt:.3f}_a{azimuth:.3f}_z{tz_hours:.3f}.csv"
+        f"weather_{lat:.3f}_{lon:.3f}_{year}" f"_t{tilt:.3f}_a{azimuth:.3f}_z{tz_hours:.3f}{suffix}.csv"
     )
 
 
@@ -105,15 +125,25 @@ def _legacy_cache_path(cache_dir: Path, lat: float, lon: float, year: int) -> Pa
     return cache_dir / f"weather_{lat:.3f}_{lon:.3f}_{year}.csv"
 
 
-def _find_city_csv(city: str, year: int) -> Optional[Path]:
+def _find_city_csv(
+    city: str,
+    year: int,
+    provider: str = "open-meteo",
+    root: Optional[Path] = None,
+) -> Optional[Path]:
     """Search for a pre-downloaded city weather CSV.
 
     Checks ``data/weather/{city}_{year}.csv`` relative to the project root
     (``vfed`` package parent).  Returns ``None`` if the file does not exist.
+
+    Round 22: ``provider="nasa-power"`` looks for ``{city}_{year}_power.csv``
+    instead — city files are source-specific, exactly like the lat/lon cache
+    key.  *root* is injectable for tests.
     """
     # Project root = directory containing vfed/
-    root = Path(__file__).resolve().parent.parent.parent
-    candidate = root / "data" / "weather" / f"{city}_{year}.csv"
+    base = Path(root) if root is not None else Path(__file__).resolve().parent.parent.parent
+    suffix = "" if provider == "open-meteo" else "_power"
+    candidate = base / "data" / "weather" / f"{city}_{year}{suffix}.csv"
     if candidate.exists():
         return candidate
     return None
@@ -244,6 +274,124 @@ def add_poa(
     return out
 
 
+# Round 22: radiation columns scaled together by ghi_scale.  Scaling the
+# whole radiation field (GHI + beam/diffuse/POA components) proportionally
+# keeps the sky partition fixed and makes POA / PV / annual GHI downstream
+# scale by exactly the same factor.
+_RADIATION_COLS = ("shortwave_radiation", "direct_radiation", "diffuse_radiation", "poa_radiation")
+
+
+def _apply_ghi_scale(df: pd.DataFrame, ghi_scale: float) -> pd.DataFrame:
+    """Apply the GHI bias-correction multiplier at the weather-df exit.
+
+    Thinnest possible layer (round 22): called at EVERY return point of
+    ``fetch_weather``, after the cache write — the on-disk cache always
+    stores UNSCALED provider values, so changing ghi_scale never
+    invalidates or poisons a cache entry.  ``ghi_scale == 1.0`` (the
+    default) multiplies nothing — the default path is bitwise unchanged.
+    The effective value is always recorded in ``attrs["ghi_scale"]``
+    (self-evidence, incl. the 1.0 no-op).
+    """
+    if ghi_scale != 1.0:
+        for col in _RADIATION_COLS:
+            if col in df.columns:
+                df[col] = df[col] * ghi_scale
+    df.attrs["ghi_scale"] = ghi_scale
+    return df
+
+
+def _parse_power_csv(text: str) -> pd.DataFrame:
+    """Parse a NASA POWER hourly point CSV response.
+
+    Format: a ``-BEGIN HEADER-`` .. ``-END HEADER-`` prologue (13 lines in
+    practice, but located by marker — never by count), then a
+    ``YEAR,MO,DY,HR,<params>`` UTC grid.  Returns a UTC-indexed DataFrame
+    with the weather-contract column names:
+
+        T2M -> temperature_2m (deg C)
+        RH2M -> relative_humidity_2m (%)
+        WS10M -> wind_speed_10m (m/s)
+        ALLSKY_SFC_SW_DWN -> shortwave_radiation (Wh/m^2 per hour ==
+                             mean W/m^2 over the hour, used as-is)
+
+    Fail-fast: any ``-999`` fill value or missing entry in ANY variable of
+    ANY row raises ``WeatherFetchError`` — a partially filled year would
+    silently poison the 8760-hour ODE integration (no-hardcoded-science /
+    no silent gap-filling).
+    """
+    lines = text.splitlines()
+    try:
+        end_hdr = next(i for i, ln in enumerate(lines) if ln.strip() == "-END HEADER-")
+    except StopIteration:
+        raise WeatherFetchError(
+            "NASA POWER response has no '-END HEADER-' marker (unexpected "
+            "format or an error page); refusing to guess the data block."
+        ) from None
+    raw = pd.read_csv(io.StringIO("\n".join(lines[end_hdr + 1 :])))
+    required = ["YEAR", "MO", "DY", "HR", "T2M", "RH2M", "WS10M", "ALLSKY_SFC_SW_DWN"]
+    missing = [c for c in required if c not in raw.columns]
+    if missing:
+        raise WeatherFetchError(
+            f"NASA POWER response is missing columns {missing} "
+            f"(got {list(raw.columns)}); check the parameters/ URL."
+        )
+    ts = pd.to_datetime(
+        dict(year=raw["YEAR"], month=raw["MO"], day=raw["DY"], hour=raw["HR"]), utc=True
+    )
+    vals = raw[["T2M", "RH2M", "WS10M", "ALLSKY_SFC_SW_DWN"]].apply(pd.to_numeric, errors="coerce")
+    bad = (vals == -999) | vals.isna()
+    if bad.to_numpy().any():
+        rows = np.nonzero(bad.any(axis=1).to_numpy())[0]
+        first = ts.iloc[int(rows[0])].strftime("%Y-%m-%dT%H:%MZ")
+        raise WeatherFetchError(
+            f"NASA POWER returned {len(rows)} row(s) with the -999 fill value "
+            f"or missing data (first at {first}); refusing a partially "
+            f"filled year. Narrow the year window or retry later."
+        )
+    return pd.DataFrame(
+        {
+            "timestamp": ts,
+            "temperature_2m": vals["T2M"].to_numpy(dtype=float),
+            "relative_humidity_2m": vals["RH2M"].to_numpy(dtype=float),
+            "wind_speed_10m": vals["WS10M"].to_numpy(dtype=float),
+            "shortwave_radiation": vals["ALLSKY_SFC_SW_DWN"].to_numpy(dtype=float),
+        }
+    )
+
+
+def _stale_cache_fallback(
+    fb: pd.DataFrame,
+    path: Path,
+    err: Exception,
+    tilt: float,
+    azimuth: float,
+    lat: float,
+    lon: float,
+    tz_hours: float,
+) -> pd.DataFrame:
+    """P4-16 offline fallback: reuse a pre-fix (shifted-window) cache when
+    the re-fetch fails (no network) rather than aborting — the tz-shift
+    only costs the first tz_hours hours of Jan 1.  Shared by the
+    Open-Meteo and NASA POWER fetch branches (identical semantics)."""
+    warnings.warn(
+        f"Weather re-fetch failed ({err}); reusing stale pre-P4-16 cache "
+        f"{path} (local calendar offset by tz_hours={tz_hours}).",
+        stacklevel=3,
+    )
+    if "poa_radiation" not in fb.columns:
+        fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours)
+    else:
+        # P6-1: stale legacy POA geometry is unknown — recompute from
+        # GHI so the offline fallback still honours the requested
+        # tilt/azimuth (pure numpy, no network needed).
+        fb = fb.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
+        fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours)
+    # P2-2: provenance metadata (offline stale-cache fallback).
+    fb.attrs["weather_source"] = "cache"
+    fb.attrs["weather_source_detail"] = f"{path.name} (stale pre-P4-16)"
+    return fb
+
+
 def fetch_weather(
     lat: float,
     lon: float,
@@ -256,14 +404,29 @@ def fetch_weather(
     use_forecast: bool = False,
     city: Optional[str] = None,
     timeout: float = 120.0,
+    provider: str = "open-meteo",
+    ghi_scale: float = 1.0,
 ) -> pd.DataFrame:
     """Fetch (and cache) hourly weather for a calendar year.
 
     When ``city`` is provided and a pre-downloaded CSV exists in
     ``data/weather/{city}_{year}.csv`` (relative to project root), it is
-    loaded directly without any API call.  Falls back to Open-Meteo if
-    the local file is not found.
+    loaded directly without any API call.  Falls back to the provider's
+    live API if the local file is not found.
+
+    Round 22: ``provider`` selects the source — ``"open-meteo"`` (default;
+    ERA5 archive, unchanged behaviour) or ``"nasa-power"`` (NASA POWER
+    hourly, MERRA-2/CERES).  The provider namespaces BOTH the lat/lon cache
+    file (``..._z8.000_power.csv``) and the city file
+    (``{City}_{year}_power.csv``) so the two reanalyses never mix.
+    ``ghi_scale`` (default 1.0) multiplies the radiation field at the df
+    exit — see ``_apply_ghi_scale``; the cache itself always stores
+    unscaled provider values.
     """
+    if provider not in WEATHER_PROVIDERS:
+        raise WeatherFetchError(
+            f"provider must be one of {WEATHER_PROVIDERS}, got {provider!r}."
+        )
     cache_dir = Path(cache_dir) if cache_dir else Path("weather_cache")
 
     # ── City-based local CSV (no API) ──
@@ -273,7 +436,7 @@ def fetch_weather(
     # its provenance is allowed to diverge from the lat/lon cache (P1-3b),
     # and silently materialising one would blur the two.
     if city:
-        local = _find_city_csv(city, year)
+        local = _find_city_csv(city, year, provider=provider)
         if local is not None:
             df = pd.read_csv(local, parse_dates=["timestamp"])
             df = df.set_index("timestamp")
@@ -317,13 +480,17 @@ def fetch_weather(
             # to_csv round-trips or the JSON result schema).
             df.attrs["weather_source"] = "pre-downloaded city file"
             df.attrs["weather_source_detail"] = local.name
-            return df
+            return _apply_ghi_scale(df, ghi_scale)
 
     # ── Standard lat/lon cache (tilt-aware key with legacy fallback, P6-1) ──
-    cp = _cache_path(cache_dir, lat, lon, year, tilt, azimuth, tz_hours)
-    lp = _legacy_cache_path(cache_dir, lat, lon, year)
-    if (cp.exists() or lp.exists()) and not force:
-        legacy = not cp.exists()
+    cp = _cache_path(cache_dir, lat, lon, year, tilt, azimuth, tz_hours, provider=provider)
+    # Round 22: the legacy (pre-P6-1) name is an Open-Meteo-era artefact —
+    # a NASA POWER run must never adopt it (its POA came from ERA5 GHI).
+    lp = _legacy_cache_path(cache_dir, lat, lon, year) if provider == "open-meteo" else None
+    has_cp = cp.exists()
+    has_lp = lp is not None and lp.exists()
+    if (has_cp or has_lp) and not force:
+        legacy = not has_cp
         path = lp if legacy else cp
         df = pd.read_csv(path, parse_dates=["timestamp"])
         df = df.set_index("timestamp")
@@ -353,7 +520,7 @@ def fetch_weather(
             # P2-2: provenance metadata (cache hit, legacy or geometry-aware).
             df.attrs["weather_source"] = "cache"
             df.attrs["weather_source_detail"] = path.name
-            return df
+            return _apply_ghi_scale(df, ghi_scale)
         # Pre-fix cache (window shifted by tz_hours): keep it as an offline
         # fallback and regenerate below when the network is available.
         fallback_df = df
@@ -369,6 +536,72 @@ def fetch_weather(
             "Open-Meteo. Install it or provide a cached CSV."
         )
 
+    # ── NASA POWER live fetch (round 22) ──
+    if provider == "nasa-power":
+        # Same padded request window as the Open-Meteo branch below (one
+        # extra day on each side): the P4-16 local-year slice must yield
+        # EXACTLY 8760/8784 rows — the engine rejects any other year length
+        # and the cache-hit alignment guard keys on the exact row count, so
+        # the UTC request has to over-cover |tz_hours| hours on both flanks.
+        p_start = date(year - 1, 12, 31).strftime("%Y%m%d")
+        p_end = date(year + 1, 1, 2).strftime("%Y%m%d")
+        power_url = (
+            f"{NASA_POWER_URL}?parameters={NASA_POWER_PARAMS}&community=RE"
+            f"&latitude={lat}&longitude={lon}"
+            f"&start={p_start}&end={p_end}&format=CSV&time-standard=UTC"
+        )
+        print(
+            f"Fetching weather for lat={lat:.3f}, lon={lon:.3f}, "
+            f"year={year} from NASA POWER (timeout={timeout:.0f}s)...",
+            flush=True,
+        )
+        try:
+            if _HAS_REQUESTS:
+                resp = requests.get(power_url, timeout=timeout)
+                resp.raise_for_status()
+                text = resp.text
+            else:
+                # Pyodide fallback: browser-native HTTP via open_url (same
+                # convention as the Open-Meteo branch).
+                body = _py_open_url(power_url).read()
+                text = body.decode("utf-8", errors="replace") if isinstance(body, bytes) else body
+        except Exception as e:
+            fb = locals().get("fallback_df")
+            if fb is not None:
+                return _apply_ghi_scale(
+                    _stale_cache_fallback(fb, path, e, tilt, azimuth, lat, lon, tz_hours),
+                    ghi_scale,
+                )
+            raise WeatherFetchError(
+                f"weather fetch failed: {e}. Check network connectivity or "
+                f"provide a cached/offline weather CSV."
+            ) from e
+        df = _parse_power_csv(text)
+        # UTC -> local wall clock with the SAME fixed-offset conversion and
+        # local-year slice as the Open-Meteo branch (P4-16; no DST rules —
+        # see the comment there).
+        tz = timezone(timedelta(hours=tz_hours))
+        df["timestamp"] = df["timestamp"].dt.tz_convert(tz)
+        df = df.set_index("timestamp")
+        lo = pd.Timestamp(f"{year}-01-01 00:00:00", tz=tz)
+        hi = pd.Timestamp(f"{year + 1}-01-01 00:00:00", tz=tz)
+        df = df[(df.index >= lo) & (df.index < hi)]
+        df.index = df.index.tz_localize(None)  # naive local wall time (cache format)
+        expected_n = (365 + int(calendar.isleap(year))) * 24
+        if len(df) != expected_n:
+            raise WeatherFetchError(
+                f"NASA POWER yielded {len(df)} hourly rows for local year "
+                f"{year} (expected {expected_n}); refusing a partial year."
+            )
+        df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+        df.to_csv(cp)
+        # P2-2: provenance metadata (live NASA POWER).  Detail carries the
+        # API host only — no query string (key-safe by construction).
+        df.attrs["weather_source"] = "NASA POWER hourly (MERRA-2/CERES)"
+        df.attrs["weather_source_detail"] = urlsplit(NASA_POWER_URL).netloc
+        return _apply_ghi_scale(df, ghi_scale)
+
+    # ── Open-Meteo live fetch (default provider) ──
     # One extra day on each side so the tz-shifted data still covers the full
     # local year [year-01-01 00:00, (year+1)-01-01 00:00) for any |tz_hours|<24
     # (P4-16).  Open-Meteo accepts dates beyond the requested archive window.
@@ -416,28 +649,15 @@ def fetch_weather(
         # Already wrapped inside the pyodide block — re-raise unchanged.
         raise
     except Exception as e:
-        # P4-16 offline fallback: if a pre-fix (shifted-window) cache exists and
-        # the re-fetch fails (no network), reuse it with a warning rather than
-        # aborting — the tz-shift only costs the first 8 hours of Jan 1.
+        # P4-16 offline fallback: if a pre-fix (shifted-window) cache exists
+        # and the re-fetch fails (no network), reuse it with a warning
+        # rather than aborting (shared with the POWER branch).
         fb = locals().get("fallback_df")
         if fb is not None:
-            warnings.warn(
-                f"Weather re-fetch failed ({e}); reusing stale pre-P4-16 cache "
-                f"{path} (local calendar offset by tz_hours={tz_hours}).",
-                stacklevel=2,
+            return _apply_ghi_scale(
+                _stale_cache_fallback(fb, path, e, tilt, azimuth, lat, lon, tz_hours),
+                ghi_scale,
             )
-            if "poa_radiation" not in fb.columns:
-                fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours)
-            else:
-                # P6-1: stale legacy POA geometry is unknown — recompute from
-                # GHI so the offline fallback still honours the requested
-                # tilt/azimuth (pure numpy, no network needed).
-                fb = fb.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
-                fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours)
-            # P2-2: provenance metadata (offline stale-cache fallback).
-            fb.attrs["weather_source"] = "cache"
-            fb.attrs["weather_source_detail"] = f"{path.name} (stale pre-P4-16)"
-            return fb
         raise WeatherFetchError(
             f"weather fetch failed: {e}. Check network connectivity or "
             f"provide a cached/offline weather CSV."
@@ -474,4 +694,4 @@ def fetch_weather(
     # but keep the convention key-safe by construction).
     df.attrs["weather_source"] = "live fetch"
     df.attrs["weather_source_detail"] = urlsplit(url).netloc
-    return df
+    return _apply_ghi_scale(df, ghi_scale)

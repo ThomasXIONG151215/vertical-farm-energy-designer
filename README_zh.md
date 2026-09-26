@@ -101,6 +101,33 @@ npm start       # 在 http://localhost:8000/ 启动本地服务
 
 离线快速体验：使用内置城市 + `--year 2025` 即可。任意地点离线运行：先联网预取一次（`vfed evaluate <yaml> --cache weather_cache`），之后复用缓存。显式坐标优先于内置城市：`vfed design new --lat <度> --lon <度>` 会清除预设自带的 `site.city`（创建时打印 `[WARN] clearing preset city ...`）——lat/lon 缓存键与城市 CSV 描述的是两个不同地点，保留 city 会悄悄仿真错误的气候。生成的 YAML 随后以坐标作为天气缓存键（`weather_<lat>_<lon>_<year>_*.csv`），首次运行联网走 Open-Meteo 拉取（`tz_hours` 仍为预设值，除非自行修改）。反之，若在仍带 `site.city` 的 YAML 里手工修改 `lat`/`lon`，只要年份匹配，城市 CSV 依旧优先——想强制走 lat/lon（在线）路径，请在 YAML 中把 `site.city` 置为 null。示例扫描文件（`example_sweep.yaml` / `example_lcoe_full.yaml`）使用 2023 年 + 显式 lat/lon（不在预下载城市数据内），首次运行需联网（几秒，取决于网络），之后命中缓存即可离线。
 
+#### 天气数据源与 GHI 订正（round 22）
+
+`site.weather_provider` 选择逐时天气数据源；`site.ghi_scale`（区间 (0.5, 1.5]）是 GHI 平均偏差订正乘子——GHI 与由它派生的 POA 场同比例缩放，因此 POA、光伏发电量、年度 GHI 按同一系数整体平移。默认值（`open-meteo`，`1.0`）与此前所有基线逐位一致。两者均可在不改 YAML 的情况下按次覆盖（`evaluate` 与 `sweep`）：
+
+```bash
+vfed evaluate my_farm.yaml --provider nasa-power              # 临时换源
+vfed evaluate my_farm.yaml --provider nasa-power --ghi-scale 0.9
+```
+
+两源在磁盘上永不混用：NASA POWER 缓存带 `_power` 后缀（`weather_..._z8.000_power.csv`），POWER 城市文件命名为 `{City}_{year}_power.csv`。订正在天气数据出口统一施加，缓存本身始终存未订正的原始值——改 `ghi_scale` 不会作废任何缓存。
+
+**什么参数用哪个源？** 独立验证研究并不支持全面换源：
+
+| 变量 | Open-Meteo (ERA5) | NASA POWER (MERRA-2/CERES) |
+|---|---|---|
+| GHI 年总量 | 华东偏高（上海 2025：~1570 kWh/m²/yr，CMA 气候态 ~1370） | 气候态更接近（实测 1524.3） |
+| GHI 逐时日循环 | 高估最小（Wang & Wang 2025） | 逐时散布更宽 |
+| T2M | 略优（RMSE 2.04 vs 2.66 K；Huang 2023） | 略差 |
+| RH2M | 相当 | 相当 |
+| WS10M | 明确更优（Mi & Liu 2025） | 最弱变量（NRMSE ≥ 20%） |
+
+推荐用法：耦合仿真默认保持 `open-meteo`（逐时温/湿/风更优）；用 `--provider nasa-power` 做 GHI 独立对照；用 `ghi_scale` 把所用数据源对齐当地 GHI 气候态——例：上海 2025 ERA5 1570 → CMA ~1370，取 `ghi_scale: 0.873`。
+
+NASA POWER 实用注意：(1) 逐时 `ALLSKY_SFC_SW_DWN` 单位为 Wh/m²/小时——数值上等于该小时平均 W/m²，直接使用（勿 ×3600）；(2) VFED 始终请求 `time-standard=UTC`（POWER 默认 LST 会悄悄平移一天）；(3) 任一变量任一行出现 `-999` 填充值即快速失败。辐射类参数滞后真实时间约 3–4 个月（气象类约 2 天）；API 无 key、无限额。
+
+参考文献：Wang & Wang 2025（ERA5 vs POWER 逐时 GHI 验证）；Huang 2023（ERA5 vs POWER 近地面气温）；Mi & Liu 2025（再分析风速互评）。
+
 ## DIY / 个人用户指南
 
 VFED 是一个研究工具，但**默认预设**现在就是一个可直接上手的小型种植间起点：约 10 m² 光照冠层、40 m³ 房间，HVAC 与除湿机均为 `auto_size`，位于上海并附带 2025 年天气数据——下述全流程**完全离线**可用。

@@ -75,7 +75,7 @@ def test_city_path_attrs(tmp_path, monkeypatch):
     """Synthetic aligned city file -> source + filename detail."""
     f = tmp_path / "TestCity_2025.csv"
     _write_weather_csv(f, _year_stamps(2025))
-    monkeypatch.setattr(weather_bridge, "_find_city_csv", lambda city, year: f)
+    monkeypatch.setattr(weather_bridge, "_find_city_csv", lambda city, year, **kw: f)
     import warnings as _w
 
     with _w.catch_warnings():
@@ -159,7 +159,7 @@ def test_attrs_do_not_leak_into_csv_roundtrip(tmp_path, monkeypatch):
     identical column set on re-read (regression pin against schema drift)."""
     f = tmp_path / "TestCity_2025.csv"
     _write_weather_csv(f, _year_stamps(2025))
-    monkeypatch.setattr(weather_bridge, "_find_city_csv", lambda city, year: f)
+    monkeypatch.setattr(weather_bridge, "_find_city_csv", lambda city, year, **kw: f)
     df = weather_bridge.fetch_weather(
         lat=31.23, lon=121.47, year=2025, tz_hours=8.0,
         tilt=20.0, azimuth=180.0, cache_dir=tmp_path, city="TestCity",

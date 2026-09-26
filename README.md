@@ -101,6 +101,33 @@ Weather is fetched hourly from Open-Meteo by lat/lon/year on first use and cache
 
 For an offline quickstart, stick with a built-in city and `--year 2025`. To run an arbitrary site offline, fetch once while online (`vfed evaluate <yaml> --cache weather_cache`), then reuse the cache. Explicit coordinates take priority over a bundled city: `vfed design new --lat <deg> --lon <deg>` clears the preset's `site.city` (a `[WARN] clearing preset city ...` line is printed at creation) because the lat/lon cache key and the city CSV describe two different sites — keeping the city would silently simulate the wrong climate. The generated YAML then uses the coordinates as the weather cache key (`weather_<lat>_<lon>_<year>_*.csv`) and for the live Open-Meteo fetch on first run (`tz_hours` stays at the preset value unless you edit it). Conversely, if you hand-edit `lat`/`lon` in a YAML that still carries `site.city`, the city CSV keeps winning whenever its year matches — set `site.city: null` to force the lat/lon path. The example sweep files (`example_sweep.yaml`, `example_lcoe_full.yaml`) use year 2023 with explicit lat/lon, so their first run fetches from Open-Meteo (a few seconds, network-dependent) and subsequent runs hit the cache.
 
+#### Weather providers & GHI bias correction (round 22)
+
+`site.weather_provider` selects the hourly weather source and `site.ghi_scale` (band (0.5, 1.5]) multiplies the GHI — and the POA field derived from it — as a mean-bias correction, so POA, PV generation and annual GHI all shift by exactly the same factor. Defaults (`open-meteo`, `1.0`) reproduce every earlier baseline bit-for-bit. Both can be overridden per run without editing the YAML (`evaluate` and `sweep`):
+
+```bash
+vfed evaluate my_farm.yaml --provider nasa-power              # one-off source switch
+vfed evaluate my_farm.yaml --provider nasa-power --ghi-scale 0.9
+```
+
+The two sources never mix on disk: NASA POWER caches carry a `_power` suffix (`weather_..._z8.000_power.csv`) and a POWER city file would be named `{City}_{year}_power.csv`. The scale is applied at the weather-data exit, so the cache itself always stores unscaled provider values — changing `ghi_scale` never invalidates a cache.
+
+**Which source for what?** Independent validation studies do not crown a single winner:
+
+| Variable | Open-Meteo (ERA5) | NASA POWER (MERRA-2/CERES) |
+|---|---|---|
+| GHI, annual total | high bias in East China (Shanghai 2025: ~1570 kWh/m²/yr vs ~1370 CMA climatology) | closer climatology (measured 1524.3) |
+| GHI, hourly diurnal cycle | smallest overestimation (Wang & Wang 2025) | broader hourly spread |
+| T2M | slightly better (RMSE 2.04 vs 2.66 K; Huang 2023) | slightly worse |
+| RH2M | comparable | comparable |
+| WS10M | clearly better (Mi & Liu 2025) | weakest variable (NRMSE ≥ 20%) |
+
+Recommended use: keep `open-meteo` as the coupled-simulation default (best hourly T/RH/WS); use `--provider nasa-power` as an independent GHI cross-check; and use `ghi_scale` to align whichever source you run with your local GHI climatology — e.g. Shanghai 2025 ERA5 1570 → CMA ~1370 gives `ghi_scale: 0.873`.
+
+NASA POWER practical notes: (1) hourly `ALLSKY_SFC_SW_DWN` is reported in Wh/m² per hour — numerically equal to the mean W/m² over the hour and used as-is (no ×3600); (2) VFED always requests `time-standard=UTC` (POWER's default LST would silently shift the day); (3) the `-999` fill value fails fast (any variable, any row). Radiation parameters lag real time by ~3–4 months (meteorology ~2 days); the API is keyless with no quota.
+
+References: Wang & Wang 2025 (hourly GHI validation, ERA5 vs POWER); Huang 2023 (ERA5 vs POWER near-surface temperature); Mi & Liu 2025 (reanalysis wind-speed intercomparison).
+
 ## DIY / Prosumer Guide
 
 VFED is a research tool, but the **default preset** is now a usable starting point for a small grow room: a ~10 m² lit canopy in a 40 m³ room, with `auto_size` HVAC and dehumidifier, located in Shanghai with bundled 2025 weather — the whole flow below works **fully offline**.

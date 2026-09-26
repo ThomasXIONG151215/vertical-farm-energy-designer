@@ -25,6 +25,10 @@ __all__ = [
     "CapitalCostConfig",
     "CAPITAL_MODES_BY_COMPONENT",
     "validate_capital_config",
+    "WEATHER_PROVIDERS",
+    "GHI_SCALE_LIMITS",
+    "validate_weather_provider",
+    "validate_ghi_scale",
     "OpexConfig",
     "SiteConfig",
     "EnvelopeConfig",
@@ -114,6 +118,46 @@ PARAM_TOPLEVEL_MAP: Dict[str, str] = {
     "pv_area": "pv_area_m2",
     "battery": "battery_kwh",
 }
+
+
+# ---------------------------------------------------------------------------
+# Round 22: weather provider enum + GHI bias-correction band.  Enforced by
+# ``DesignProject.from_dict`` (E001 at load time) and reused verbatim by the
+# CLI ``--provider`` / ``--ghi-scale`` overrides and agent_evaluate's
+# additive kwargs, so every entry point applies the SAME rule.
+# ---------------------------------------------------------------------------
+WEATHER_PROVIDERS: Tuple[str, ...] = ("open-meteo", "nasa-power")
+GHI_SCALE_LIMITS = (0.5, 1.5)  # (lo, hi]; <= 0.5 is almost surely a unit/source error
+
+
+def validate_weather_provider(value, where: str = "site.weather_provider") -> str:
+    """Round 22: provider whitelist — an unknown source must fail fast
+    instead of silently falling back to Open-Meteo (no silent fallbacks)."""
+    if value not in WEATHER_PROVIDERS:
+        raise ValueError(
+            f"{where} must be one of {'|'.join(WEATHER_PROVIDERS)}, got "
+            f"{value!r}. 'open-meteo' (ERA5 archive) is the default; "
+            f"'nasa-power' fetches NASA POWER hourly (MERRA-2/CERES)."
+        )
+    return value
+
+
+def validate_ghi_scale(value, where: str = "site.ghi_scale") -> float:
+    """Round 22: GHI bias-correction band (0.5, 1.5] (E001 at load time)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(
+            f"{where} must be a number (GHI multiplier), got "
+            f"{type(value).__name__}: {value!r}"
+        )
+    lo, hi = GHI_SCALE_LIMITS
+    if not (lo < float(value) <= hi):
+        raise ValueError(
+            f"{where} must be in ({lo}, {hi}], got {value}. The multiplier "
+            f"scales shortwave_radiation (and the POA field) at the weather "
+            f"exit; a factor of {lo} or less is almost surely a unit or "
+            f"source mistake, not a bias correction."
+        )
+    return float(value)
 
 
 @dataclass
@@ -274,6 +318,20 @@ class SiteConfig:
 
     P8-15: 默认值在此文档化; 用 ``vfed design new --city <name>`` 可写入
     正确的 lat/lon/tz_hours 三元组。
+
+    Round 22 (weather source, 新增，均有默认值——缺省即原行为，零漂移):
+
+        weather_provider = "open-meteo"  逐时天气源枚举
+            "open-meteo"  ERA5 archive (默认，历来的唯一来源)
+            "nasa-power"  NASA POWER hourly (MERRA-2/CERES)；GHI 气候态略优，
+                          T2M/WS10M 略差 (见 README "Weather Data")。非默认
+                          provider 的缓存/城市文件名自动加 ``_power`` 后缀，
+                          两源永不混用。
+        ghi_scale = 1.0  GHI 订正乘子，区间 (0.5, 1.5]。在 weather df 出口
+            统一乘 shortwave_radiation 及其派生的 POA 场 (POA/PV/年度 GHI
+            同比例生效)；缓存文件存的是未乘订正的原始值，改系数不换缓存。
+            例: 把 ERA5 年 GHI 1570 kWh/m2/yr 对齐到当地气候态 1370 时，
+            ghi_scale ≈ 1370/1570 = 0.873。
     """
 
     lat: float = 31.2
@@ -283,6 +341,11 @@ class SiteConfig:
     azimuth: float = 180.0  # PV 方位角 (°, 180=正南)
     year: int = 2025  # 天气数据年份
     city: Optional[str] = None  # optional: pre-downloaded city name
+    weather_provider: str = "open-meteo"
+    #   hourly weather source (round 22); see the class docstring above.
+    ghi_scale: float = 1.0
+    #   GHI bias-correction multiplier, band (0.5, 1.5]; see the class
+    #   docstring above — the cache always stores unscaled values.
 
 
 @dataclass
@@ -1284,6 +1347,10 @@ class DesignProject:
 
         site_cfg = sub(SiteConfig, d.get("site", {}), yaml_path="site")
         _require_number(["lat", "lon", "tz_hours", "tilt", "azimuth", "year"], site_cfg, "site")
+        # Round 22: weather provider enum + GHI bias-correction band (E001
+        # at load time; the defaults themselves are always valid).
+        validate_weather_provider(site_cfg.get("weather_provider", "open-meteo"))
+        validate_ghi_scale(site_cfg.get("ghi_scale", 1.0))
 
         # P0-1: battery + top-level capital blocks -- validate the pricing
         # basis before constructing the project (fail-fast, YAML paths).

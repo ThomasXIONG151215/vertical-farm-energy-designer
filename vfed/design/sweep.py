@@ -443,7 +443,13 @@ def _precheck_legacy_cache_notice(project: DesignProject, cache_dir) -> None:
 
     City-backed projects never consult the lat/lon cache, so they skip the
     precheck entirely (same priority as fetch_weather).
+
+    Round 22: non-default weather providers also skip — the legacy name is
+    an Open-Meteo-era artefact and their cache key carries a ``_power``
+    suffix, so there is no legacy file this precheck could speak about.
     """
+    if getattr(project.site, "weather_provider", "open-meteo") != "open-meteo":
+        return
     if getattr(project.site, "city", None):
         return
     from ..weather.weather_bridge import (

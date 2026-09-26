@@ -8,7 +8,9 @@ Commands:
     vfed design tariffs
     vfed validate <project.yaml>
     vfed evaluate <project.yaml> [--cache weather_cache] [--tariff NAME|PATH]
+                  [--provider {open-meteo,nasa-power}] [--ghi-scale FLOAT]
     vfed sweep <project.yaml> [--cache weather_cache] [--out results.csv] [--tariff NAME|PATH]
+               [--provider {open-meteo,nasa-power}] [--ghi-scale FLOAT]
 
 The CLI is intentionally dependency-light (argparse) and wraps the parametric
 ODE building model + optional PVBES energy system.
@@ -25,6 +27,8 @@ from .design.project import (
     HARDWARE_ALIASES,
     HVACConfig,
     TariffConfig,
+    validate_ghi_scale,
+    validate_weather_provider,
 )
 from .design.presets import preset_default, preset_609
 from .design.engine import DesignEngine, full_load_warnings
@@ -210,6 +214,12 @@ _YAML_SECTION_COMMENTS = {
         "#                offline data exists only for 2025 (year is locked)\n"
         "#   tz_hours   - UTC offset (h)\n"
         "#   tilt, azimuth - PV panel mounting (degrees)\n"
+        "#   weather_provider - open-meteo (ERA5, default) | nasa-power\n"
+        "#                (POWER hourly; its cache/city files get a _power\n"
+        "#                suffix so the two sources never mix)\n"
+        "#   ghi_scale  - GHI bias multiplier (0.5, 1.5]; 1.0 = no scaling.\n"
+        "#                Scales GHI and the POA field together (POA/PV/\n"
+        "#                annual GHI shift by the same factor)\n"
         "# ------------------------------------------------------------------\n"
     ),
     "envelope": (
@@ -743,6 +753,24 @@ def _resolve_tariff_arg(value, project_currency=None):
     sys.exit(1)
 
 
+def _resolve_weather_overrides(args):
+    """Round 22: resolve ``--provider`` / ``--ghi-scale`` into VALIDATED
+    override values (None = flag not given = the YAML value wins, same
+    semantics as ``--tariff``).  Exits with ``[ERROR E001]`` on an invalid
+    value; returns ``(provider, ghi_scale)`` otherwise."""
+    provider = getattr(args, "provider", None)
+    ghi_scale = getattr(args, "ghi_scale", None)
+    try:
+        if provider is not None:
+            provider = validate_weather_provider(provider, where="--provider")
+        if ghi_scale is not None:
+            ghi_scale = validate_ghi_scale(ghi_scale, where="--ghi-scale")
+    except ValueError as e:
+        print(f"[ERROR E001] {e}", file=sys.stderr)
+        sys.exit(1)
+    return provider, ghi_scale
+
+
 def _cmd_evaluate(args):
     """Evaluate a single design — building simulation only (no sweep)."""
     import numpy as np
@@ -767,6 +795,13 @@ def _cmd_evaluate(args):
     tariff_override = _resolve_tariff_arg(args.tariff, project_currency=project.currency)
     if tariff_override is not None:
         project.tariff = tariff_override
+    # Round 22: --provider / --ghi-scale one-off overrides (CLI wins over
+    # the YAML when given, additive no-op otherwise).
+    provider_override, ghi_scale_override = _resolve_weather_overrides(args)
+    if provider_override is not None:
+        project.site.weather_provider = provider_override
+    if ghi_scale_override is not None:
+        project.site.ghi_scale = ghi_scale_override
     engine = DesignEngine(cache_dir=args.cache)
     # user12 P2-1: "Resolving" is accurate for every outcome -- the engine
     # may hit the pre-downloaded city file or the weather cache (no network)
@@ -931,14 +966,22 @@ def _cmd_sweep(args):
             print(f"[ERROR E001] invalid project config: {e}", file=sys.stderr)
             return 1
     tariff_override = _resolve_tariff_arg(args.tariff, project_currency=project_currency)
+    # Round 22: --provider / --ghi-scale one-off overrides (validated before
+    # any simulation work; passed as kwargs only when set — agent_evaluate's
+    # None defaults keep the sweep behaviour bitwise unchanged).
+    provider_override, ghi_scale_override = _resolve_weather_overrides(args)
     print(
         f"Loading '{args.project}', fetching weather if needed " f"(cache: '{args.cache}')...",
         file=sys.stderr,
     )
+    override_kwargs = {}
     if tariff_override is not None:
-        res = agent_evaluate(args.project, cache_dir=args.cache, tariff=tariff_override)
-    else:
-        res = agent_evaluate(args.project, cache_dir=args.cache)
+        override_kwargs["tariff"] = tariff_override
+    if provider_override is not None:
+        override_kwargs["provider"] = provider_override
+    if ghi_scale_override is not None:
+        override_kwargs["ghi_scale"] = ghi_scale_override
+    res = agent_evaluate(args.project, cache_dir=args.cache, **override_kwargs)
     if not res["success"]:
         print(f"[ERROR {res.get('error_code', '?')}] {res['message']}", file=sys.stderr)
         return 1
@@ -1231,6 +1274,21 @@ def build_parser() -> argparse.ArgumentParser:
         "or path to a YAML file with a top-level 'tariff:' section; a db region "
         "priced in a different currency than the project is rejected (E001)",
     )
+    e.add_argument(
+        "--provider",
+        choices=["open-meteo", "nasa-power"],
+        default=None,
+        help="weather source override for this run (default: the YAML's "
+        "site.weather_provider, itself defaulting to open-meteo/ERA5); "
+        "provider-specific caches carry a _power suffix",
+    )
+    e.add_argument(
+        "--ghi-scale",
+        type=float,
+        default=None,
+        help="GHI bias-correction multiplier for this run, band (0.5, 1.5] "
+        "(default: the YAML's site.ghi_scale, itself 1.0 = no scaling)",
+    )
     e.set_defaults(func=_cmd_evaluate)
 
     s = sub.add_parser("sweep", help="run a design sweep (single-point if no ranges)")
@@ -1245,6 +1303,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="tariff override: tariff-db region name (see 'vfed design tariffs') "
         "or path to a YAML file with a top-level 'tariff:' section; a db region "
         "priced in a different currency than the project is rejected (E001)",
+    )
+    s.add_argument(
+        "--provider",
+        choices=["open-meteo", "nasa-power"],
+        default=None,
+        help="weather source override for this run (default: the YAML's "
+        "site.weather_provider, itself defaulting to open-meteo/ERA5); "
+        "provider-specific caches carry a _power suffix",
+    )
+    s.add_argument(
+        "--ghi-scale",
+        type=float,
+        default=None,
+        help="GHI bias-correction multiplier for this run, band (0.5, 1.5] "
+        "(default: the YAML's site.ghi_scale, itself 1.0 = no scaling)",
     )
     s.set_defaults(func=_cmd_sweep)
 

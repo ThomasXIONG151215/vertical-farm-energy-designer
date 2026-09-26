@@ -527,6 +527,10 @@ class DesignEngine:
                 azimuth=p.site.azimuth,
                 cache_dir=self.cache_dir,
                 city=p.site.city,
+                # Round 22: weather source + GHI bias correction (additive
+                # pass-through; defaults keep the open-meteo path identical).
+                provider=getattr(p.site, "weather_provider", "open-meteo"),
+                ghi_scale=getattr(p.site, "ghi_scale", 1.0),
             )
         # P2-2: weather provenance (fetch layer tags df.attrs) -- copy it out
         # so the reporting layer can self-evidence the weather source.  The

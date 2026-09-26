@@ -36,6 +36,10 @@ def preset_default() -> DesignProject:
         # T5 (P2-3): coords are the authoritative city_db["Shanghai"] values
         # (vfed/weather/city_db.py) so the preset cache key matches the city
         # it simulates (was 31.2/121.5).
+        # Round 22: weather_provider/ghi_scale stay at their SiteConfig
+        # defaults ("open-meteo", 1.0) — presets do not pin the weather
+        # source, so every baseline is bitwise unchanged by the provider
+        # switch.
         site=SiteConfig(lat=31.23, lon=121.47, tz_hours=8.0, city="Shanghai"),
         envelope=EnvelopeConfig(
             U_wall_A=20.0,  # W/K — insulated small room (~10 m² footprint)

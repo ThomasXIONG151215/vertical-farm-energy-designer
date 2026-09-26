@@ -57,7 +57,7 @@ def city_env(tmp_path, monkeypatch):
     a caller-populated temp file; cache writes stay inside tmp_path."""
     holder = {"path": None}
 
-    def fake_find(city, year):
+    def fake_find(city, year, **kw):
         return holder["path"]
 
     monkeypatch.setattr(weather_bridge, "_find_city_csv", fake_find)

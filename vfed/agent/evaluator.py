@@ -16,7 +16,12 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from ..design.project import DesignProject, TariffConfig
+from ..design.project import (
+    DesignProject,
+    TariffConfig,
+    validate_ghi_scale,
+    validate_weather_provider,
+)
 from ..design.engine import DesignEngine
 from ..design.sweep import sweep_design
 from ..weather.weather_bridge import WeatherFetchError
@@ -56,6 +61,8 @@ def agent_evaluate(
     project_path: str,
     cache_dir: Optional[str] = "weather_cache",
     tariff: Optional[TariffConfig] = None,
+    provider: Optional[str] = None,
+    ghi_scale: Optional[float] = None,
 ) -> Dict:
     """Load project → simulate → sweep (if parameter_ranges are defined).
 
@@ -65,14 +72,29 @@ def agent_evaluate(
     T7 (P2-3): *tariff* optionally overrides ``project.tariff`` AFTER load
     (sensitivity analysis without copying the YAML).  Default ``None`` is a
     no-op -- numerical behaviour is unchanged.
+
+    Round 22: *provider* / *ghi_scale* optionally override
+    ``project.site.weather_provider`` / ``project.site.ghi_scale`` after
+    load — the same additive-None contract as *tariff* (None = zero
+    behaviour change).  Non-None values run through the same validators
+    as ``from_dict`` (E001 on a bad override).
     """
     # E001: configuration
     try:
         project = DesignProject.load(project_path)
     except Exception as e:  # noqa: BLE001
         return {"success": False, "error_code": "E001", "message": f"invalid project config: {e}"}
-    if tariff is not None:
-        project.tariff = tariff
+    try:
+        if tariff is not None:
+            project.tariff = tariff
+        if provider is not None:
+            validate_weather_provider(provider, where="--provider")
+            project.site.weather_provider = provider
+        if ghi_scale is not None:
+            validate_ghi_scale(ghi_scale, where="--ghi-scale")
+            project.site.ghi_scale = ghi_scale
+    except ValueError as e:
+        return {"success": False, "error_code": "E001", "message": f"invalid override: {e}"}
 
     # Run sweep (handles single-point internally when parameter_ranges is empty).
     try:
