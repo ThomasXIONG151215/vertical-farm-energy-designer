@@ -112,6 +112,12 @@ vfed evaluate my_farm.yaml --provider nasa-power --ghi-scale 0.9
 
 The two sources never mix on disk: NASA POWER caches carry a `_power` suffix (`weather_..._z8.000_power.csv`) and a POWER city file would be named `{City}_{year}_power.csv`. The scale is applied at the weather-data exit, so the cache itself always stores unscaled provider values — changing `ghi_scale` never invalidates a cache.
 
+#### Pre-downloaded dual-source city files (round 23) 预下载双源城市文件
+
+All 51 built-in cities ship **both** sources for 2025 in `data/weather/`: `{City}_{year}.csv` = Open-Meteo/ERA5, `{City}_{year}_power.csv` = NASA POWER (MERRA-2 meteorology + CERES radiation). Setting `site.weather_provider: nasa-power` in the YAML makes the engine load `{City}_{year}_power.csv` automatically — fully offline, no API call, no CLI flag needed. GHI bias correction still applies the same way (`site.ghi_scale`, see above). Per-file provenance (provider, city, lat/lon, rows, annual GHI, generation date) is tabulated in `data/weather/MANIFEST.md`; regenerate the POWER set with `python scripts/download_weather_db.py --provider nasa-power` (no flag = ERA5 set, behaviour unchanged). Because POWER provides hourly GHI only, the `_power` files carry `direct_radiation = diffuse_radiation = 0` placeholders — POA and its beam/diffuse split are re-derived from GHI (Erbs split) at load time with the design's tilt/azimuth, so the files stay geometry-neutral. Publications using the `_power` files must cite the NASA POWER service and its MERRA-2/CERES upstream datasets (<https://power.larc.nasa.gov/docs/methodology/citations/>; full citation list in MANIFEST.md).
+
+中文：51 城在 `data/weather/` 中同时内置两种数据源的 2025 逐时文件——`{City}_{year}.csv` 为 Open-Meteo/ERA5 再分析，`{City}_{year}_power.csv` 为 NASA POWER（MERRA-2 气象 + CERES 辐射卫星）。YAML 中设 `site.weather_provider: nasa-power` 后引擎自动命中 `_power` 文件：完全离线、零 API 调用、无需命令行旗标；`site.ghi_scale` 订正开关照常生效（见上节）。每个文件的来源、坐标、行数、GHI 年累计与生成日期见 `data/weather/MANIFEST.md`；可用 `python scripts/download_weather_db.py --provider nasa-power` 重新生成（不加旗标即 ERA5，行为不变）。POWER 仅提供逐时 GHI，故 `_power` 文件中 `direct_radiation`/`diffuse_radiation` 两列为 0 占位，引擎加载时按设计的倾角/方位角由 GHI 重建 POA 直散分量（Erbs 分解），文件本身与几何无关。使用 `_power` 文件的发表物须按 NASA POWER 的引用要求标注该服务及 MERRA-2/CERES 文献（完整引文清单见 MANIFEST.md）。
+
 **Which source for what?** Independent validation studies do not crown a single winner:
 
 | Variable | Open-Meteo (ERA5) | NASA POWER (MERRA-2/CERES) |
