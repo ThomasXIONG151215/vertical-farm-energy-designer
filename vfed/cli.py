@@ -238,6 +238,10 @@ _YAML_SECTION_COMMENTS = {
         "#   wall_rc_nodes: 2   # 0 = legacy single node; 2 = air node + mass node\n"
         "#   C_mass / g_im / g_em  # mass capacity (Wh/K), mass->air and\n"
         "#                         # mass->outdoor conductances (W/K)\n"
+        "#   wall_rc_nodes: 3   # 2R3C: adds surface node (C_surface Wh/K,\n"
+        "#                      # g_sa surface->air, g_sm surface->mass, W/K)\n"
+        "#   solar_mass_fraction  # [0,1] window solar fed into the RC network\n"
+        "#                        # (1.0 = LBNL rule: solar lands on surfaces)\n"
         "# ------------------------------------------------------------------\n"
     ),
     "hvac": (

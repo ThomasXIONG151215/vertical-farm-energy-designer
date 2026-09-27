@@ -130,9 +130,10 @@ class TestRcOffIsLegacy:
 
 class TestConfigFailFast:
     def test_invalid_switch_value(self):
-        # direct dataclass path
+        # direct dataclass path (1 is not a legal switch; 3 became legal in
+        # R28 step 3 as the 2R3C mode)
         with pytest.raises(ValueError, match="wall_rc_nodes"):
-            Envelope(U_wall_A=50.0, wall_rc_nodes=3)
+            Envelope(U_wall_A=50.0, wall_rc_nodes=1)
         # YAML-facing path
         with pytest.raises(ValueError, match="wall_rc_nodes"):
             DesignProject.from_dict(

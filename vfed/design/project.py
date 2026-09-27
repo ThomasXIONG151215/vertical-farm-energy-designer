@@ -405,9 +405,13 @@ class EnvelopeConfig:
     #   0 (default) = legacy single-node envelope: Q_wall = U_wall_A×(T_ext−T_z),
     #   behaviour identical to pre-R28 builds.  2 = enable the 2R2C network
     #   (air node T_z + lumped mass node T_m; g_im couples T_m→T_z, g_em
-    #   couples T_m→outdoors).  The engine fails fast at build time if the
-    #   600 s-class timestep violates the forward-Euler stability band of the
-    #   resulting 2×2 system (λmax guard in engine._build_devices).
+    #   couples T_m→outdoors).  3 = enable the 2R3C network (adds a surface
+    #   node T_s between T_m and T_z: C_surface capacity, g_sa couples
+    #   T_s→T_z, g_sm couples T_s→T_m) -- the topology the LBNL BESTEST
+    #   reference uses to route window solar through a construction surface.
+    #   The engine fails fast at build time if the configured timestep
+    #   violates the forward-Euler stability band of the resulting 2×2 / 3×3
+    #   system (λmax guards in engine._build_devices).
     C_mass: float = 0.0  # Wh/K lumped mass-layer capacity (wall_rc_nodes=2 only)
     #   Estimating: Σ A_i·d_i·ρ_i·c_i / 3600 over the mass layers (wall/roof/
     #   floor slabs), including pure internal mass with no outdoor path (e.g.
@@ -422,6 +426,25 @@ class EnvelopeConfig:
     #   U_wall_A means the DIRECT channel only (window + lightweight surfaces
     #   bypassing the mass node); steady-state design conductance closes as
     #   UA_dc = U_wall_A + g_em·g_im/(g_em+g_im) (hvac auto-size uses this).
+    # ── R28 step 3: 2R3C wall network (wall_rc_nodes=3) + solar split ──
+    C_surface: float = 0.0  # Wh/K surface-node capacity (wall_rc_nodes=3 only)
+    #   Lumped capacity of the solar-receiving inner surfaces (floor slab +
+    #   inner boards): Σ A_i·d_i·ρ_i·c_i / 3600.  BESTEST-600 floor (25 mm oak
+    #   over insulation): 48·0.025·650·1200/3600 ≈ 260 Wh/K.
+    g_sa: float = 0.0  # W/K surface node -> air node conductance (wall_rc_nodes=3 only)
+    #   Inner surface film over the solar-receiving areas, in parallel:
+    #   Σ A_i / R_si with R_si ≈ 0.125 m²K/W (48 m² floor ≈ 384 W/K).
+    g_sm: float = 0.0  # W/K surface node -> mass node conductance (wall_rc_nodes=3 only)
+    #   Conduction from the surface into the inner half of the mass layer:
+    #   Σ A_i / (d_i/(2·k_i)).  Small for insulated light construction.
+    solar_mass_fraction: float = 0.0
+    #   Fraction of the window solar gain fed INTO the RC network as a heat
+    #   source (mass node for wall_rc_nodes=2, surface node for =3 -- the LBNL
+    #   SolarRadiationExchange rule puts all transmitted solar on the
+    #   construction surfaces, i.e. 1.0); the remainder goes to the air node
+    #   exactly as before.  0.0 (default) = legacy single-point air injection,
+    #   bit-for-bit identical to pre-step-3 builds.  Requires wall_rc_nodes>0
+    #   (no mass node to absorb it otherwise); valid range [0, 1].
 
 
 @dataclass
@@ -1543,10 +1566,23 @@ class DesignProject:
         _env_cfg = EnvelopeConfig(
             **sub(EnvelopeConfig, d.get("envelope", {}), yaml_path="envelope")
         )
-        if _env_cfg.wall_rc_nodes not in (0, 2):
+        if _env_cfg.wall_rc_nodes not in (0, 2, 3):
             raise ValueError(
                 f"envelope.wall_rc_nodes = {_env_cfg.wall_rc_nodes!r} is invalid -- "
-                f"use 0 (single node, legacy default) or 2 (2R2C wall mass network)."
+                f"use 0 (single node, legacy default), 2 (2R2C wall mass network) "
+                f"or 3 (2R3C wall network with surface node)."
+            )
+        if not (0.0 <= _env_cfg.solar_mass_fraction <= 1.0):
+            raise ValueError(
+                "envelope.solar_mass_fraction must be within [0, 1] "
+                f"(got {_env_cfg.solar_mass_fraction})."
+            )
+        if _env_cfg.solar_mass_fraction > 0.0 and _env_cfg.wall_rc_nodes == 0:
+            raise ValueError(
+                "envelope.solar_mass_fraction > 0 requires wall_rc_nodes=2 or 3 "
+                "-- with the legacy single-node envelope there is no mass/surface "
+                "node to absorb the solar source (got "
+                f"solar_mass_fraction={_env_cfg.solar_mass_fraction})."
             )
         if _env_cfg.wall_rc_nodes == 2:
             if _env_cfg.C_mass <= 0.0:
@@ -1563,6 +1599,32 @@ class DesignProject:
                 raise ValueError(
                     "envelope.g_em must be >= 0 W/K when wall_rc_nodes=2 "
                     f"(got {_env_cfg.g_em}; 0 = pure internal mass)."
+                )
+        if _env_cfg.wall_rc_nodes == 3:
+            if _env_cfg.C_mass <= 0.0:
+                raise ValueError(
+                    "envelope.C_mass must be > 0 Wh/K when wall_rc_nodes=3 "
+                    f"(got {_env_cfg.C_mass})."
+                )
+            if _env_cfg.g_em < 0.0:
+                raise ValueError(
+                    "envelope.g_em must be >= 0 W/K when wall_rc_nodes=3 "
+                    f"(got {_env_cfg.g_em}; 0 = pure internal mass)."
+                )
+            if _env_cfg.C_surface <= 0.0:
+                raise ValueError(
+                    "envelope.C_surface must be > 0 Wh/K when wall_rc_nodes=3 "
+                    f"(got {_env_cfg.C_surface})."
+                )
+            if _env_cfg.g_sa <= 0.0:
+                raise ValueError(
+                    "envelope.g_sa must be > 0 W/K when wall_rc_nodes=3 "
+                    f"(got {_env_cfg.g_sa})."
+                )
+            if _env_cfg.g_sm <= 0.0:
+                raise ValueError(
+                    "envelope.g_sm must be > 0 W/K when wall_rc_nodes=3 "
+                    f"(got {_env_cfg.g_sm})."
                 )
 
         project = cls(

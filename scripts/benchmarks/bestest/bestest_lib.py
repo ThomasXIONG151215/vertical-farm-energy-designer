@@ -10,13 +10,20 @@ case (lbl-srg/modelica-buildings issues #3005, #3396).  Mirrored from
 REF dict below for the source annotation.
 
 Everything here is harness-side only: no vfed production code path changes.
-The two sanctioned instrumentations are:
+The sanctioned instrumentations are:
   * ``vfed.physics.ode._DEFAULT_T_MAX`` raised to 90 degC for the run
     (Case 600FF free-float reference peaks 62.4-68.4 degC exceed the 60 degC
     production clamp; production default is untouched and restored after).
   * ``vfed.design.engine.HVACDevice.step`` wrapped to capture Q_HVAC_W per
     substep (the timeseries only carries electrical energy, and BESTEST
     compares thermal loads).
+  * ``vfed.physics.envelope.Envelope.step_mass`` wrapped (rc3 mode only) to
+    add the ASHRAE 140-2020 radiant internal-gain share (120 W) to the
+    surface-node source term ``Q_source_w``.  vfed routes
+    ``equipment_power_w`` to the electrical ledger only (it never enters the
+    room heat balance), so the 140 gains are injected harness-side: 80 W
+    convective via the LED channel (air node, ``led.power_w=80``) + 120 W
+    radiant via the surface node.  Both restored after the run.
 
 Weather: Denver Intl AP 725650 TMY3 EPW (energyplus.net, free distribution,
 same source data as the LBNL ``USA_CO_Denver.Intl.AP.725650_TMY3.mos``).
@@ -156,6 +163,54 @@ INITIAL_RC = {
     "600FF": dict(cz=150.0, ua=52.1, eta=0.80, cmass=535.0, g_im=400.0, g_em=35.8),
     "900": dict(cz=150.0, ua=52.1, eta=0.78, cmass=3966.0, g_im=1000.0, g_em=28.0),
     "900FF": dict(cz=150.0, ua=52.1, eta=0.78, cmass=3966.0, g_im=1000.0, g_em=28.0),
+}
+
+# ---------------------------------------------------------------------------
+# R28 step 3: 2R3C wall network (wall_rc_nodes=3) + solar split seeds.
+# Topology: T_z --g_sa-- T_s(C_surface) --g_sm-- T_m(C_mass) --g_em-- T_ext;
+# solar_mass_fraction = 1.0 puts ALL window solar on the surface node (LBNL
+# SolarRadiationExchange rule: transmitted solar is absorbed at the
+# construction surfaces, the air only via the inner film).
+#
+# R28 step-4 CALIBRATED family rows (2026-09-27, ~80-run scan, 140-correct
+# internal gains 80 W convective + 120 W radiant, ideal thermostat
+# deadband 0).  Outcomes:
+#   * 600FF / 900FF free-float triples: ALL PASS.
+#     600FF @ eta 0.68: min/max/mean -10.15 / 63.37 / 25.85
+#       (bands -13.8..-9.9 / 62.4..68.4 / 24.3..26.1).
+#     900FF @ eta 0.69, g_em 40, g_sm 150: 1.60 / 44.93 / 24.73
+#       (bands 0.6..2.2 / 43.3..46.0 / 24.5..25.7).
+#     Family rows are kept IDENTICAL for the controlled case of each family
+#     (same construction, per Standard 140).
+#   * 600 / 900 controlled annual loads: STRUCTURALLY OUT (see
+#     user-gym/benchmarks/layerC_rc3_calibration.md for the full scan
+#     trajectory and the mechanism attribution).  Nearest documented
+#     attempts (NOT adopted -- physically indefensible and still OUT):
+#       600: cs=15000, gsa=1000, gsm=3000, cmass=6000, gem=24, eta=0.62
+#            -> heat 4.291 (PASS), cool 7.952 (+29%), pkH 2.356 (OUT low),
+#               pkC 2.153 (OUT low)
+#       900: cs=2000, gsa=585, gsm=3000, cmass=3966, gem=36.6, eta=0.60
+#            -> heat 8.98 (5.0x), cool 6.85 (2.5x)
+#     Mechanism: the lumped 2R3C surface node is AC-coupled to the zone
+#     through g_sa; any defensible g_sa dominates the wall export path, so
+#     stored summer solar returns to the air and is metered as cooling
+#     instead of exporting through the wall at night.  A wall continuum
+#     (CTF / 3R4C with radiant decoupling) is required to reach the
+#     controlled-case bands.
+# C_surface anchors (layerC_solar_split_design.md section 4): 600 = floor
+# 48 m2 x 25 mm oak = 260 Wh/K; 900 = concrete slab ~2000 Wh/K.  g_sa =
+# inner film; g_sm inner half-layer; C_mass/g_em per construction.
+# Timestep 60 s as in --rc (light air/surface nodes vs controller swings).
+# ---------------------------------------------------------------------------
+INITIAL_RC3 = {
+    "600": dict(cz=150.0, ua=52.1, eta=0.68, cmass=535.0, g_em=35.8,
+                cs=260.0, gsa=384.0, gsm=60.0, fs=1.0),
+    "600FF": dict(cz=150.0, ua=52.1, eta=0.68, cmass=535.0, g_em=35.8,
+                  cs=260.0, gsa=384.0, gsm=60.0, fs=1.0),
+    "900": dict(cz=150.0, ua=52.1, eta=0.69, cmass=3966.0, g_em=40.0,
+                cs=2000.0, gsa=585.0, gsm=150.0, fs=1.0),
+    "900FF": dict(cz=150.0, ua=52.1, eta=0.69, cmass=3966.0, g_em=40.0,
+                  cs=2000.0, gsa=585.0, gsm=150.0, fs=1.0),
 }
 
 
@@ -318,6 +373,12 @@ def case_dict(
     cmass: float = 0.0,
     gim: float = 0.0,
     gem: float = 0.0,
+    rc3: bool = False,
+    cs: float = 0.0,
+    gsa: float = 0.0,
+    gsm: float = 0.0,
+    fs: float = 1.0,
+    mod_band_c: float = 1.0,
 ) -> dict:
     """BESTEST project dict.  Thermostat trick: photoperiod 24 h (always
     'light') makes T_light=27 the year-round cooling setpoint and T_dark=20
@@ -325,17 +386,26 @@ def case_dict(
 
     ``rc=True`` activates the 2R2C wall thermal-mass network: ``u_wall_a``
     is then the DIRECT channel (roof+window) and the wall path runs through
-    the mass node (C_mass / g_im / g_em).  The timestep drops to 60 s (see
-    INITIAL_RC note: the 600 s controller granularity diverges the latent
-    conservation re-step on a light air node).
+    the mass node (C_mass / g_im / g_em).  ``rc3=True`` activates the 2R3C
+    network (adds the surface node C_surface / g_sa / g_sm) with
+    ``fs`` = solar_mass_fraction (1.0 = the LBNL rule).  The timestep drops
+    to 60 s in both modes (see INITIAL_RC note: the 600 s controller
+    granularity diverges the latent conservation re-step on a light air
+    node).
     """
     heavy = name.startswith("9")
     hvac = {
         "cop_mode": "constant",
         "cop_value": 3.0,
         "heat_mode": "resistive",
-        "deadband_c": 0.5,
-        "comp_mod_band_c": 1.0,
+        # ASHRAE 140 thermostat is an IDEAL two-point controller (heat below
+        # 20, cool above 27) with NO mechanical hysteresis; any deadband
+        # over-cools / over-heats past the setpoint and inflates both loads.
+        "deadband_c": 0.0,
+        # VFD proportional band: the harness stand-in for ideal-load
+        # modulation (m = deviation / band).  Smaller band = closer to the
+        # 140 ideal (exact load matching), at dt-60s stability cost.
+        "comp_mod_band_c": mod_band_c,
         "min_on_s": 0.0,
         "min_off_s": 0.0,
         "fan_power_w": 0.0,  # BESTEST ideal equipment: no fan waste heat
@@ -345,7 +415,12 @@ def case_dict(
     if free_float:
         hvac.update(P_rated_w=0.0, P_rated_heat_w=0.0)  # three zeros: no HVAC
     else:
-        hvac.update(P_rated_w=4000.0, P_rated_heat_w=6000.0)  # capacity headroom
+        # R28 step 3 formalization (was a scan-script wrapper): BESTEST
+        # equipment is IDEAL (unlimited capacity) -- the reference peak
+        # bands (600: 5.42-6.48 kW cooling) require >= 8 kW of thermal
+        # headroom; 4 kW electrical x COP 3 = 12 kW thermal is the adopted
+        # floor.  Only clips unphysical demand spikes, never the bands.
+        hvac.update(P_rated_w=8000.0, P_rated_heat_w=8000.0)
     envelope = {
         "U_wall_A": u_wall_a,
         "A_window": 12.0,
@@ -357,7 +432,17 @@ def case_dict(
         "cp_air": 1005.0,
         "C_z": cz,
     }
-    if rc:
+    if rc3:
+        envelope.update(
+            wall_rc_nodes=3,
+            C_mass=cmass,
+            g_em=gem,
+            C_surface=cs,
+            g_sa=gsa,
+            g_sm=gsm,
+            solar_mass_fraction=fs,
+        )
+    elif rc:
         envelope.update(
             wall_rc_nodes=2,
             C_mass=cmass,
@@ -371,9 +456,14 @@ def case_dict(
         "deh": {"P_ref_w": 0.0, "fan_power_w": 0.0, "auto_size": False},
         # auto_deduce MUST be False: True would recompute power_w from
         # ppfd_target*area/efficacy and put a 1300 W internal gain in the room.
+        # power_w = 80 W: the CONVECTIVE share of the 140-2020 internal gains,
+        # injected into the air node via Q_LED (photoperiod 24 h = always on).
+        # The radiant 120 W share is injected at the rc3 surface node by the
+        # step_mass wrapper in run_case (vfed equipment_power_w is electrical
+        # ledger only and never reaches the room heat balance).
         "led": {
             "auto_deduce": False,
-            "power_w": 0.0,
+            "power_w": 80.0,
             "photoperiod_hours": 24.0,
             "light_start_hour": 0,
         },
@@ -383,7 +473,7 @@ def case_dict(
         "pv_area_m2": 0.0,
         "battery_kwh": 0.0,
         "site": {"lat": LAT, "lon": LON, "tz_hours": TZ_HOURS, "year": 1990},
-        "space": {"timestep_s": 60 if rc else 600},
+        "space": {"timestep_s": 60 if (rc or rc3) else 600},
     }
 
 
@@ -428,25 +518,45 @@ def run_case(
     cmass: Optional[float] = None,
     gim: Optional[float] = None,
     gem: Optional[float] = None,
+    rc3: bool = False,
+    cs: Optional[float] = None,
+    gsa: Optional[float] = None,
+    gsm: Optional[float] = None,
+    fs: Optional[float] = None,
+    equip_rad_w: Optional[float] = None,
+    mod_band: Optional[float] = None,
 ) -> CaseResult:
     """Run one BESTEST case on the dual-year weather and return year-2 KPIs.
 
-    Instrumentation (both restored in ``finally``):
+    Instrumentation (all restored in ``finally``):
       * ``vfed.physics.ode._DEFAULT_T_MAX = t_max`` -- the engine never passes
         T_min/T_max, so the None-sentinel resolves the module constant at
         build time.  Production default (60) is untouched outside this run.
       * ``HVACDevice.step`` wrapped to integrate Q_HVAC_W (thermal, sign:
         >0 heating, <0 cooling) per substep into hourly Wh buckets.
+      * ``Envelope.step_mass`` wrapped (rc3 mode, ``equip_rad_w`` > 0) to add
+        the radiant internal-gain share to the surface-node source term.
+        ASHRAE 140-2020 internal gains are 200 W = 80 W convective (routed
+        through the LED channel to the air node in ``case_dict``) + 120 W
+        radiant (this wrapper; vfed's ``equipment_power_w`` is an electrical
+        ledger entry and never enters the room heat balance).
 
-    ``rc=True`` runs the 2R2C wall mass-network mode: parameters default to
-    the derived INITIAL_RC set; C_z / eta_solar / C_mass / g_im / g_em can
-    be probed individually, ``u_wall_a`` overrides the direct channel.
+    ``rc=True`` runs the 2R2C wall mass-network mode; ``rc3=True`` the 2R3C
+    network + solar-split mode (params default to INITIAL_RC3, ``fs`` is the
+    solar_mass_fraction).  C_z / eta_solar / the network parameters can be
+    probed individually, ``u_wall_a`` overrides the direct channel.
     """
     import vfed.design.engine as eng
     import vfed.physics.ode as ode_mod
+    import vfed.physics.envelope as env_mod
     from vfed.design.project import DesignProject
 
-    if rc:
+    if equip_rad_w is None:
+        equip_rad_w = 120.0 if rc3 else 0.0
+
+    if rc3:
+        init = dict(INITIAL_RC3[case])
+    elif rc:
         # defaults = the adopted (calibrated) section INITIAL_RC set
         init = dict(INITIAL_RC[case])
     else:
@@ -465,6 +575,12 @@ def run_case(
         cmass=init.get("cmass", 0.0) if cmass is None else cmass,
         gim=init.get("g_im", 0.0) if gim is None else gim,
         gem=init.get("g_em", 0.0) if gem is None else gem,
+        rc3=rc3,
+        cs=init.get("cs", 0.0) if cs is None else cs,
+        gsa=init.get("gsa", 0.0) if gsa is None else gsa,
+        gsm=init.get("gsm", 0.0) if gsm is None else gsm,
+        fs=init.get("fs", 1.0) if fs is None else fs,
+        mod_band_c=1.0 if mod_band is None else mod_band,
     )
     project = DesignProject.from_dict(d)
     dt = project.space.timestep_s
@@ -477,6 +593,8 @@ def run_case(
 
     orig_step = eng.HVACDevice.step
     orig_tmax = ode_mod._DEFAULT_T_MAX
+    orig_step_mass = env_mod.Envelope.step_mass
+    rad_holder = {"w": float(equip_rad_w)}
 
     def patched_step(self, T_z, RH_z, T_ext, dt=60.0, **kw):
         out = orig_step(self, T_z, RH_z, T_ext, dt, **kw)
@@ -490,13 +608,25 @@ def run_case(
         counter["i"] += 1
         return out
 
+    def patched_step_mass(self, T_ext, T_z, dt, Q_source_w=0.0):
+        # Radiant internal-gain share onto the surface node (rc3 topology:
+        # Q_source_w enters the T_s balance, Envelope.step_mass lines
+        # q_s = g_sa*(T_z-T_s) + g_sm*(T_m-T_s) + Q_source_w).
+        return orig_step_mass(
+            self, T_ext, T_z, dt, Q_source_w=Q_source_w + rad_holder["w"]
+        )
+
     eng.HVACDevice.step = patched_step
+    if rad_holder["w"] > 0.0:
+        env_mod.Envelope.step_mass = patched_step_mass
     ode_mod._DEFAULT_T_MAX = float(t_max)
     try:
         engine = eng.DesignEngine()
         result = engine.run(project, weather=dual_year(weather_year))
     finally:
         eng.HVACDevice.step = orig_step
+        if rad_holder["w"] > 0.0:
+            env_mod.Envelope.step_mass = orig_step_mass
         ode_mod._DEFAULT_T_MAX = orig_tmax
 
     t_z = np.asarray(result.timeseries["T_z"], dtype=float)
@@ -520,6 +650,20 @@ def run_case(
             g_im=float(d["envelope"]["g_im"]),
             g_em=float(d["envelope"]["g_em"]),
             t_m_final_c=float(result.summary.get("wall_rc", {}).get("T_m_final_c", float("nan"))),
+        )
+    if rc3:
+        extra.update(
+            wall_rc_nodes=3,
+            cmass=float(d["envelope"]["C_mass"]),
+            g_em=float(d["envelope"]["g_em"]),
+            cs=float(d["envelope"]["C_surface"]),
+            g_sa=float(d["envelope"]["g_sa"]),
+            g_sm=float(d["envelope"]["g_sm"]),
+            fs=float(d["envelope"]["solar_mass_fraction"]),
+            t_m_final_c=float(result.summary.get("wall_rc", {}).get("T_m_final_c", float("nan"))),
+            t_s_final_c=float(result.summary.get("wall_rc", {}).get("T_s_final_c", float("nan"))),
+            equip_conv_w=80.0,
+            equip_rad_w=float(rad_holder["w"]),
         )
     return CaseResult(
         case=case,
