@@ -17,6 +17,15 @@ Sign convention:
 
 __all__ = ["RoomODESolver"]
 
+# Default thermal state clamp [degC] (module-level so a caller can raise the
+# clamp for validation harnesses -- e.g. the ASHRAE 140 BESTEST comparison,
+# whose Case 600FF free-float reference peaks reach 62.4-68.4 C -- without
+# touching engine.py: the engine's ``_build_devices`` never passes
+# T_min/T_max, so the constructor ``None`` sentinel resolves here AT CALL
+# TIME.  Production defaults are unchanged (-20/60).
+_DEFAULT_T_MIN = -20.0
+_DEFAULT_T_MAX = 60.0
+
 
 class RoomODESolver:
     """Euler room thermal + hygric balance solver."""
@@ -26,16 +35,16 @@ class RoomODESolver:
         C_z: float,  # Equivalent heat capacity (Wh/K)
         V_room: float = 200.0,  # Room volume (m^3)
         rho_air: float = 1.2,  # Air density (kg/m^3)
-        T_min: float = -20.0,
-        T_max: float = 60.0,
+        T_min: float = None,  # None -> _DEFAULT_T_MIN (module-level, overridable)
+        T_max: float = None,  # None -> _DEFAULT_T_MAX (module-level, overridable)
         P_atm: float = 101.325,  # Atmospheric pressure (kPa)
     ):
         # The vendored model scaled small C_z by 1000; here C_z is always Wh/K.
         self.C_z = float(C_z)
         self.V_room = float(V_room)
         self.rho_air = float(rho_air)
-        self.T_min = T_min
-        self.T_max = T_max
+        self.T_min = float(_DEFAULT_T_MIN if T_min is None else T_min)
+        self.T_max = float(_DEFAULT_T_MAX if T_max is None else T_max)
         self.P_atm = P_atm
 
     def step_temperature(
