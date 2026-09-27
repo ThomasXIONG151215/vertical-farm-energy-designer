@@ -234,6 +234,10 @@ _YAML_SECTION_COMMENTS = {
         "#   C_z         - thermal mass (Wh/K); air alone ~ V_room*1.2*1005/3600,\n"
         "#                 add racks/slab/water (water ~1.16 kWh/K per m3);\n"
         "#                 practical PFAL band 30-200 kWh/K\n"
+        "#   Optional 2R2C wall mass network (default off = single node):\n"
+        "#   wall_rc_nodes: 2   # 0 = legacy single node; 2 = air node + mass node\n"
+        "#   C_mass / g_im / g_em  # mass capacity (Wh/K), mass->air and\n"
+        "#                         # mass->outdoor conductances (W/K)\n"
         "# ------------------------------------------------------------------\n"
     ),
     "hvac": (

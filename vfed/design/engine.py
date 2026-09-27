@@ -8,6 +8,7 @@ aggregated to hourly load (kW) consumed by the PVBES layer. Device state
 """
 
 import logging
+import math
 import warnings
 from typing import List, Optional
 
@@ -255,6 +256,47 @@ def full_load_warnings(summary: dict) -> List[str]:
     return msgs
 
 
+def _wall_rc_stability_guard(p) -> None:
+    """R28: forward-Euler stability guard for the 2R2C wall mass network.
+
+    Closed-form |lambda|max of the 2x2 (T_z, T_m) state matrix (per design
+    report layerC_rc_design.md section 2.3; no numpy needed)::
+
+        A = [[-(g_z_ext+g_im)/C_z',  g_im/C_z'        ],
+             [ g_im/C_m',           -(g_em+g_im)/C_m' ]]
+
+    with C' = C*3600 (Wh/K -> J/K) and g_z_ext = direct channel U_wall_A +
+    infiltration conductance m_dot*cp_air.  Forward Euler is stable for
+    dt <= 2/|lambda|max; the engine fails fast when dt exceeds 0.8x of that
+    (the 0.8 safety factor absorbs secondary couplings).  Only runs when
+    wall_rc_nodes=2 -- the default single-node path never enters here.
+    """
+    e = p.envelope
+    if e.wall_rc_nodes != 2:
+        return
+    dt = p.space.timestep_s
+    c_z_j = e.C_z * 3600.0  # Wh/K -> J/K
+    c_m_j = e.C_mass * 3600.0  # Wh/K -> J/K
+    m_dot = e.ach * e.V_room * e.rho_air / 3600.0  # kg/s
+    g_z_ext = e.U_wall_A + m_dot * e.cp_air  # W/K direct channel + infiltration
+    a = (g_z_ext + e.g_im) / c_z_j
+    b = (e.g_em + e.g_im) / c_m_j
+    tr = a + b  # = -trace(A) > 0
+    det = (g_z_ext * e.g_em + g_z_ext * e.g_im + e.g_em * e.g_im) / (c_z_j * c_m_j)
+    disc = tr * tr / 4.0 - det
+    lam_max = tr / 2.0 + math.sqrt(disc) if disc > 0.0 else tr / 2.0  # |lambda|max, 1/s
+    dt_max = 2.0 / lam_max  # s
+    if dt > 0.8 * dt_max:
+        raise RuntimeError(
+            f"2R2C wall mass network unstable at dt={dt:.0f} s: forward-Euler "
+            f"stability limit dt_max={dt_max:.0f} s (0.8x margin "
+            f"{0.8 * dt_max:.0f} s). Loosen the network: raise C_z "
+            f"(>= {e.C_z * dt / (0.8 * dt_max):.0f} Wh/K), C_mass, or lower "
+            f"g_im (currently C_z={e.C_z:.0f} Wh/K, C_mass={e.C_mass:.0f} Wh/K, "
+            f"g_im={e.g_im:.0f} W/K, g_em={e.g_em:.1f} W/K)."
+        )
+
+
 def _build_devices(p, P_atm: float = 101.325):
     env = Envelope(
         U_wall_A=p.envelope.U_wall_A,
@@ -265,7 +307,15 @@ def _build_devices(p, P_atm: float = 101.325):
         rho_air=p.envelope.rho_air,
         cp_air=p.envelope.cp_air,
         V_room=p.envelope.V_room,
+        # R28 additive: defaults (0/0/0/0) keep the legacy single-node path
+        # bit-for-bit; wall_rc_nodes=2 activates the 2R2C wall mass network.
+        wall_rc_nodes=p.envelope.wall_rc_nodes,
+        C_mass=p.envelope.C_mass,
+        g_im=p.envelope.g_im,
+        g_em=p.envelope.g_em,
     )
+    # R28: closed-form Euler stability guard (only active when RC is on).
+    _wall_rc_stability_guard(p)
     led = LEDDevice(
         power_w=p.led.power_w,
         light_start_hour=p.led.light_start_hour,
@@ -444,6 +494,16 @@ def _build_devices(p, P_atm: float = 101.325):
 
     P_rated = p.hvac.P_rated_w
     P_rated_heat = p.hvac.P_rated_heat_w
+    # R28: with the 2R2C wall mass network active, U_wall_A is the DIRECT
+    # channel only; the steady-state design-load conductance closes through
+    # the mass node as UA_dc = U_wall_A + g_em*g_im/(g_em+g_im) (series
+    # g_em/g_im legs), so auto-sizing keeps the same DC aperture as the
+    # legacy single-node semantics.  Default path (RC off): unchanged.
+    _ua_env = p.envelope.U_wall_A
+    if p.envelope.wall_rc_nodes == 2:
+        _ua_env += (p.envelope.g_em * p.envelope.g_im) / (
+            p.envelope.g_em + p.envelope.g_im
+        )
     if p.hvac.Q_cool_nom > 0:
         # New mode: nominal cooling capacity (kW) → rated electrical power (W)
         P_rated = p.hvac.Q_cool_nom * 1000.0 / max(cop_design, 0.5)
@@ -452,7 +512,7 @@ def _build_devices(p, P_atm: float = 101.325):
             P_rated = min(P_rated, p.hvac.P_rated_max * 1000.0)
     elif p.hvac.auto_size:
         P_rated = size_hvac(
-            U_wall_A=p.envelope.U_wall_A,
+            U_wall_A=_ua_env,
             A_window=p.envelope.A_window,
             eta_solar=p.envelope.eta_solar,
             ach=p.envelope.ach,
@@ -631,6 +691,11 @@ class DesignEngine:
         T_z = p.setpoints.T_light
         W_z = temp_rh_to_ah(T_z, p.setpoints.RH, pressure_kpa=P_atm)
         RH_z = p.setpoints.RH
+        # R28: 2R2C wall mass node starts consistent with the air node
+        # (T_m init == T_z init; same warm-up caveat as the air node).
+        if env.rc_enabled:
+            env.reset(T_z)
+            T_m_out = np.zeros(n)
 
         # ── hourly output arrays ───────────────────────────────────────────
         load_kw = np.zeros(n)
@@ -699,6 +764,7 @@ class DesignEngine:
             deh_wh = 0.0
             led_wh = 0.0
             t_sum, rh_sum = 0.0, 0.0
+            tm_sum = 0.0  # R28: mass-node substep accumulator (RC on only)
             # P0-4 full-load observation counters (reporting only, no
             # effect on the ODE or device models below).
             cool_full_s = heat_full_s = deh_full_s = 0
@@ -743,7 +809,20 @@ class DesignEngine:
                 cycle_h += dt / 3600.0
                 _, X_d = grow.step(T_z, light_wm2, X_d, dt)
                 W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h], pressure_kpa=P_atm)
-                Q_wall = env.Q_wall(T_ext[h], T_z)
+                # R28: the ONLY branch point of the wall mass network.  With
+                # RC off the legacy single-node call below is byte-identical
+                # to pre-R28 builds (zero drift by construction).
+                if env.rc_enabled:
+                    # Staggered Euler: step T_m from the SUBSTEP-START
+                    # T_ext/T_z, then let Q_wall discharge it into the air
+                    # balance (same O(dt) ordering as the air node).  The
+                    # q_corr re-integration below only re-steps T_z -- T_m is
+                    # NOT re-stepped (no double counting).
+                    T_m = env.step_mass(T_ext[h], T_z, dt)
+                    tm_sum += T_m
+                    Q_wall = env.Q_wall(T_ext[h], T_z, T_m)
+                else:
+                    Q_wall = env.Q_wall(T_ext[h], T_z)
                 Q_solar = env.Q_solar(GHI[h])
                 Q_inf, M_inf, Q_lat_inf = env.infiltration(T_ext[h], T_z, W_ext, W_z)
                 M_perm = env.envelope_moisture(W_ext, W_z)
@@ -859,6 +938,8 @@ class DesignEngine:
             load_kw[h] = energy_wh / 1000.0
             T_z_out[h] = t_sum / sub
             RH_z_out[h] = rh_sum / sub
+            if env.rc_enabled:
+                T_m_out[h] = tm_sum / sub
             P_hvac[h] = hvac_wh
             P_deh[h] = deh_wh
             P_led[h] = led_wh
@@ -1013,6 +1094,10 @@ class DesignEngine:
                 else 1.0,
             },
         }
+        # R28: 2R2C diagnostics (additive, RC on only) -- year-end mass-node
+        # temperature exposes the warm-up transient (T_m starts at T_z init).
+        if env.rc_enabled:
+            summary["wall_rc"] = {"T_m_final_c": round(env.T_m, 3)}
 
         # P1-1: DEH effective-SMER report — the control strategy's efficiency
         # footprint made visible.  Two ratios on the same COMPRESSOR-input
@@ -1121,6 +1206,9 @@ class DesignEngine:
             "hour_of_day": hours.tolist(),
             "T_z": T_z_out.tolist(),
             "RH_z": RH_z_out.tolist(),
+            # R28: 2R2C mass-node temperature (additive column, RC on only;
+            # hourly mean of the substep values).
+            **({"T_m": T_m_out.tolist()} if env.rc_enabled else {}),
             "T_ext": T_ext.tolist(),
             "RH_ext": RH_ext.tolist(),
             "GHI": GHI.tolist(),

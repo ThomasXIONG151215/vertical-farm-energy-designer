@@ -38,6 +38,18 @@ def main() -> int:
                     help="eta_solar overrides; repeats the run per value")
     ap.add_argument("--ua", nargs="*", type=float, default=None,
                     help="U_wall_A overrides (W/K); repeats the run per value")
+    ap.add_argument("--rc", action="store_true",
+                    help="R28 mode: 2R2C wall mass network (timestep 60 s, "
+                         "params from INITIAL_RC; U_wall_A = direct channel)")
+    ap.add_argument("--k", nargs="*", type=float, default=None,
+                    help="[rc] conductance scale factors on U_wall_A/g_im/g_em "
+                         "(1.0 = derived section-3.4 values); repeats per value")
+    ap.add_argument("--cmass", nargs="*", type=float, default=None,
+                    help="[rc] C_mass overrides (Wh/K); repeats per value")
+    ap.add_argument("--gim", nargs="*", type=float, default=None,
+                    help="[rc] g_im overrides (W/K); repeats per value")
+    ap.add_argument("--gem", nargs="*", type=float, default=None,
+                    help="[rc] g_em overrides (W/K); repeats per value")
     ap.add_argument("--no-report", action="store_true",
                     help="probe mode: print table only, do not write report")
     args = ap.parse_args()
@@ -55,26 +67,49 @@ def main() -> int:
           f"scout report's 1.2-1.5 estimate applied to tilted roofs, not vertical)")
     print(f"[weather] mean station pressure = {df['surface_pressure'].mean():.1f} hPa")
 
-    overrides = []
-    for cz in (args.cz or [None]):
-        for eta in (args.eta or [None]):
-            for ua in (args.ua or [None]):
-                overrides.append((cz, eta, ua))
+    grids = [
+        args.cz or [None],
+        args.eta or [None],
+        args.ua or [None],
+        args.k or [None],
+        args.cmass or [None],
+        args.gim or [None],
+        args.gem or [None],
+    ]
+    overrides = [
+        (cz, eta, ua, k, cmass, gim, gem)
+        for cz in grids[0]
+        for eta in grids[1]
+        for ua in grids[2]
+        for k in grids[3]
+        for cmass in grids[4]
+        for gim in grids[5]
+        for gem in grids[6]
+    ]
     probing = len(overrides) > 1 or args.no_report
 
     results = []
-    for cz, eta, ua in overrides:
-        tag = f"(C_z={cz}, eta={eta}, UA={ua})" if (cz or eta or ua) else "(initial)"
+    for cz, eta, ua, k, cmass, gim, gem in overrides:
+        tag = _tag(cz, eta, ua, k, cmass, gim, gem)
         for case in cases:
             print(f"[run] case {case} {tag} ...", flush=True)
-            res = lib.run_case(case, df, cz=cz, eta_solar=eta, u_wall_a=ua)
+            kw = dict(cz=cz, eta_solar=eta, u_wall_a=ua,
+                      cmass=cmass, gim=gim, gem=gem, rc=args.rc)
+            if args.rc and k is not None:
+                if any(v is not None for v in (ua, cmass, gim, gem)):
+                    ap.error("--k cannot be combined with --ua/--cmass/--gim/--gem")
+                scaled = lib.scaled_rc_params(case, k)
+                kw.update(u_wall_a=scaled["ua"], cmass=scaled["cmass"],
+                          gim=scaled["g_im"], gem=scaled["g_em"])
+            res = lib.run_case(case, df, **kw)
             results.append(res)
             print(f"      heating {res.annual_heating_gj:.3f} GJ  cooling "
                   f"{res.annual_cooling_gj:.3f} GJ  T {res.min_t:.1f}/"
-                  f"{res.mean_t:.1f}/{res.max_t:.1f} C  clips {res.temp_clip_events}")
+                  f"{res.mean_t:.1f}/{res.max_t:.1f} C  clips {res.temp_clip_events}"
+                  + (f"  heat-h {res.extra['heating_hours']:.0f}" if args.rc else ""))
 
     if probing:
-        _print_probe_table(results)
+        _print_probe_table(results, args.rc)
         return 0
 
     report = render_report(results, df, args.epw)
@@ -85,23 +120,65 @@ def main() -> int:
     return 0
 
 
-def _print_probe_table(results):
-    print("\ncase | C_z | eta | UA | metric | value | band | verdict")
+def _tag(cz, eta, ua, k, cmass, gim, gem):
+    parts = []
+    if cz is not None:
+        parts.append(f"C_z={cz}")
+    if eta is not None:
+        parts.append(f"eta={eta}")
+    if ua is not None:
+        parts.append(f"UA={ua}")
+    if k is not None:
+        parts.append(f"k={k}")
+    if cmass is not None:
+        parts.append(f"C_m={cmass}")
+    if gim is not None:
+        parts.append(f"g_im={gim}")
+    if gem is not None:
+        parts.append(f"g_em={gem}")
+    return f"({', '.join(parts)})" if parts else "(initial)"
+
+
+def _print_probe_table(results, rc=False):
+    head = "case | C_z | eta | UA | metric | value | band | verdict"
+    if rc:
+        head = ("case | C_z | eta | UA | C_mass | g_im | g_em | dt | "
+                "metric | value | band | verdict")
+    print("\n" + head)
     for res in results:
+        ex = res.extra
         for key, val in lib.case_metrics(res).items():
             band = lib.REF[res.case][key]
-            print(f"{res.case} | {res.cz:.0f} | {res.eta_solar:.2f} | "
-                  f"{res.u_wall_a:.1f} | {lib.METRIC_LABEL[key]} | {val:.3f} | "
-                  f"{band[0]}..{band[1]} | {lib.verdict(val, band)}")
+            if rc:
+                print(f"{res.case} | {res.cz:.0f} | {res.eta_solar:.2f} | "
+                      f"{res.u_wall_a:.1f} | {ex.get('cmass', 0):.0f} | "
+                      f"{ex.get('g_im', 0):.0f} | {ex.get('g_em', 0):.1f} | "
+                      f"{ex.get('timestep_s', 600):.0f} | "
+                      f"{lib.METRIC_LABEL[key]} | {val:.3f} | "
+                      f"{band[0]}..{band[1]} | {lib.verdict(val, band)}")
+            else:
+                print(f"{res.case} | {res.cz:.0f} | {res.eta_solar:.2f} | "
+                      f"{res.u_wall_a:.1f} | {lib.METRIC_LABEL[key]} | {val:.3f} | "
+                      f"{band[0]}..{band[1]} | {lib.verdict(val, band)}")
 
 
 def render_report(results, df, epw_path) -> str:
     lines: list[str] = []
     now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-    lines.append(f"# R27 Layer C — vfed vs ASHRAE 140 BESTEST 对拍报告\n")
+    rc_mode = bool(results) and results[0].extra.get("wall_rc_nodes") == 2
+    title = ("R28 Layer C — vfed 2R2C 墙体热质量 vs ASHRAE 140 BESTEST 对拍报告"
+             if rc_mode else
+             "R27 Layer C — vfed vs ASHRAE 140 BESTEST 对拍报告")
+    lines.append(f"# {title}\n")
     lines.append(f"- 生成时间: {now}")
     lines.append(f"- 被测对象: vfed 单区 ODE 建筑热湿内核 "
-                  f"(`vfed/physics/ode.py` + `vfed/physics/envelope.py`，engine 恒温控制)")
+                 f"(`vfed/physics/ode.py` + `vfed/physics/envelope.py`，engine 恒温控制)")
+    if rc_mode:
+        ex = results[0].extra
+        lines.append(f"- R28 2R2C 墙体热质量: wall_rc_nodes=2，timestep "
+                     f"{ex.get('timestep_s', 0):.0f} s（600 s 控制粒度下理想大容量恒温器 + "
+                     f"轻空气节点的饱和钳位守恒回写会发散，见实现报告），"
+                     f"U_wall_A=直接通道语义（窗+屋顶），墙体路径经质量节点 g_em/g_im")
     lines.append(f"- 气象: Denver Intl AP 725650 TMY3 EPW（energyplus.net 免费分发，"
                   f"与 LBNL BESTEST `.mos` 同源）；南立面 POA（各向同性天空，ρg=0.2）直填 "
                   f"`shortwave_radiation` 列；年 POA/GHI 比 = {df.attrs['poa_to_ghi_annual']:.3f}")
@@ -113,8 +190,13 @@ def render_report(results, df, epw_path) -> str:
     lines.append(f"### 几何与折算\n\n{lib.GEOMETRY_NOTE}\n")
 
     for res in results:
+        rc_note = ""
+        if res.extra.get("wall_rc_nodes") == 2:
+            rc_note = (f", C_mass={res.extra['cmass']:.0f}, g_im={res.extra['g_im']:.0f}"
+                       f", g_em={res.extra['g_em']:.1f}")
         lines.append(f"## Case {res.case}（C_z={res.cz:.0f} Wh/K, "
-                     f"U_wall_A={res.u_wall_a:.1f} W/K, eta_solar={res.eta_solar:.2f}）\n")
+                     f"U_wall_A={res.u_wall_a:.1f} W/K, eta_solar={res.eta_solar:.2f}"
+                     f"{rc_note}）\n")
         if res.case.endswith("FF"):
             lines.append("| 指标 | vfed 值 | 参考 140-2020 区间 | 判定 |")
             lines.append("|---|---|---|---|")
@@ -168,7 +250,8 @@ def render_report(results, df, epw_path) -> str:
     lines.append("\n## 复现\n\n```bash\n"
                  "python scripts/benchmarks/bestest/run_bestest.py\n"
                  "```\n\n"
-                 "标定探测：`--only 600FF --cz 500 700 900`；"
+                 "标定探测：`--only 600FF --cz 500 700 900`；R28 2R2C 模式："
+                 "`--rc`（可用 `--k 0.8 0.866 1.0` / `--cmass` / `--gim` / `--gem` 探针）；"
                  "详见 `scripts/benchmarks/bestest/README.md`。\n")
     return "\n".join(lines)
 

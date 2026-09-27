@@ -110,6 +110,66 @@ INITIAL = {"600": dict(cz=600.0, ua=75.0, eta=0.72),
            "900": dict(cz=4200.0, ua=75.0, eta=0.75),
            "900FF": dict(cz=4200.0, ua=75.0, eta=0.75)}
 
+# ---------------------------------------------------------------------------
+# R28: 2R2C wall thermal-mass network initial parameters (additive mode).
+# Derivation: user-gym/benchmarks/layerC_rc_design.md section 3 (BESTEST
+# geometry: walls 63.6 m2, roof 48 m2, floor 48 m2, south glazing 12 m2).
+#   * U_wall_A becomes the DIRECT channel only (roof 15.26 + window 36.84).
+#   * g_im = sum(A_i/(R_si + d_i/(2 k_i))); g_em = wall outer leg + exterior
+#     film; C_mass = lumped mass layers (600: inner boards; 900: concrete
+#     wall + floor slab).  DC aperture = 52.1 + series(g_em,g_im) = 86.6 W/K
+#     vs the single-node calibrated 75 -> the harness starts the calibration
+#     scan at the conductance scale factor k = 75/86.6 = 0.866 (applied to
+#     U_wall_A/g_im/g_em only; design report section 3.5).
+#   * timestep 60 s (NOT the 600 s of the single-node runs): at 600 s the
+#     ideal oversized thermostat + the light air node (C_z=150/100) produce
+#     -19 K substep plunges whose saturation-clamp conservation re-step
+#     (q_corr, up to +131 kW onto 150 Wh/K) diverges.  60 s bounds the
+#     controller swing to ~1 K and passes the lambda-max guard with a wide
+#     margin; the passive-network 600 s feasibility claim is unaffected
+#     (engine-side guard covers any user dt).
+# ---------------------------------------------------------------------------
+INITIAL_RC_DERIVED = {
+    "600": dict(cz=150.0, ua=52.1, eta=0.72, cmass=535.0, g_im=900.0, g_em=35.8),
+    "600FF": dict(cz=150.0, ua=52.1, eta=0.72, cmass=535.0, g_im=900.0, g_em=35.8),
+    "900": dict(cz=100.0, ua=52.1, eta=0.75, cmass=3966.0, g_im=585.0, g_em=36.6),
+    "900FF": dict(cz=100.0, ua=52.1, eta=0.75, cmass=3966.0, g_im=585.0, g_em=36.6),
+}
+
+# Adopted (calibrated) 2R2C parameter set per case -- R28 calibration outcome.
+# Calibration path (R28 implementation report, layerC_rc_implementation.md):
+#   * Free-float triples were the identifying constraint (hard PASS on all
+#     six FF metrics).  Controlled-case annual loads remain OUT (4-5x bands)
+#     and are INSENSITIVE to (k, eta, C_z, g_im, g_em) over a wide scan --
+#     attributed to the harness solar profile over-energizing clear winter
+#     days (Jan free-float daily max mean 40.8 C: 26/31 days above the 27 C
+#     cooling setpoint) + the solar-to-air-node absorption architecture.
+#     See the implementation report scan table for the full evidence.
+#   * g_im values are EFFECTIVE lumped-node couplings: 600 family 400 W/K
+#     (mass layer deeper than the surface half-layer of the section-3
+#     derivation), 900 family 1000 W/K (floor slab closely coupled).
+#   * U_wall_A = direct channel (roof 15.26 + window 36.84); timestep 60 s
+#     (600 s controller granularity diverges the latent conservation
+#     re-step on a light air node -- see INITIAL_RC_DERIVED note).
+INITIAL_RC = {
+    "600": dict(cz=150.0, ua=52.1, eta=0.80, cmass=535.0, g_im=400.0, g_em=35.8),
+    "600FF": dict(cz=150.0, ua=52.1, eta=0.80, cmass=535.0, g_im=400.0, g_em=35.8),
+    "900": dict(cz=150.0, ua=52.1, eta=0.78, cmass=3966.0, g_im=1000.0, g_em=28.0),
+    "900FF": dict(cz=150.0, ua=52.1, eta=0.78, cmass=3966.0, g_im=1000.0, g_em=28.0),
+}
+
+
+def scaled_rc_params(case: str, k: float) -> Dict[str, float]:
+    """Conductance-scaled 2R2C parameters (design report section 3.5): the
+    k factor applies to the DIRECT channel U_wall_A and the two network
+    conductances g_im/g_em; C_z, C_mass and eta_solar are held.  Based on
+    the section-3 DERIVED set (kept for provenance / probe restarts)."""
+    d = dict(INITIAL_RC_DERIVED[case])
+    d["ua"] = d.pop("ua") * k
+    d["g_im"] *= k
+    d["g_em"] *= k
+    return d
+
 
 # ---------------------------------------------------------------------------
 # EPW -> vfed weather DataFrame
@@ -254,10 +314,21 @@ def case_dict(
     u_wall_a: float,
     eta_solar: float,
     free_float: bool,
+    rc: bool = False,
+    cmass: float = 0.0,
+    gim: float = 0.0,
+    gem: float = 0.0,
 ) -> dict:
     """BESTEST project dict.  Thermostat trick: photoperiod 24 h (always
     'light') makes T_light=27 the year-round cooling setpoint and T_dark=20
-    the heating setpoint -- exactly the BESTEST 20/27 window controller."""
+    the heating setpoint -- exactly the BESTEST 20/27 window controller.
+
+    ``rc=True`` activates the 2R2C wall thermal-mass network: ``u_wall_a``
+    is then the DIRECT channel (roof+window) and the wall path runs through
+    the mass node (C_mass / g_im / g_em).  The timestep drops to 60 s (see
+    INITIAL_RC note: the 600 s controller granularity diverges the latent
+    conservation re-step on a light air node).
+    """
     heavy = name.startswith("9")
     hvac = {
         "cop_mode": "constant",
@@ -275,19 +346,27 @@ def case_dict(
         hvac.update(P_rated_w=0.0, P_rated_heat_w=0.0)  # three zeros: no HVAC
     else:
         hvac.update(P_rated_w=4000.0, P_rated_heat_w=6000.0)  # capacity headroom
+    envelope = {
+        "U_wall_A": u_wall_a,
+        "A_window": 12.0,
+        "eta_solar": eta_solar,
+        "ach": 0.346,  # 0.414 ACH @ 1650 m mass flow 0.0149 kg/s, rho 1.2
+        "permeance": 0.0,
+        "V_room": 129.6,
+        "rho_air": 1.2,
+        "cp_air": 1005.0,
+        "C_z": cz,
+    }
+    if rc:
+        envelope.update(
+            wall_rc_nodes=2,
+            C_mass=cmass,
+            g_im=gim,
+            g_em=gem,
+        )
     return {
         "name": f"bestest{name}",
-        "envelope": {
-            "U_wall_A": u_wall_a,
-            "A_window": 12.0,
-            "eta_solar": eta_solar,
-            "ach": 0.346,  # 0.414 ACH @ 1650 m mass flow 0.0149 kg/s, rho 1.2
-            "permeance": 0.0,
-            "V_room": 129.6,
-            "rho_air": 1.2,
-            "cp_air": 1005.0,
-            "C_z": cz,
-        },
+        "envelope": envelope,
         "hvac": hvac,
         "deh": {"P_ref_w": 0.0, "fan_power_w": 0.0, "auto_size": False},
         # auto_deduce MUST be False: True would recompute power_w from
@@ -304,7 +383,7 @@ def case_dict(
         "pv_area_m2": 0.0,
         "battery_kwh": 0.0,
         "site": {"lat": LAT, "lon": LON, "tz_hours": TZ_HOURS, "year": 1990},
-        "space": {"timestep_s": 600},
+        "space": {"timestep_s": 60 if rc else 600},
     }
 
 
@@ -345,6 +424,10 @@ def run_case(
     u_wall_a: Optional[float] = None,
     eta_solar: Optional[float] = None,
     t_max: float = 90.0,
+    rc: bool = False,
+    cmass: Optional[float] = None,
+    gim: Optional[float] = None,
+    gem: Optional[float] = None,
 ) -> CaseResult:
     """Run one BESTEST case on the dual-year weather and return year-2 KPIs.
 
@@ -354,21 +437,40 @@ def run_case(
         build time.  Production default (60) is untouched outside this run.
       * ``HVACDevice.step`` wrapped to integrate Q_HVAC_W (thermal, sign:
         >0 heating, <0 cooling) per substep into hourly Wh buckets.
+
+    ``rc=True`` runs the 2R2C wall mass-network mode: parameters default to
+    the derived INITIAL_RC set; C_z / eta_solar / C_mass / g_im / g_em can
+    be probed individually, ``u_wall_a`` overrides the direct channel.
     """
     import vfed.design.engine as eng
     import vfed.physics.ode as ode_mod
     from vfed.design.project import DesignProject
 
-    init = INITIAL[case]
+    if rc:
+        # defaults = the adopted (calibrated) section INITIAL_RC set
+        init = dict(INITIAL_RC[case])
+    else:
+        init = dict(INITIAL[case])
     cz = init["cz"] if cz is None else cz
     ua = init["ua"] if u_wall_a is None else u_wall_a
     eta = init["eta"] if eta_solar is None else eta_solar
     free_float = case.endswith("FF")
-    d = case_dict(case, cz=cz, u_wall_a=ua, eta_solar=eta, free_float=free_float)
+    d = case_dict(
+        case,
+        cz=cz,
+        u_wall_a=ua,
+        eta_solar=eta,
+        free_float=free_float,
+        rc=rc,
+        cmass=init.get("cmass", 0.0) if cmass is None else cmass,
+        gim=init.get("g_im", 0.0) if gim is None else gim,
+        gem=init.get("g_em", 0.0) if gem is None else gem,
+    )
     project = DesignProject.from_dict(d)
+    dt = project.space.timestep_s
 
     n = len(weather_year)
-    sub = 6  # timestep 600 s -> 6 substeps per hour
+    sub = int(round(3600.0 / dt))  # timesteps per hour (6 @ 600 s, 60 @ 60 s)
     heat_wh = np.zeros(2 * n)  # dual-year run: year 1 wash-out, year 2 reported
     cool_wh = np.zeros(2 * n)
     counter = {"i": 0}
@@ -405,6 +507,20 @@ def run_case(
     h2, c2 = heat_wh[n:] / 1000.0, cool_wh[n:] / 1000.0
 
     clip = int(result.summary.get("moisture_clamp_stats", {}).get("temp_clip_events", 0))
+    extra: Dict[str, float] = {
+        # duty-cycle evidence: hours with any heating / cooling in year 2
+        "heating_hours": float((h2 > 0.0).sum()),
+        "cooling_hours": float((c2 > 0.0).sum()),
+        "timestep_s": float(dt),
+    }
+    if rc:
+        extra.update(
+            wall_rc_nodes=2,
+            cmass=float(d["envelope"]["C_mass"]),
+            g_im=float(d["envelope"]["g_im"]),
+            g_em=float(d["envelope"]["g_em"]),
+            t_m_final_c=float(result.summary.get("wall_rc", {}).get("T_m_final_c", float("nan"))),
+        )
     return CaseResult(
         case=case,
         annual_heating_kwh=float(h2.sum()),
@@ -419,6 +535,7 @@ def run_case(
         cz=cz,
         u_wall_a=ua,
         eta_solar=eta,
+        extra=extra,
     )
 
 

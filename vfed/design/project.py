@@ -400,6 +400,28 @@ class EnvelopeConfig:
     #   Practical band for a 100-500 m³ PFAL room: 30-200 kWh/K
     #   (P4-5 calibration used 200,000; default 80,000 Wh/K = moderate mass).
     #   注意: 归档数字孪生 499,597 已被判定超物理 (≈430 m³ 水当量), 勿沿用。
+    # ── R28: 2R2C wall thermal-mass network (additive, default off) ──
+    wall_rc_nodes: int = 0
+    #   0 (default) = legacy single-node envelope: Q_wall = U_wall_A×(T_ext−T_z),
+    #   behaviour identical to pre-R28 builds.  2 = enable the 2R2C network
+    #   (air node T_z + lumped mass node T_m; g_im couples T_m→T_z, g_em
+    #   couples T_m→outdoors).  The engine fails fast at build time if the
+    #   600 s-class timestep violates the forward-Euler stability band of the
+    #   resulting 2×2 system (λmax guard in engine._build_devices).
+    C_mass: float = 0.0  # Wh/K lumped mass-layer capacity (wall_rc_nodes=2 only)
+    #   Estimating: Σ A_i·d_i·ρ_i·c_i / 3600 over the mass layers (wall/roof/
+    #   floor slabs), including pure internal mass with no outdoor path (e.g.
+    #   a floor slab on insulation).  Concrete slab: A·d·1400·1000/3600 ≈
+    #   0.389×A·d(m) Wh/K; timber board ≈ 0.22×A·d Wh/K.
+    g_im: float = 0.0  # W/K mass node -> air node conductance (wall_rc_nodes=2 only)
+    #   Inner surface film + inner half of the mass layer, surfaces in
+    #   parallel: Σ A_i / (R_si + d_i/(2·k_i)) with R_si ≈ 0.125 m²K/W.
+    g_em: float = 0.0  # W/K mass node -> outdoor conductance (wall_rc_nodes=2 only)
+    #   Outer half of the mass layer + remaining layers + exterior film:
+    #   Σ A_i / R_i,ext.  0 is valid (pure internal mass).  With RC on,
+    #   U_wall_A means the DIRECT channel only (window + lightweight surfaces
+    #   bypassing the mass node); steady-state design conductance closes as
+    #   UA_dc = U_wall_A + g_em·g_im/(g_em+g_im) (hvac auto-size uses this).
 
 
 @dataclass
@@ -1515,12 +1537,38 @@ class DesignProject:
             for k in ("labor_cost_per_year", "misc_opex_per_year", "water_cost_per_m3")
         )
 
+        # ── R28: 2R2C wall mass network switch -- fail-fast config checks
+        # (E001 style).  Physics-level re-validation also lives in
+        # Envelope.__init__; this block gives the YAML-facing error messages. ──
+        _env_cfg = EnvelopeConfig(
+            **sub(EnvelopeConfig, d.get("envelope", {}), yaml_path="envelope")
+        )
+        if _env_cfg.wall_rc_nodes not in (0, 2):
+            raise ValueError(
+                f"envelope.wall_rc_nodes = {_env_cfg.wall_rc_nodes!r} is invalid -- "
+                f"use 0 (single node, legacy default) or 2 (2R2C wall mass network)."
+            )
+        if _env_cfg.wall_rc_nodes == 2:
+            if _env_cfg.C_mass <= 0.0:
+                raise ValueError(
+                    "envelope.C_mass must be > 0 Wh/K when wall_rc_nodes=2 "
+                    f"(got {_env_cfg.C_mass})."
+                )
+            if _env_cfg.g_im <= 0.0:
+                raise ValueError(
+                    "envelope.g_im must be > 0 W/K when wall_rc_nodes=2 "
+                    f"(got {_env_cfg.g_im})."
+                )
+            if _env_cfg.g_em < 0.0:
+                raise ValueError(
+                    "envelope.g_em must be >= 0 W/K when wall_rc_nodes=2 "
+                    f"(got {_env_cfg.g_em}; 0 = pure internal mass)."
+                )
+
         project = cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**site_cfg),
-            envelope=EnvelopeConfig(
-                **sub(EnvelopeConfig, d.get("envelope", {}), yaml_path="envelope")
-            ),
+            envelope=_env_cfg,
             hvac=HVACConfig(**hvac_cfg),
             deh=DEHConfig(**deh_cfg),
             led=LEDConfig(**led_cfg),
