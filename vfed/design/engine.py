@@ -376,6 +376,31 @@ def _wall_rc3_stability_guard(p) -> None:
         )
 
 
+def _wall_fd_stability_guard(p) -> None:
+    """R28 step 6: FD-wall runtime guard.
+
+    The 1-D FD wall is advanced with a FULLY IMPLICIT (backward-Euler)
+    solve -- unconditionally stable for any dt, so there is no lambda-max
+    band to enforce.  What can still go wrong at build time is a
+    non-positive timestep (division by zero in the C/dt terms) or a
+    degenerate discretisation; both are rejected here (and, for the config
+    surface, in ``DesignProject.from_dict`` / ``Envelope.__init__``).
+    """
+    e = p.envelope
+    if e.wall_fd_nodes == 0:
+        return
+    dt = p.space.timestep_s
+    if not (dt > 0.0):
+        raise RuntimeError(
+            f"FD wall requires timestep_s > 0 (got {dt!r}); the implicit "
+            "solve is unconditionally stable but needs a positive dt."
+        )
+    if not (10 <= int(e.wall_fd_nodes) <= 100):
+        raise RuntimeError(
+            f"wall_fd_nodes must be in [10, 100] (got {e.wall_fd_nodes!r})."
+        )
+
+
 def _build_devices(p, P_atm: float = 101.325):
     env = Envelope(
         U_wall_A=p.envelope.U_wall_A,
@@ -399,11 +424,22 @@ def _build_devices(p, P_atm: float = 101.325):
         g_sa=p.envelope.g_sa,
         g_sm=p.envelope.g_sm,
         solar_mass_fraction=p.envelope.solar_mass_fraction,
+        # R28 step 6 additive: 1-D FD wall continuum (defaults keep every
+        # existing path bit-for-bit).
+        wall_fd_nodes=p.envelope.wall_fd_nodes,
+        wall_layers=p.envelope.wall_layers,
+        wall_area_m2=p.envelope.wall_area_m2,
+        h_ext_wm2=p.envelope.h_ext_wm2,
+        wall_solar_abs=p.envelope.wall_solar_abs,
+        h_int_c_wm2=p.envelope.h_int_c_wm2,
     )
     # R28: closed-form Euler stability guard (only active when RC is on).
     _wall_rc_stability_guard(p)
     # R28 step 3: 3-node closed-form guard (only active at wall_rc_nodes=3).
     _wall_rc3_stability_guard(p)
+    # R28 step 6: FD-wall guard (dt > 0; implicit solve is unconditionally
+    # stable).  Only active when wall_fd_nodes > 0.
+    _wall_fd_stability_guard(p)
     led = LEDDevice(
         power_w=p.led.power_w,
         light_start_hour=p.led.light_start_hour,
@@ -600,6 +636,19 @@ def _build_devices(p, P_atm: float = 101.325):
                 + 1.0 / p.envelope.g_sm
                 + 1.0 / p.envelope.g_em
             )  # g_em = 0 (pure internal mass): no DC path, adds nothing
+    elif p.envelope.wall_fd_nodes > 0:
+        # R28 step 6: the FD wall's DC aperture is the series
+        # exterior-film -> layer stack -> interior-convective-film path
+        # (the radiative share feeds the internal mass node, not the air).
+        _layers = p.envelope.wall_layers
+        _r_lay = sum(
+            lay[0] / lay[1] for lay in _layers
+        ) / p.envelope.wall_area_m2  # K/W through the full stack
+        _ua_env += 1.0 / (
+            1.0 / (p.envelope.h_ext_wm2 * p.envelope.wall_area_m2)
+            + _r_lay
+            + 1.0 / (p.envelope.h_int_c_wm2 * p.envelope.wall_area_m2)
+        )
     if p.hvac.Q_cool_nom > 0:
         # New mode: nominal cooling capacity (kW) → rated electrical power (W)
         P_rated = p.hvac.Q_cool_nom * 1000.0 / max(cop_design, 0.5)
@@ -789,12 +838,16 @@ class DesignEngine:
         RH_z = p.setpoints.RH
         # R28: 2R2C wall mass node starts consistent with the air node
         # (T_m init == T_z init; same warm-up caveat as the air node).
-        # R28 step 3: 2R3C surface node T_s likewise.
-        if env.rc_enabled:
+        # R28 step 3: 2R3C surface node T_s likewise.  R28 step 6: FD-wall
+        # continuum + mass node likewise.
+        if env.rc_enabled or env.fd_enabled:
             env.reset(T_z)
             T_m_out = np.zeros(n)
-            if env.rc3_enabled:
+            if env.rc3_enabled or env.fd_enabled:
                 T_s_out = np.zeros(n)
+            if env.fd_enabled:
+                T_wall_out_arr = np.zeros(n)  # exterior cell (diagnostic)
+                T_sol_air_arr = np.zeros(n)  # sol-air boundary (diagnostic)
 
         # ── hourly output arrays ───────────────────────────────────────────
         load_kw = np.zeros(n)
@@ -865,6 +918,8 @@ class DesignEngine:
             t_sum, rh_sum = 0.0, 0.0
             tm_sum = 0.0  # R28: mass-node substep accumulator (RC on only)
             ts_sum = 0.0  # R28 step 3: surface-node substep accumulator (rc3 only)
+            twi_sum = 0.0  # R28 step 6: FD exterior-cell accumulator
+            tos_sum = 0.0  # R28 step 6: sol-air boundary accumulator
             # P0-4 full-load observation counters (reporting only, no
             # effect on the ODE or device models below).
             cool_full_s = heat_full_s = deh_full_s = 0
@@ -912,7 +967,27 @@ class DesignEngine:
                 # R28: the ONLY branch point of the wall mass network.  With
                 # RC off the legacy single-node calls below are byte-identical
                 # to pre-R28 builds (zero drift by construction).
-                if env.rc_enabled:
+                if env.fd_enabled:
+                    # R28 step 6: FD wall -- solar split lands the f_m share
+                    # on the inner-surface control volume (LBNL
+                    # SolarRadiationExchange rule), I_ext drives the sol-air
+                    # exterior boundary; fully implicit solve inside.
+                    f_m = env.solar_mass_fraction
+                    q_sol_full = env.eta_solar * env.A_window * GHI[h]
+                    T_rc = env.step_mass(
+                        T_ext[h],
+                        T_z,
+                        dt,
+                        Q_source_w=f_m * q_sol_full if f_m > 0.0 else 0.0,
+                        I_ext_wm2=GHI[h],
+                    )
+                    Q_solar = (1.0 - f_m) * q_sol_full
+                    Q_wall = env.Q_wall(T_ext[h], T_z, T_rc)
+                    tm_sum += env.T_m
+                    ts_sum += env.T_s
+                    twi_sum += env.T_wall_out
+                    tos_sum += env.T_sol_air
+                elif env.rc_enabled:
                     # Staggered Euler: step the RC nodes from the SUBSTEP-START
                     # T_ext/T_z, then let Q_wall discharge them into the air
                     # balance (same O(dt) ordering as the air node).  The
@@ -1058,10 +1133,13 @@ class DesignEngine:
             load_kw[h] = energy_wh / 1000.0
             T_z_out[h] = t_sum / sub
             RH_z_out[h] = rh_sum / sub
-            if env.rc_enabled:
+            if env.rc_enabled or env.fd_enabled:
                 T_m_out[h] = tm_sum / sub
-                if env.rc3_enabled:
+                if env.rc3_enabled or env.fd_enabled:
                     T_s_out[h] = ts_sum / sub
+                if env.fd_enabled:
+                    T_wall_out_arr[h] = twi_sum / sub
+                    T_sol_air_arr[h] = tos_sum / sub
             P_hvac[h] = hvac_wh
             P_deh[h] = deh_wh
             P_led[h] = led_wh
@@ -1223,6 +1301,14 @@ class DesignEngine:
             summary["wall_rc"] = {"T_m_final_c": round(env.T_m, 3)}
             if env.rc3_enabled:
                 summary["wall_rc"]["T_s_final_c"] = round(env.T_s, 3)
+        # R28 step 6: FD-wall diagnostics (additive, FD on only).
+        if env.fd_enabled:
+            summary["wall_fd"] = {
+                "n_nodes": int(env._fd.n),
+                "T_wall_in_final_c": round(env.T_s, 3),
+                "T_wall_out_final_c": round(env.T_wall_out, 3),
+                "T_sol_air_final_c": round(env.T_sol_air, 3),
+            }
 
         # P1-1: DEH effective-SMER report — the control strategy's efficiency
         # footprint made visible.  Two ratios on the same COMPRESSOR-input
@@ -1333,7 +1419,7 @@ class DesignEngine:
             "RH_z": RH_z_out.tolist(),
             # R28: 2R2C mass-node temperature (additive column, RC on only;
             # hourly mean of the substep values).
-            **({"T_m": T_m_out.tolist()} if env.rc_enabled else {}),
+            **({"T_m": T_m_out.tolist()} if (env.rc_enabled or env.fd_enabled) else {}),
             **({"T_s": T_s_out.tolist()} if env.rc3_enabled else {}),
             "T_ext": T_ext.tolist(),
             "RH_ext": RH_ext.tolist(),
@@ -1350,6 +1436,17 @@ class DesignEngine:
             # appended last (existing consumers index by name).
             "timestamp": weather.index.strftime("%Y-%m-%dT%H:%M:%S").tolist(),
             "price": [p.tariff.hourly_prices[int(h) % 24] for h in hours],
+            # R28 step 6: FD-wall diagnostic columns, appended LAST so the
+            # existing column order is untouched (FD on only).
+            **(
+                {
+                    "T_wall_in": T_s_out.tolist(),
+                    "T_wall_out": T_wall_out_arr.tolist(),
+                    "T_sol_air": T_sol_air_arr.tolist(),
+                }
+                if env.fd_enabled
+                else {}
+            ),
         }
 
         # ── typical daily ──────────────────────────────────────────────────

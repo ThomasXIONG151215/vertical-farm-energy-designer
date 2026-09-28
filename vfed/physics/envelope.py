@@ -23,10 +23,36 @@ node and the air node, coupled by ``g_sa`` (surface->air film, W/K) and
 the window gain), deposited on the surface node for 2R3C and on the mass node
 for 2R2C -- mirroring the LBNL ``SolarRadiationExchange`` rule that transmits
 solar to the construction surfaces, never directly to the air.
+
+R28 step 6 (additive, default off): ``wall_fd_nodes >= 10`` replaces the
+lumped RC wall by a 1-D finite-difference continuum through the
+``wall_layers`` stack (cell-centered control volumes; nodes distributed per
+layer proportional to sqrt(R_i·C_i), min 1 per layer -- the same discretise-
+per-material idea as LBNL ``MultiLayer.mo`` with ``nStaRef``).  The FD system
+is advanced with a FULLY IMPLICIT (backward-Euler) solve; the system matrix
+is constant for a fixed ``dt``, so the inverse is cached and each substep
+costs one small dense matvec.  Implicit solves are unconditionally stable for
+any ``dt``.  Boundary channels:
+
+  * exterior: film ``h_ext_wm2 * A`` to the sol-air temperature
+    ``T_os = T_ext + wall_solar_abs * I_ext / h_ext_wm2`` (``wall_solar_abs=0``
+    disables the solar term; the sky long-wave term is not modelled);
+  * interior: convective film ``g_c = h_int_c_wm2 * A`` to the zone air
+    (returns through ``Q_wall``), plus the ``g_sm`` coupling to the internal
+    mass node T_m (``C_mass`` Wh/K, no outdoor path);
+  * source: ``Q_source_w`` (solar split / radiant internal gains) deposited
+    on the inner-surface control volume.
+
+Because every boundary film is evaluated at the NEW (implicit) state and the
+air balance consumes the mirrored film product at the same states, the wall +
+air energy balance closes with NO staggering residual (unlike the explicit
+RC networks whose g_sa leg carries an O(dt) stagger).
 """
 
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
 
 from .psychrometrics import latent_heat_vaporization
 
@@ -76,6 +102,200 @@ class _WallRC:
     def is_rc3(self) -> bool:
         """True when the 2R3C surface node is present."""
         return self.T_s is not None
+
+
+def distribute_nodes_fd(layers: List[Tuple[float, float, float, float]], n_total: int) -> List[int]:
+    """Distribute ``n_total`` FD nodes across wall layers.
+
+    Layer shares follow sqrt(R_i·C_i) (geometric mean of the layer's thermal
+    resistance ``d_i/k_i`` and areal capacity ``rho_i·c_i·d_i`` -- the
+    diffusion-penetration scaling: thick resistive layers AND heavy layers
+    both earn resolution).  Largest-remainder rounding keeps the total exact
+    and every layer keeps >= 1 node.
+    """
+    weights = [
+        ((d / k) * (rho * c * d)) ** 0.5 for (d, k, rho, c) in layers
+    ]
+    total = sum(weights)
+    raw = [n_total * w / total for w in weights]
+    counts = [max(1, int(r)) for r in raw]
+    # Largest-remainder top-up / trim while keeping every layer >= 1.
+    while sum(counts) > n_total:
+        idx = max(range(len(counts)), key=lambda i: counts[i] - raw[i])
+        if counts[idx] <= 1:
+            raise ValueError(
+                "wall_fd_nodes too small for the wall_layers stack: cannot "
+                f"fit {n_total} nodes with >=1 node per layer "
+                f"({len(layers)} layers)."
+            )
+        counts[idx] -= 1
+    order = sorted(range(len(counts)), key=lambda i: raw[i] - int(raw[i]), reverse=True)
+    i = 0
+    while sum(counts) < n_total:
+        counts[order[i % len(order)]] += 1
+        i += 1
+    return counts
+
+
+@dataclass
+class _WallFD:
+    """1-D finite-difference wall continuum + internal mass node (R28 step 6).
+
+    Cell-centered control volumes through the layer stack (index 0 = exterior
+    cell, index n-1 = interior cell).  Units: C in J/K, conductances in W/K,
+    temperatures in degC.  The implicit system matrix (fixed per ``dt``) is
+    cached inverted in ``a_inv`` -- one dense matvec per substep.
+
+    States: ``T`` (len n wall cells) and ``T_m`` (internal mass node, no
+    outdoor path, coupled to the interior cell through ``g_sm``).
+    """
+
+    C: np.ndarray  # J/K per wall cell
+    G_cond: np.ndarray  # W/K conductance between adjacent cells (len n-1)
+    G_ext: float  # W/K exterior film (h_ext_wm2 * A)
+    g_c: float  # W/K interior convective film -> zone air
+    g_sm: float  # W/K interior cell -> internal mass node
+    C_m: float  # J/K internal mass node
+    T: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    T_m: float = 20.0
+    T_sol_air: float = 20.0  # last sol-air boundary drive (diagnostic)
+    a_inv: Dict[float, np.ndarray] = field(default_factory=dict)
+
+    @classmethod
+    def build(
+        cls,
+        layers: List[Tuple[float, float, float, float]],
+        n_nodes: int,
+        area_m2: float,
+        h_ext_wm2: float,
+        h_int_c_wm2: float,
+        g_sm: float,
+        C_mass_whk: float,
+    ) -> "_WallFD":
+        """Assemble the cell-centered FD grid from physical layer data.
+
+        Cell resistances are ``d_i / (k_i * n_i * A)`` (K/W) and cell
+        capacities ``rho_i * c_i * d_i / n_i * A`` (J/K); adjacent cells
+        couple through the harmonic half-cell resistance
+        ``r_a/2 + r_b/2`` (exact for the piecewise-constant-k stack).
+        """
+        counts = distribute_nodes_fd(layers, n_nodes)
+        caps: List[float] = []
+        res: List[float] = []
+        for (d, k, rho, c), n_i in zip(layers, counts):
+            caps.extend([rho * c * (d / n_i) * area_m2] * n_i)
+            res.extend([d / (k * n_i * area_m2)] * n_i)
+        C = np.asarray(caps, dtype=float)
+        G_cond = np.asarray(
+            [1.0 / (0.5 * res[i] + 0.5 * res[i + 1]) for i in range(len(res) - 1)],
+            dtype=float,
+        )
+        # Cell-centered films see the BOUNDARY-CELL CENTRES, so the film
+        # resistance is put in series with the outer half-cell: the DC
+        # ladder then closes EXACTLY onto the continuum
+        # R_tot = 1/(h_o*A) + R_layers/A + 1/(h_c*A) (the pure-centre
+        # coupling would omit r_0/2 + r_n-1/2 and bias the steady flux by
+        # ~0.7% on the 140 constructions).
+        g_ext = 1.0 / (1.0 / (h_ext_wm2 * area_m2) + 0.5 * res[0])
+        g_c = 1.0 / (1.0 / (h_int_c_wm2 * area_m2) + 0.5 * res[-1])
+        return cls(
+            C=C,
+            G_cond=G_cond,
+            G_ext=g_ext,
+            g_c=g_c,
+            g_sm=float(g_sm),
+            C_m=C_mass_whk * 3600.0,  # Wh/K -> J/K
+            T=np.full(len(C), 20.0),
+            T_m=20.0,
+        )
+
+    @property
+    def n(self) -> int:
+        return len(self.C)
+
+    def reset(self, T_init: float) -> None:
+        self.T = np.full(self.n, float(T_init))
+        self.T_m = float(T_init)
+        self.T_sol_air = float(T_init)
+
+    def _system_inverse(self, dt: float) -> np.ndarray:
+        """Constant implicit matrix A(dt) inverted once per distinct dt.
+
+        A is symmetric negative definite (positive diagonal, negative
+        off-diagonals, strictly diagonally dominant via the C/dt terms), so
+        the cached inverse is numerically safe and every solve is one
+        matvec -- O(n^2) with tiny n instead of an O(n^3) factorisation
+        per substep.
+        """
+        inv = self.a_inv.get(dt)
+        if inv is None:
+            n = self.n
+            a = np.zeros((n + 1, n + 1), dtype=float)
+            for i in range(n):
+                # diagonal = C/dt + sum of ALL conductances touching cell i
+                g_sum = 0.0
+                if i == 0:
+                    g_sum += self.G_ext
+                else:
+                    a[i, i - 1] = -self.G_cond[i - 1]
+                    g_sum += self.G_cond[i - 1]
+                if i < n - 1:
+                    a[i, i + 1] = -self.G_cond[i]
+                    g_sum += self.G_cond[i]
+                else:
+                    # interior cell: convective film to air + mass coupling
+                    g_sum += self.g_c + self.g_sm
+                    a[i, n] = -self.g_sm
+                a[i, i] = self.C[i] / dt + g_sum
+            a[n, n] = self.C_m / dt + self.g_sm
+            a[n, n - 1] = -self.g_sm
+            inv = self.a_inv[dt] = np.linalg.inv(a)
+        return inv
+
+    def step(
+        self,
+        T_ext: float,
+        T_z: float,
+        dt: float,
+        Q_source_w: float = 0.0,
+        I_ext_wm2: float = 0.0,
+        solar_abs: float = 0.0,
+        h_ext_wm2: float = 0.0,
+    ) -> float:
+        """Advance one fully implicit step; return the interior-cell temp.
+
+        ``solar_abs > 0`` activates the sol-air exterior boundary
+        ``T_os = T_ext + solar_abs * I_ext_wm2 / h_ext_wm2``.
+        """
+        t_os = T_ext
+        if solar_abs > 0.0:
+            t_os = T_ext + solar_abs * float(I_ext_wm2) / h_ext_wm2
+        self.T_sol_air = float(t_os)
+        inv = self._system_inverse(dt)
+        n = self.n
+        b = (self.C / dt) * self.T
+        b[0] += self.G_ext * t_os
+        # g_sm*T_m and g_sm*T_inner are matrix off-diagonal terms (A), NOT
+        # RHS entries -- only the BOUNDARY drives (T_os, T_z) and sources go
+        # on the right-hand side.
+        b[n - 1] += self.g_c * T_z + Q_source_w
+        b = np.append(b, (self.C_m / dt) * self.T_m)
+        x = inv @ b
+        t_in = float(x[n - 1])
+        t_out = float(x[0])
+        t_m = float(x[n])
+        for name, v in (("exterior", t_out), ("interior", t_in), ("mass", t_m)):
+            if not (-100.0 <= v <= 100.0):
+                raise RuntimeError(
+                    f"FD wall {name} node diverged to {v:.1f} C -- check "
+                    f"wall_fd config (n={n}, g_ext={self.G_ext:.1f} W/K, "
+                    f"g_c={self.g_c:.1f} W/K, g_sm={self.g_sm:.1f} W/K, "
+                    f"C_m={self.C_m / 3600.0:.0f} Wh/K, dt={dt:.0f} s, "
+                    f"T_ext={T_ext:.1f} C, T_z={T_z:.1f} C)"
+                )
+        self.T = x[:n].copy()
+        self.T_m = t_m
+        return t_in
 
 
 class Envelope:
@@ -138,6 +358,21 @@ class Envelope:
         2R2C, surface node for 2R3C); the remainder goes to the air node.
         0.0 (default) = legacy single-point air injection, bit-for-bit
         identical to pre-step-3 builds.  Requires ``wall_rc_nodes > 0``.
+    wall_fd_nodes : int
+        R28 step 6: 0 (default) = FD wall off (all paths unchanged);
+        10..100 = enable the 1-D finite-difference wall continuum.
+        Mutually exclusive with ``wall_rc_nodes > 0``.
+    wall_layers : list
+        (thickness_m, k_W_mK, rho_kg_m3, c_J_kgK) per layer, EXTERIOR ->
+        INTERIOR; required when ``wall_fd_nodes > 0`` (all entries > 0).
+    wall_area_m2 : float
+        Conductive FD-wall area (m2); required > 0 when ``wall_fd_nodes > 0``.
+    h_ext_wm2 : float
+        Exterior film coefficient (W/m2K); required > 0 when ``wall_fd_nodes > 0``.
+    wall_solar_abs : float
+        Exterior solar absorptance [0, 1]; 0 (default) = sol-air disabled.
+    h_int_c_wm2 : float
+        Interior convective film (W/m2K); required > 0 when ``wall_fd_nodes > 0``.
     """
 
     def __init__(
@@ -158,6 +393,12 @@ class Envelope:
         g_sa: float = 0.0,
         g_sm: float = 0.0,
         solar_mass_fraction: float = 0.0,
+        wall_fd_nodes: int = 0,
+        wall_layers: Optional[List[Tuple[float, float, float, float]]] = None,
+        wall_area_m2: float = 0.0,
+        h_ext_wm2: float = 0.0,
+        wall_solar_abs: float = 0.0,
+        h_int_c_wm2: float = 0.0,
     ):
         self.U_wall_A = U_wall_A
         self.A_window = A_window
@@ -174,13 +415,109 @@ class Envelope:
                 "solar_mass_fraction must be within [0, 1], got "
                 f"{solar_mass_fraction!r}"
             )
-        if solar_mass_fraction > 0.0 and wall_rc_nodes == 0:
+        if solar_mass_fraction > 0.0 and wall_rc_nodes == 0 and wall_fd_nodes == 0:
             raise ValueError(
-                "solar_mass_fraction > 0 requires wall_rc_nodes=2 or 3 "
-                "(no mass/surface node exists in the legacy single-node "
-                f"envelope; got {solar_mass_fraction})"
+                "solar_mass_fraction > 0 requires wall_rc_nodes=2, 3 or "
+                "wall_fd_nodes > 0 (no mass/surface node exists in the "
+                f"legacy single-node envelope; got {solar_mass_fraction})"
             )
         self.solar_mass_fraction = float(solar_mass_fraction)
+        # R28 step 6: 1-D FD wall continuum (None = off; mutually exclusive
+        # with the lumped RC network).
+        if wall_fd_nodes != 0:
+            if wall_rc_nodes != 0:
+                raise ValueError(
+                    "wall_fd_nodes and wall_rc_nodes are mutually exclusive "
+                    f"wall models (got {wall_fd_nodes} / {wall_rc_nodes})"
+                )
+            if not isinstance(wall_fd_nodes, int) or not (10 <= wall_fd_nodes <= 100):
+                raise ValueError(
+                    f"wall_fd_nodes must be an int in [10, 100] (got "
+                    f"{wall_fd_nodes!r}); 0 disables the FD wall"
+                )
+            layers = list(wall_layers or [])
+            if not layers:
+                raise ValueError(
+                    "wall_fd_nodes > 0 requires wall_layers "
+                    "[(thickness_m, k, rho, c_J_kgK), ...] exterior->interior"
+                )
+            if len(layers) > wall_fd_nodes:
+                raise ValueError(
+                    f"wall_fd_nodes ({wall_fd_nodes}) must be >= the number "
+                    f"of wall_layers ({len(layers)})"
+                )
+            clean_layers = []
+            for li, lay in enumerate(layers):
+                if not isinstance(lay, (list, tuple)) or len(lay) != 4:
+                    raise ValueError(
+                        f"wall_layers[{li}] must be (thickness_m, k, rho, c), "
+                        f"got {lay!r}"
+                    )
+                d_i, k_i, rho_i, c_i = (float(v) for v in lay)
+                for name, v in (
+                    ("thickness_m", d_i),
+                    ("k_W_mK", k_i),
+                    ("rho_kg_m3", rho_i),
+                    ("c_J_kgK", c_i),
+                ):
+                    if not (v > 0.0):
+                        raise ValueError(
+                            f"wall_layers[{li}].{name} must be > 0, got {v}"
+                        )
+                clean_layers.append((d_i, k_i, rho_i, c_i))
+            if not (wall_area_m2 > 0.0):
+                raise ValueError(
+                    f"wall_fd_nodes > 0 requires wall_area_m2 > 0 (got {wall_area_m2})"
+                )
+            if not (h_ext_wm2 > 0.0):
+                raise ValueError(
+                    f"wall_fd_nodes > 0 requires h_ext_wm2 > 0 (got {h_ext_wm2})"
+                )
+            if not (h_int_c_wm2 > 0.0):
+                raise ValueError(
+                    f"wall_fd_nodes > 0 requires h_int_c_wm2 > 0 (got {h_int_c_wm2})"
+                )
+            if not (0.0 <= wall_solar_abs <= 1.0):
+                raise ValueError(
+                    f"wall_solar_abs must be within [0, 1], got {wall_solar_abs}"
+                )
+            if C_mass <= 0.0:
+                raise ValueError(
+                    f"wall_fd_nodes > 0 requires C_mass > 0 Wh/K (internal "
+                    f"mass node for the surface radiation exchange; got {C_mass})"
+                )
+            if g_sm <= 0.0:
+                raise ValueError(
+                    f"wall_fd_nodes > 0 requires g_sm > 0 W/K (surface <-> "
+                    f"internal mass coupling; got {g_sm})"
+                )
+            for name, v in (
+                ("g_em", g_em),
+                ("g_im", g_im),
+                ("C_surface", C_surface),
+                ("g_sa", g_sa),
+            ):
+                if v != 0.0:
+                    raise ValueError(
+                        f"{name} must be 0 when wall_fd_nodes > 0 (the FD "
+                        f"wall replaces the RC network; got {v})"
+                    )
+            self._fd = _WallFD.build(
+                layers=clean_layers,
+                n_nodes=wall_fd_nodes,
+                area_m2=float(wall_area_m2),
+                h_ext_wm2=float(h_ext_wm2),
+                h_int_c_wm2=float(h_int_c_wm2),
+                g_sm=float(g_sm),
+                C_mass_whk=float(C_mass),
+            )
+            self._fd_params = {
+                "solar_abs": float(wall_solar_abs),
+                "h_ext_wm2": float(h_ext_wm2),
+            }
+        else:
+            self._fd = None
+            self._fd_params = None
         # R28: additive 2R2C/2R3C wall mass network (None = legacy single node).
         if wall_rc_nodes not in (0, 2, 3):
             raise ValueError(
@@ -229,11 +566,19 @@ class Envelope:
         """True when the 2R3C surface node is active (wall_rc_nodes=3)."""
         return self._rc is not None and self._rc.is_rc3
 
+    @property
+    def fd_enabled(self) -> bool:
+        """True when the 1-D FD wall continuum is active (wall_fd_nodes>0)."""
+        return self._fd is not None
+
     def reset(self, T_init: float) -> None:
         """Reset the mass-node state to ``T_init`` (degC); engine calls this
         once at run start with the air-node initial temperature so all RC
         states start consistent."""
-        if self._rc is None:
+        if self._rc is None and self._fd is None:
+            return
+        if self._fd is not None:
+            self._fd.reset(float(T_init))
             return
         self._rc.T_m = float(T_init)
         if self._rc.T_s is not None:
@@ -241,34 +586,69 @@ class Envelope:
 
     @property
     def T_m(self) -> Optional[float]:
-        """Current mass-node temperature (degC), or None when RC is off."""
+        """Current mass-node temperature (degC), or None when RC/FD is off."""
+        if self._fd is not None:
+            return self._fd.T_m
         return None if self._rc is None else self._rc.T_m
 
     @property
     def T_s(self) -> Optional[float]:
-        """Current surface-node temperature (degC), or None when 2R2C/off."""
+        """Current surface-node temperature (degC), or None when 2R2C/off.
+
+        FD wall: the interior control volume (innermost cell) temperature.
+        """
+        if self._fd is not None:
+            return float(self._fd.T[-1])
         return None if self._rc is None else self._rc.T_s
 
+    @property
+    def T_wall_out(self) -> Optional[float]:
+        """FD wall: exterior control volume temperature (degC), else None."""
+        return None if self._fd is None else float(self._fd.T[0])
+
+    @property
+    def T_sol_air(self) -> Optional[float]:
+        """FD wall: last sol-air boundary temperature (degC), else None."""
+        return None if self._fd is None else self._fd.T_sol_air
+
     def step_mass(
-        self, T_ext: float, T_z: float, dt: float, Q_source_w: float = 0.0
+        self,
+        T_ext: float,
+        T_z: float,
+        dt: float,
+        Q_source_w: float = 0.0,
+        I_ext_wm2: float = 0.0,
     ) -> float:
-        """Advance the RC wall nodes one explicit Euler step (dt seconds).
+        """Advance the wall nodes one step (dt seconds); return the air-side
+        discharge node temperature.
 
-        Uses the SUBSTEP-START T_ext/T_z (staggered with the air-node
-        integrator, same O(dt) ordering error); the engine calls this before
-        the air-node heat balance so Q_wall sees the freshly stepped states.
-        ``Q_source_w`` (W) is the solar-split source (``solar_mass_fraction``
-        of the window gain): deposited on the surface node in 2R3C and on
-        the mass node in 2R2C; default 0 reproduces the pre-step-3 balance
-        bit-for-bit.
+        RC networks: explicit Euler from the SUBSTEP-START T_ext/T_z
+        (staggered with the air-node integrator, same O(dt) ordering error);
+        the engine calls this before the air-node heat balance so Q_wall sees
+        the freshly stepped states.  ``Q_source_w`` (W) is the solar-split
+        source (``solar_mass_fraction`` of the window gain): deposited on the
+        surface node in 2R3C and on the mass node in 2R2C; default 0
+        reproduces the pre-step-3 balance bit-for-bit.
 
-        Returns the temperature of the node that discharges into the air:
-        the mass node T_m for 2R2C, the surface node T_s for 2R3C (pass the
-        return value straight into :meth:`Q_wall`).
+        FD wall (``wall_fd_nodes > 0``): fully implicit (backward-Euler) solve
+        of the whole continuum + mass node; boundary films are evaluated at
+        the NEW states so the air-side film product mirrors the wall balance
+        exactly (no staggering residual).  ``I_ext_wm2`` (W/m2) drives the
+        sol-air exterior boundary through ``wall_solar_abs`` (0 = off).
 
-        Only a +-100 degC divergence guard applies (no clamp: the RC nodes
+        Only a +-100 degC divergence guard applies (no clamp: the wall nodes
         are slow, large-inertia states and clamping them would mask physics).
         """
+        if self._fd is not None:
+            return self._fd.step(
+                T_ext,
+                T_z,
+                dt,
+                Q_source_w=Q_source_w,
+                I_ext_wm2=I_ext_wm2,
+                solar_abs=self._fd_params["solar_abs"],
+                h_ext_wm2=self._fd_params["h_ext_wm2"],
+            )
         if self._rc is None:
             raise RuntimeError("step_mass called with wall mass network disabled")
         rc = self._rc
@@ -313,13 +693,22 @@ class Envelope:
     def Q_wall(self, T_ext: float, T_z: float, T_m: Optional[float] = None) -> float:
         """Conductive envelope heat flow (W). + = into room.
 
-        Legacy path (``T_m`` is None or RC off): ``U_wall_A * (T_ext - T_z)``
+        Legacy path (``T_m`` is None or RC/FD off): ``U_wall_A * (T_ext - T_z)``
         -- the historical single-node expression, unchanged.  RC path: the
         direct channel (window + lightweight surfaces) plus the discharge of
         the RC node returned by :meth:`step_mass` -- ``g_im * (T_m - T_z)``
         for 2R2C, ``g_sa * (T_s - T_z)`` for 2R3C; the outdoor leg g_em
-        enters only through the RC-node dynamics.
+        enters only through the RC-node dynamics.  FD path: direct channel
+        plus the interior convective film ``g_c * (T_inner - T_z)``; the
+        exterior film and interior conduction enter through the FD dynamics.
         """
+        if self._fd is not None:
+            if T_m is None:
+                raise RuntimeError(
+                    "FD wall active: pass the step_mass return value "
+                    "(interior surface temperature) into Q_wall"
+                )
+            return self.U_wall_A * (T_ext - T_z) + self._fd.g_c * (T_m - T_z)
         if self._rc is None or T_m is None:
             return self.U_wall_A * (T_ext - T_z)
         if self._rc.T_s is not None:

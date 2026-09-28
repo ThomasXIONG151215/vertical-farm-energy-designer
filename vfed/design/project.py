@@ -445,6 +445,36 @@ class EnvelopeConfig:
     #   exactly as before.  0.0 (default) = legacy single-point air injection,
     #   bit-for-bit identical to pre-step-3 builds.  Requires wall_rc_nodes>0
     #   (no mass node to absorb it otherwise); valid range [0, 1].
+    # ── R28 step 6: 1-D finite-difference wall (wall_fd_nodes > 0) ──
+    wall_fd_nodes: int = 0
+    #   0 (default) = FD wall OFF (legacy / RC paths untouched, zero drift).
+    #   10..100 = number of FD nodes discretising the wall_layers stack
+    #   (cell-centered control volumes; nodes distributed per layer
+    #   proportional to sqrt(R_i·C_i), min 1 per layer).  Mutually exclusive
+    #   with wall_rc_nodes > 0.  Implicit (backward-Euler) solve: stable for
+    #   any dt; the engine still fails fast on dt <= 0.
+    wall_layers: List[Tuple[float, float, float, float]] = field(default_factory=list)
+    #   Wall layer stack, EXTERIOR -> INTERIOR, each (thickness_m, k_W_mK,
+    #   rho_kg_m3, c_J_kgK).  Required non-empty when wall_fd_nodes > 0.
+    #   Example (ASHRAE 140 Case 600 wall, 63.6 m2): [(0.009, 0.14, 530, 900),
+    #   (0.066, 0.04, 12, 840), (0.012, 0.16, 950, 840)] -> R=1.789 m2K/W,
+    #   areal capacity 14.53 kJ/m2K.
+    wall_area_m2: float = 0.0
+    #   Conductive area of the FD wall (m2); required > 0 when wall_fd_nodes>0.
+    h_ext_wm2: float = 0.0
+    #   Exterior surface film coefficient (W/m2K); required > 0 when
+    #   wall_fd_nodes > 0 (ASHRAE 140: R_o = 0.04 m2K/W -> h_o = 25.0).
+    wall_solar_abs: float = 0.0
+    #   Exterior solar absorptance [0, 1] driving the sol-air boundary
+    #   T_sol-air = T_ext + wall_solar_abs * I_ext / h_ext_wm2 (long-wave sky
+    #   term not modelled).  0.0 (default) disables the sol-air channel
+    #   (boundary = T_ext).
+    h_int_c_wm2: float = 0.0
+    #   Interior CONVECTIVE film coefficient (W/m2K) coupling the wall inner
+    #   surface to the zone air; required > 0 when wall_fd_nodes > 0
+    #   (g_c = h_int_c_wm2 * wall_area_m2).  The radiative share to the
+    #   internal mass runs through g_sm (LBNL BESTEST: h_c = 3.0 fixed,
+    #   h_r ~ 5.3 -> total 8.29 = 1/R_si per ASHRAE 140).
 
 
 @dataclass
@@ -1577,9 +1607,12 @@ class DesignProject:
                 "envelope.solar_mass_fraction must be within [0, 1] "
                 f"(got {_env_cfg.solar_mass_fraction})."
             )
-        if _env_cfg.solar_mass_fraction > 0.0 and _env_cfg.wall_rc_nodes == 0:
+        if _env_cfg.solar_mass_fraction > 0.0 and (
+            _env_cfg.wall_rc_nodes == 0 and _env_cfg.wall_fd_nodes == 0
+        ):
             raise ValueError(
-                "envelope.solar_mass_fraction > 0 requires wall_rc_nodes=2 or 3 "
+                "envelope.solar_mass_fraction > 0 requires wall_rc_nodes=2, 3 "
+                "or wall_fd_nodes > 0 "
                 "-- with the legacy single-node envelope there is no mass/surface "
                 "node to absorb the solar source (got "
                 f"solar_mass_fraction={_env_cfg.solar_mass_fraction})."
@@ -1626,6 +1659,110 @@ class DesignProject:
                     "envelope.g_sm must be > 0 W/K when wall_rc_nodes=3 "
                     f"(got {_env_cfg.g_sm})."
                 )
+
+        # ── R28 step 6: 1-D finite-difference wall -- fail-fast config
+        # checks (E001 style).  Physics-level re-validation also lives in
+        # Envelope.__init__; this block gives the YAML-facing messages. ──
+        if _env_cfg.wall_fd_nodes != 0 and _env_cfg.wall_rc_nodes != 0:
+            raise ValueError(
+                "envelope.wall_fd_nodes and envelope.wall_rc_nodes are "
+                "mutually exclusive wall models -- set one of them to 0 "
+                f"(got wall_fd_nodes={_env_cfg.wall_fd_nodes}, "
+                f"wall_rc_nodes={_env_cfg.wall_rc_nodes})."
+            )
+        if _env_cfg.wall_fd_nodes != 0:
+            _fd = _env_cfg.wall_fd_nodes
+            if isinstance(_fd, bool) or not isinstance(_fd, int) or not (10 <= _fd <= 100):
+                raise ValueError(
+                    "envelope.wall_fd_nodes must be an int in [10, 100] when "
+                    f"enabled (got {_fd!r}); 0 disables the FD wall."
+                )
+            _layers = _env_cfg.wall_layers
+            if not isinstance(_layers, (list, tuple)) or len(_layers) == 0:
+                raise ValueError(
+                    "envelope.wall_layers must be a non-empty list of "
+                    "(thickness_m, k_W_mK, rho_kg_m3, c_J_kgK) tuples when "
+                    f"wall_fd_nodes > 0 (got {_layers!r})."
+                )
+            if len(_layers) > _fd:
+                raise ValueError(
+                    "envelope.wall_fd_nodes must be >= the number of wall "
+                    f"layers (got {_fd} nodes for {len(_layers)} layers)."
+                )
+            for li, lay in enumerate(_layers):
+                if not isinstance(lay, (list, tuple)) or len(lay) != 4:
+                    raise ValueError(
+                        f"envelope.wall_layers[{li}] must be "
+                        f"(thickness_m, k, rho, c), got {lay!r}."
+                    )
+                d_i, k_i, rho_i, c_i = (float(v) for v in lay)
+                for name, v in (
+                    ("thickness_m", d_i),
+                    ("k_W_mK", k_i),
+                    ("rho_kg_m3", rho_i),
+                    ("c_J_kgK", c_i),
+                ):
+                    if not (v > 0.0):
+                        raise ValueError(
+                            f"envelope.wall_layers[{li}].{name} must be > 0 "
+                            f"(got {v})."
+                        )
+            if not (_env_cfg.wall_area_m2 > 0.0):
+                raise ValueError(
+                    "envelope.wall_area_m2 must be > 0 m2 when "
+                    f"wall_fd_nodes > 0 (got {_env_cfg.wall_area_m2})."
+                )
+            if not (_env_cfg.h_ext_wm2 > 0.0):
+                raise ValueError(
+                    "envelope.h_ext_wm2 must be > 0 W/m2K when "
+                    f"wall_fd_nodes > 0 (got {_env_cfg.h_ext_wm2})."
+                )
+            if not (_env_cfg.h_int_c_wm2 > 0.0):
+                raise ValueError(
+                    "envelope.h_int_c_wm2 must be > 0 W/m2K when "
+                    f"wall_fd_nodes > 0 (got {_env_cfg.h_int_c_wm2})."
+                )
+            if not (0.0 <= _env_cfg.wall_solar_abs <= 1.0):
+                raise ValueError(
+                    "envelope.wall_solar_abs must be within [0, 1] "
+                    f"(got {_env_cfg.wall_solar_abs})."
+                )
+            if _env_cfg.C_mass <= 0.0:
+                raise ValueError(
+                    "envelope.C_mass must be > 0 Wh/K when wall_fd_nodes > 0 "
+                    f"(the FD inner surface radiates to the internal mass "
+                    f"node; got {_env_cfg.C_mass})."
+                )
+            if _env_cfg.g_sm <= 0.0:
+                raise ValueError(
+                    "envelope.g_sm must be > 0 W/K when wall_fd_nodes > 0 "
+                    f"(surface <-> internal-mass coupling; got "
+                    f"{_env_cfg.g_sm})."
+                )
+            for _name, _v in (
+                ("g_em", _env_cfg.g_em),
+                ("g_im", _env_cfg.g_im),
+                ("C_surface", _env_cfg.C_surface),
+                ("g_sa", _env_cfg.g_sa),
+            ):
+                if _v != 0.0:
+                    raise ValueError(
+                        f"envelope.{_name} must be 0 when wall_fd_nodes > 0 "
+                        f"(the FD wall replaces the RC network; got {_v})."
+                    )
+        elif (
+            _env_cfg.wall_layers
+            or _env_cfg.wall_area_m2 != 0.0
+            or _env_cfg.h_ext_wm2 != 0.0
+            or _env_cfg.wall_solar_abs != 0.0
+            or _env_cfg.h_int_c_wm2 != 0.0
+        ):
+            raise ValueError(
+                "envelope.wall_layers / wall_area_m2 / h_ext_wm2 / "
+                "wall_solar_abs / h_int_c_wm2 require wall_fd_nodes > 0 -- "
+                "they would otherwise be silently ignored "
+                f"(wall_fd_nodes={_env_cfg.wall_fd_nodes})."
+            )
 
         project = cls(
             name=d.get("name", "unnamed"),

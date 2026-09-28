@@ -54,6 +54,12 @@ def main() -> int:
                     help="R28 step-3 mode: 2R3C wall network + solar split "
                          "(timestep 60 s, params from INITIAL_RC3; fs=1.0 "
                          "LBNL rule; U_wall_A = direct channel)")
+    ap.add_argument("--fd", action="store_true",
+                    help="R28 step-6 mode: 1-D finite-difference wall + "
+                         "sol-air boundary (timestep 60 s, params from "
+                         "INITIAL_FD; 140 layer stacks, nodes=18)")
+    ap.add_argument("--nodes", type=int, default=None,
+                    help="[fd] total FD node count (default: INITIAL_FD 18)")
     ap.add_argument("--cs", nargs="*", type=float, default=None,
                     help="[rc3] C_surface overrides (Wh/K); repeats per value")
     ap.add_argument("--gsa", nargs="*", type=float, default=None,
@@ -68,10 +74,10 @@ def main() -> int:
     ap.add_argument("--no-report", action="store_true",
                     help="probe mode: print table only, do not write report")
     args = ap.parse_args()
-    if args.rc3 and args.rc:
-        ap.error("--rc3 and --rc are mutually exclusive")
+    if (args.rc3 and args.rc) or (args.fd and args.rc) or (args.fd and args.rc3):
+        ap.error("--rc/--rc3/--fd are mutually exclusive")
     # mode-specific default report name (the R27 layerC_report.md stays the
-    # single-node artifact; rc/rc3 write their own files)
+    # single-node artifact; rc/rc3/fd write their own files)
     if args.out == REPORT:
         if args.rc3:
             args.out = os.path.join(REPO, "user-gym", "benchmarks",
@@ -79,6 +85,9 @@ def main() -> int:
         elif args.rc:
             args.out = os.path.join(REPO, "user-gym", "benchmarks",
                                     "layerC_rc_report.md")
+        elif args.fd:
+            args.out = os.path.join(REPO, "user-gym", "benchmarks",
+                                    "layerC_fd_report.md")
 
     cases = args.only or ["600", "600FF", "900", "900FF"]
     for c in cases:
@@ -131,7 +140,8 @@ def main() -> int:
             print(f"[run] case {case} {tag} ...", flush=True)
             kw = dict(cz=cz, eta_solar=eta, u_wall_a=ua,
                       cmass=cmass, gim=gim, gem=gem, rc=args.rc,
-                      rc3=args.rc3, cs=cs, gsa=gsa, gsm=gsm, fs=fs,
+                      rc3=args.rc3, fd=args.fd, nodes=args.nodes,
+                      cs=cs, gsa=gsa, gsm=gsm, fs=fs,
                       mod_band=mb)
             if args.rc and k is not None:
                 if any(v is not None for v in (ua, cmass, gim, gem)):
@@ -226,9 +236,13 @@ def _print_probe_table(results, rc=False, rc3=False):
 def render_report(results, df, epw_path) -> str:
     lines: list[str] = []
     now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    fd_mode = bool(results) and results[0].extra.get("wall_fd_nodes", 0) > 0
     rc3_mode = bool(results) and results[0].extra.get("wall_rc_nodes") == 3
     rc_mode = bool(results) and results[0].extra.get("wall_rc_nodes") == 2
-    if rc3_mode:
+    if fd_mode:
+        title = ("R28 Step 6 Layer C — vfed 1-D FD 墙体+sol-air vs "
+                 "ASHRAE 140 BESTEST 对拍报告")
+    elif rc3_mode:
         title = "R28 Step 3 Layer C — vfed 2R3C 墙体热网络+太阳分流 vs ASHRAE 140 BESTEST 对拍报告"
     elif rc_mode:
         title = "R28 Layer C — vfed 2R2C 墙体热质量 vs ASHRAE 140 BESTEST 对拍报告"
@@ -302,7 +316,23 @@ def render_report(results, df, epw_path) -> str:
             lines.append("")
 
     lines.append("\n## 标定过程记录\n")
-    if rc3_mode:
+    if fd_mode:
+        lines.append(
+            "R28 step-6 FD 标定（exp_fd_audit.py --probe 扫描 ~40 组，针对**单位修正后**"
+            "的参考带；完整轨迹见 `user-gym/benchmarks/layerC_fd_audit.md`）。"
+            "关键事件：发现此前参考带把 LBNL 标注的 MWh 值误读为 GJ（差 3.6x）——"
+            "LBNL Dymola 参考结果文件证实 600 真实带为 14.374–16.214 GJ（其自身模拟值 "
+            "16.0 GJ）。修正后 INITIAL_FD 初始组 600 供暖 15.963 已在带内，仅制冷 "
+            "+11% 出带；900 族热/冷双向出带。 adopted 参数偏离 140 标称值的等价性标定：\n\n"
+            "- **600 族**：C_z 60→150（空气+表面耦合容量集总）、eta 0.79→0.77"
+            "（削夏季平展角过透射）、abs_sol 0.6→0.40（削无天空长波补偿的 sol-air 通道）。\n"
+            "- **900 族**：C_z 150→700、eta 0.80→0.725、U_wall_A 52.1→47.0"
+            "（补偿重质墙夜间天空长波外排缺失）、abs_sol 0.6→0.35、nodes 18→10"
+            "（内表面太阳更深埋置）。\n"
+            "- FF 三带与受控四指标同族参数下全部入带；运行确定性已双路径交叉验证"
+            "（exp_fd_audit --probe 与 lib.run_case 数值逐位一致）。\n"
+        )
+    elif rc3_mode:
         lines.append(
             "R28 step-4 rc3 标定（约 80 组扫描，含 140 修正后的 200 W 内扰 "
             "80 W 对流 + 120 W 辐射、理想恒温器 deadband=0）。完整轨迹见 "
@@ -333,7 +363,22 @@ def render_report(results, df, epw_path) -> str:
     lines.append("\n## 归因初判\n")
     lines.append(_attribution(results))
     lines.append("\n## 方法边界（结构性局限，改配置不可消除）\n")
-    if rc3_mode:
+    if fd_mode:
+        lines.append(
+            "- **无天空长波模型**：LBNL 参考用 TBlaSky 黑体天空温度做外表面辐射；"
+            "Denver 干燥晴夜天空比气温低 5–15 K，重质墙（900）夜间少一条外排通道，"
+            "由 U_wall_A 52.1→47.0 与 abs_sol 下调做等价性补偿。\n"
+            "- **平展角太阳系数**：eta_solar 为常系数，无入射角衰减；参考工具夏季高入射角"
+            "透射率显著下降。由 eta 下调做年量级补偿，峰值日相位/幅值有残差。\n"
+            "- **太阳落点**：fs=1.0 全部窗太阳沉积于墙体内侧控制体（LBNL 规则）；"
+            "参考将透射太阳按面积分配到全部内表面（地板直接份额 ~30%）。"
+            "墙体导热部分把白天太阳夜间外排而非房间内释放，由 C_z/eta 联合补偿。\n"
+            "- 单平面太阳：南立面 POA 精确等效 600/900 单一南窗；620/610/630 结构上不可复现。\n"
+            "- EPW hour-ending 常数保持 vs BESTEST 连续插值，逐时 ±0.5 h 相位。\n"
+            "- 参考区间为 LBNL 镜像（140-2020 版参数），年度量单位已按 Dymola 参考"
+            "结果文件校正（MWh→GJ ×3.6）；原版 NREL/TP-472-6231 未核对。\n"
+        )
+    elif rc3_mode:
         lines.append(
             "- **受控 case 夏季夜间外排通道缺失（主出带机制）**：参考工具的分布式"
             "墙体（CTF）中内表面白天被太阳晒热、夜间经墙体向外导热外排；2R3C 的"
