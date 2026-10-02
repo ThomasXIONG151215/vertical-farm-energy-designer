@@ -214,6 +214,21 @@ vfed sweep my_farm.yaml --cache weather_cache --out results.csv
 
 `vfed evaluate` prints more than energy: annual water use, RH clamp events, DEH utilization, and how much moisture the dehumidifier vs the HVAC coil removed (see the **Output Glossary** under *Interpreting Results* for what these mean). `vfed evaluate ... --export out/` also writes `summary.csv`, `timeseries.csv` (8,760 hourly rows) and `monthly.csv` for your own analysis.
 
+### DEH operating-condition SMER correction (`deh.smer_curve`, default `false`)
+
+The rated `deh.smer` only holds at the DOE rating point (10 CFR 430 Appendix X1: 26.7 °C / 60 % RH). In drier air the coil condenses less water per kWh, so a constant SMER over-states efficiency by 1.5–2× in cold/dry rooms. Set `deh.smer_curve: true` to apply, every step:
+
+```
+SMER_eff = smer × clamp(0.25 + 0.75 × (W_z / W_nom)^0.7, 0.25, 1.0)
+```
+
+- `W_z` — room humidity ratio (kg/kg) at the current step (already computed by the engine's psychrometrics)
+- `W_nom` — rating-point humidity ratio `W(26.7 °C, 60 % RH) ≈ 0.01318 kg/kg`, computed with `vfed/physics/psychrometrics.py` (no hardcoded anchor)
+- Moisture capacity is unchanged; the compressor power for the same condensate rises as `1/SMER_eff` — e.g. 15 °C / 40 % RH gives a factor ≈ 0.59, i.e. ~1.7× the power of the constant-SMER assumption
+- Both control modes apply it: `vfd` stacks it with the DOE part-load speed curve, `on_off` gets the air-side factor at full speed
+- The `deh_smer` summary block reports `smer_curve` plus effective/delivered SMER on the corrected basis
+- Default `false` = constant rated SMER, bit-identical to every pre-existing baseline
+
 ## Architecture
 
 ```

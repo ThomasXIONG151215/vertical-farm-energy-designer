@@ -208,6 +208,21 @@ vfed sweep my_farm.yaml --cache weather_cache --out results.csv
 
 `vfed evaluate` 输出的不止是能耗：年用水量、RH 钳制事件、除湿机利用率，以及除湿机与 HVAC 表冷器各自除掉的水分（含义见"输出结果解读"下的 **Output Glossary**）。`vfed evaluate ... --export out/` 还会写出 `summary.csv`、`timeseries.csv`（8,760 行逐时数据）和 `monthly.csv` 供自行分析。
 
+### 除湿机工况 SMER 修正（`deh.smer_curve`，默认 `false`）
+
+额定 `deh.smer` 只在 DOE 额定工况点（10 CFR 430 Appendix X1：26.7 °C / 60 % RH）成立。空气越干，盘管每 kWh 凝结的水越少，因此恒定 SMER 在冷干房间里会把效率高估 1.5–2 倍。设置 `deh.smer_curve: true` 后，每个步长应用：
+
+```
+SMER_eff = smer × clamp(0.25 + 0.75 × (W_z / W_nom)^0.7, 0.25, 1.0)
+```
+
+- `W_z` — 当前步长的室内含湿量（kg/kg，由引擎现有湿空气库逐时计算）
+- `W_nom` — 额定工况含湿量 `W(26.7 °C, 60 % RH) ≈ 0.01318 kg/kg`，用 `vfed/physics/psychrometrics.py` 计算（不硬编码锚点）
+- 除湿容量不变；同等凝水量下压缩机功率按 `1/SMER_eff` 上升——例如 15 °C / 40 % RH 修正系数 ≈ 0.59，即比恒定 SMER 假设多耗约 1.7 倍电
+- 两种控制模式都生效：`vfd` 与 DOE 部分负荷转速曲线相乘叠加，`on_off` 满速运行时只乘空气侧系数
+- `deh_smer` 汇总块报告 `smer_curve` 开关以及修正口径下的有效/送达 SMER
+- 默认 `false` = 恒定额定 SMER，与既有全部基线逐位一致
+
 ## 架构
 
 ```

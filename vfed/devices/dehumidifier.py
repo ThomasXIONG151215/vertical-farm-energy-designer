@@ -24,6 +24,17 @@ Moisture removal is governed solely by SMER (Specific Moisture Extraction Rate,
 kg water / kWh electricity). The EnthalpyEfficiency class is deprecated and
 retained only for backward compatibility.
 
+Operating-condition SMER correction (R33, benchmark B10): the rated SMER holds
+only at the DOE rating point.  With ``smer_curve=True`` the effective SMER is
+
+    SMER_eff = smer * clamp(0.25 + 0.75 * (W_z/W_nom)^0.7, 0.25, 1.0)
+
+where W_z is the room humidity ratio at the step and W_nom the humidity ratio
+at the DOE 10 CFR 430 Appendix X1 dehumidifier test condition (26.7 C / 60 %
+RH).  Moisture capacity is unchanged; the compressor power for the same
+condensate rises as 1/SMER_eff (P = M * 3.6e6 / SMER_eff), which restores the
+1.5-2x dry-air pessimism the constant-SMER assumption was missing.
+
 Control modes (P1-1): ``control`` selects how S_DH is produced from the
 humidity error ``RH_z - deh_setpoint``:
     * ``"vfd"``    (default) variable-speed modulation inside the proportional
@@ -57,6 +68,19 @@ DEH_CONTROL_MODES = ("vfd", "on_off")
 # a viable efficiency path for dehumidifiers.
 _SMER_SPEED_B0, _SMER_SPEED_B1, _SMER_SPEED_B2 = 0.30, 1.0467, -0.3467
 _DEH_SPEED_M_MIN = 0.2  # compressor turndown (lowest continuous speed)
+
+# R33 (B10): operating-condition SMER correction, anchored to the DOE 10 CFR
+# 430 Appendix X1 dehumidifier test condition 26.7 C (80 F) / 60 % RH.  W_nom
+# is computed with the same bundled Magnus-formula psychrometrics the engine
+# uses for W_ext, so the anchor is reproducible from the code base instead of
+# a hardcoded magic number (~0.013176 kg/kg at 101.325 kPa).
+_W_NOM_DOE = temp_rh_to_ah(26.7, 60.0)
+# Correction band: clamp(0.25 + 0.75*(W_z/W_nom)^0.7, 0.25, 1.0).  Same DOE
+# part-load measurement family as the speed curve above (capacity ratio
+# m = 0.25 -> 0.54, m = 0.75 -> 0.89, m = 1 -> 1.0): as the inlet air dries
+# the evaporator approaches the dew point and condensate per kWh falls; the
+# floor 0.25 bounds the penalty, the ceiling 1.0 forbids beating the rating.
+_SMER_AIR_B0, _SMER_AIR_EXP, _SMER_AIR_FLOOR = 0.25, 0.7, 0.25
 
 
 class EnthalpyEfficiency:
@@ -102,6 +126,10 @@ class DEHDevice:
         fan_power_w: float = 40.0,
         smer: float = 2.0,  # kg water / kWh COMPRESSOR input (P2-5);
         # realistic 1.5-3.0, fan excluded from SMER
+        smer_curve: bool = False,  # R33/B10: apply the W_z operating-condition
+        # SMER correction (SMER_eff = smer * clamp(0.25+0.75*(W_z/W_nom)^0.7,
+        # 0.25, 1.0), W_nom anchored at DOE 26.7 C / 60 % RH).  False =
+        # constant rated SMER, bit-identical to the pre-R33 path.
         tau_q: float = 90.0,
         tau_m: float = 120.0,
         mod_band_rh: float = 4.0,  # VFD proportional band (% RH)
@@ -119,6 +147,7 @@ class DEHDevice:
         # EnthalpyEfficiency parameter).  P_ref_w is the COMPRESSOR reference
         # power; fan_power_w is metered separately in P_elec / Q_DH.
         self.smer = smer
+        self.smer_curve = smer_curve
         self.fan_power_w = fan_power_w
         self.mod_band_rh = mod_band_rh
         self.control = control
@@ -156,6 +185,16 @@ class DEHDevice:
         m = min(max(m, _DEH_SPEED_M_MIN), 1.0)
         return max(_SMER_SPEED_B0 + _SMER_SPEED_B1 * m + _SMER_SPEED_B2 * m * m, 0.05)
 
+    def _smer_air_mod(self, W_z: float) -> float:
+        """SMER modifier vs room humidity ratio (R33/B10, DOE rating-point
+        anchored): drier air means less condensate per kWh of compressor
+        input, so the effective SMER falls with W_z/W_nom."""
+        ratio = max(W_z, 0.0) / _W_NOM_DOE
+        return min(
+            max(_SMER_AIR_B0 + 0.75 * ratio ** _SMER_AIR_EXP, _SMER_AIR_FLOOR),
+            1.0,
+        )
+
     def step(
         self,
         T_z: float,
@@ -167,7 +206,7 @@ class DEHDevice:
         """Advance one timestep.
 
         Returns dict with Q_DH_W, M_deh_kgs, P_elec_W, is_on, S_DH,
-        latent_cop (with legacy ``eta`` alias).
+        latent_cop (with legacy ``eta`` alias) and smer_air_mod (R33).
 
         ``control="vfd"`` (default): variable-speed modulation (second-round
         research, DOE 87 FR 35286): capacity scales linearly with m
@@ -180,6 +219,13 @@ class DEHDevice:
         running, so ``smer_speed_mod(1) = 1`` and the machine extracts
         moisture at its rated SMER, cycling on the hysteresis deadband
         (min_on/min_off anti-short-cycling included via CompressorState).
+
+        ``smer_curve=True`` (R33/B10): the air-side operating-condition factor
+        ``smer_air = clamp(0.25 + 0.75*(W_z/W_nom)^0.7, 0.25, 1.0)`` (W_nom at
+        the DOE 26.7 C / 60 % RH rating point) multiplies the effective SMER
+        in BOTH control modes — full speed included — so
+        ``SMER_eff = smer * smer_speed_mod(m) * smer_air`` and the compressor
+        power for the same condensate rises as 1/smer_air.
         """
         mod = self.comp.update(
             RH_z - deh_setpoint, dt, on_threshold=0.0, off_threshold=-self.comp.deadband
@@ -188,6 +234,15 @@ class DEHDevice:
         Q_sens_target, M_target, P_elec = 0.0, 0.0, 0.0
         s_dh = 0.0
         latent_cop = 0.0
+        # R33/B10: operating-condition SMER correction.  The rated SMER holds
+        # only at the DOE rating point (26.7 C / 60 % RH); in drier air the
+        # moisture-per-power relation degrades by the air-side factor below.
+        # Capacity (M vs m) is UNCHANGED -- the compressor power for the same
+        # condensate rises as 1/smer_air (P = M * 3.6e6 / SMER_eff), exactly
+        # the DOE-observed dry-air pessimism the constant-SMER assumption was
+        # missing.  Default off: the 1.0 factor multiplies through IEEE-754
+        # exactly, so the pre-R33 path is bit-identical (zero drift).
+        smer_air = self._smer_air_mod(W_z) if self.smer_curve else 1.0
         # L_v(T_z) evaluated every step so the post-shutdown condensate drip
         # (M_act > 0) releases latent heat at the current room temperature.
         L_v = latent_heat_vaporization(T_z) * 1000.0
@@ -196,13 +251,15 @@ class DEHDevice:
             P_full = self._poly_power(T_z, W_z)
             smer_mod = self._smer_speed_mod(s_dh)
             # VFD compressor power: P/P_rated = m / smer_mod (DOE curve:
-            # capacity linear, SMER falling, so power super-linear).
-            P_comp = P_full * s_dh / max(smer_mod, 1e-6)
+            # capacity linear, SMER falling, so power super-linear).  With
+            # the air curve on, the SAME removal demand draws
+            # P = M*3.6e6/SMER_eff = P_full*m/(smer_mod*smer_air).
+            P_comp = P_full * s_dh / max(smer_mod * smer_air, 1e-6)
             # Specific Moisture Extraction Rate (kg water / kWh COMPRESSOR
             # input, P2-5): m_dh [kg/s] = SMER * P_comp [W] / 3.6e6 [J/kWh].
             # The fan is intentionally excluded from the SMER denominator and
             # counted exactly once in P_elec below — no double-count.
-            m_dh = self.smer * smer_mod * P_comp / 3.6e6
+            m_dh = self.smer * smer_mod * smer_air * P_comp / 3.6e6
             # MINOR-7 (D): latent heat evaluated at room temperature T_z so the
             # condenser term exactly cancels the engine's evaporative sink
             # (engine L_v = latent_heat_vaporization(T_z)*1000) — the closure
@@ -215,7 +272,8 @@ class DEHDevice:
             # Latent COP for reporting (P2-10): condensation power per unit of
             # compressor input (fan excluded) — renamed from the misleading
             # "eta"; the module's deprecated EnthalpyEfficiency is unrelated.
-            # No longer constant: SMER falls with m, so latent_cop falls too.
+            # No longer constant: SMER falls with m, so latent_cop falls too
+            # (and with W_z when smer_curve is on — R33).
             latent_cop = m_dh * L_v / max(P_comp, 1e-6)
 
         # Energy-self-consistent transient (P2-6): Q_act is DERIVED from M_act,
@@ -241,6 +299,7 @@ class DEHDevice:
             "S_DH": s_dh,
             "latent_cop": latent_cop,
             "eta": latent_cop,  # DEPRECATED alias (P2-10) — use "latent_cop"
+            "smer_air_mod": smer_air,  # R33: air-side factor (1.0 when curve off)
         }
 
 

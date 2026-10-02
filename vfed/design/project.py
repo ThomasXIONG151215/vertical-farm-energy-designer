@@ -551,6 +551,18 @@ class DEHConfig:
     W_mean: float = 0.012  # kg/kg mean humidity ratio (W normalisation)
     W_std: float = 0.003  # kg/kg std dev
     smer: float = 2.0  # rated SMER (kg water / kWh COMPRESSOR input, fan excluded — P2-5); realistic 1.5-3.0
+    smer_curve: bool = False
+    #   R33/B10: operating-condition SMER correction.  true = each step applies
+    #   SMER_eff = smer × clamp(0.25 + 0.75×(W_z/W_nom)^0.7, 0.25, 1.0), with
+    #   W_z = room humidity ratio and W_nom anchored at the DOE 10 CFR 430
+    #   Appendix X1 dehumidifier test condition (26.7 °C / 60 % RH, ≈0.01318
+    #   kg/kg, computed via vfed/physics/psychrometrics.py).  Moisture
+    #   capacity is unchanged; the compressor power for the same condensate
+    #   rises as 1/SMER_eff (dry-air rooms: 15 °C/40 % RH → factor ≈0.59 ≈
+    #   1.7× power vs the constant-SMER assumption).  Applies to BOTH control
+    #   modes (vfd stacks with the DOE part-load speed curve; on_off gets the
+    #   air factor at full speed).  false (default) = constant rated SMER,
+    #   bit-identical to the pre-R33 baselines.
     control: str = "vfd"
     #   DEH control mode (P1-1): "vfd" = variable-speed modulation inside
     #   comp_mod_band_rh (DOE 87 FR 35286 part-load SMER penalty applies);
@@ -1215,6 +1227,17 @@ class DesignProject:
                 f"'vfd' modulates speed inside deh.comp_mod_band_rh (DOE part-load "
                 f"SMER penalty); 'on_off' cycles at full speed on deh.deadband_rh "
                 f"(rated SMER while running)."
+            )
+        # R33/B10: smer_curve is a boolean switch — YAML strings like "true"
+        # or the numbers 0/1 previously would coerce or mislead; reject at
+        # load time (same pattern as battery.allow_grid_charging).
+        _smer_curve = deh_cfg.get("smer_curve")
+        if _smer_curve is not None and not isinstance(_smer_curve, bool):
+            raise ValueError(
+                f"deh.smer_curve must be a boolean (true/false), got "
+                f"{type(_smer_curve).__name__}: {_smer_curve!r}. true applies the "
+                f"DOE rating-point SMER correction (SMER_eff = smer * clamp(0.25 + "
+                f"0.75*(W_z/W_nom)^0.7, 0.25, 1.0), W_nom at 26.7 C / 60 % RH)."
             )
         rh_sp = sp_cfg.get("RH")
         if rh_sp is not None and not (0.0 <= rh_sp <= 100.0):
