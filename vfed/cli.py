@@ -277,9 +277,14 @@ _YAML_SECTION_COMMENTS = {
         "# deh: dehumidifier (removes moisture from transpiration)\n"
         "#   P_ref_w     - compressor rated electrical power (W); fan metered\n"
         "#                 separately\n"
-        "#   smer        - specific moisture extraction (kg water / kWh COMPRESSOR\n"
-        "#                 input, fan excluded); realistic 1.5-3.0\n"
-        "#   control     - vfd (variable speed, part-load SMER penalty)\n"
+         "#   smer        - specific moisture extraction (kg water / kWh COMPRESSOR\n"
+         "#                 input, fan excluded); realistic 1.5-3.0\n"
+         "#   smer_curve  - true: DOE rating-point W_z SMER correction (R33,\n"
+         "#                 power law; default false)\n"
+         "#   smer_map    - true: EnergyPlus Dehumidifier:DX (T,RH) biquadratic\n"
+         "#                 capacity+SMER maps (R34; default false; exclusive\n"
+         "#                 with smer_curve)\n"
+         "#   control     - vfd (variable speed, part-load SMER penalty)\n"
         "#                 | on_off (full-speed cycling, rated SMER)\n"
         "#   auto_size   - true = size capacity from design moisture load\n"
         "#   M_deh_nom   - alternative spec: nominal removal (L/day)\n"
@@ -938,10 +943,17 @@ def _cmd_evaluate(args):
     # full-speed cycling).  Skipped when the DEH never ran.
     sm = summary.get("deh_smer")
     if sm and sm.get("effective_smer_kg_per_kwh") is not None:
+        # R34/W2-C: name the active air-side correction, if any (all-off
+        # default keeps the console line byte-identical to pre-R34).
+        _sm_tag = ""
+        if sm.get("smer_map"):
+            _sm_tag = ", E+ (T,RH) map"
+        elif sm.get("smer_curve"):
+            _sm_tag = ", W_z power law"
         print(
             f"  DEH eff. SMER    = {sm['effective_smer_kg_per_kwh']:.2f} kg/kWh "
             f"(rated {sm.get('rated_smer_kg_per_kwh', 0.0):.2f}, "
-            f"mode {sm.get('control_mode', 'vfd')})"
+            f"mode {sm.get('control_mode', 'vfd')}{_sm_tag})"
         )
     # R34: HVAC additive upgrades self-evidence -- one line, only when an
     # upgrade is actually active (all-off defaults print nothing, so the

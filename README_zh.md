@@ -223,6 +223,22 @@ SMER_eff = smer × clamp(0.25 + 0.75 × (W_z / W_nom)^0.7, 0.25, 1.0)
 - `deh_smer` 汇总块报告 `smer_curve` 开关以及修正口径下的有效/送达 SMER
 - 默认 `false` = 恒定额定 SMER，与既有全部基线逐位一致
 
+### 除湿机 EnergyPlus (T, RH) 性能 map（`deh.smer_map`，默认 `false`）
+
+R33 幂律只按湿度修正 SMER 且容量不变。设置 `deh.smer_map: true` 后切换为 EnergyPlus `ZoneHVAC:Dehumidifier:DX` 同构模型——两条关于进风状态 (T_z, RH_z) 的归一化双二次曲线，系数取 E+ 参考曲线（v9.5.0 `SingleFamilyHouse_HP_Slab_Dehumidification.idf`，NREL 按 DOE 10 CFR 430 Appendix X1 测试矩阵拟合；输入钳制在曲线定义域 21–32.22 °C × 40–80 % RH，不外推）：
+
+```
+M        = M_nom × m × WR(T_z, RH_z)        （容量同样降额）
+SMER_eff = smer × smer_speed_mod(m) × EF(T_z, RH_z)
+P_comp   = M × 3.6e6 / SMER_eff             （口径同上，压缩机输入）
+```
+
+- `WR(T,RH) = a + b·T + c·T² + d·RH + e·RH² + f·T·RH`，系数 `(-2.724878664080, 0.100711983591, -0.000990538285, 0.050053043874, -0.000203629282, -0.000341750531)`；`EF` 系数 `(-2.388319068955, 0.093047739452, -0.001369700327, 0.066533716758, -0.000343198063, -0.000562490295)`
+- 两条 map 在 DOE 额定点 26.7 °C / 60 % RH 处严格等于 1.0（E+ 公布曲线在该点原值约 0.981/0.975，运行时按额定原值归一）
+- 角点行为：15 °C/40 % RH（钳制到 21/40）→ `wr` 0.349 / `ef` 0.617，即 `SMER_eff = 0.617 × 额定`（落在 R33 修复带内）且容量降到 35 %；21 °C/68 % RH → `ef` 1.124——比额定更湿的空气可能优于额定值（额定点是锚点不是上限，遵循 E+ 口径）
+- 与 `deh.smer_curve` 互斥（同一 DOE 干空气物理的两种函数形式——加载时 fail-fast）
+- `deh_smer` 汇总块报告 `smer_map`；默认 `false` = 与既有全部基线逐位一致
+
 ### HVAC COP 软顶、曲轴箱加热、除霜（默认全关）
 
 三个 additive HVAC 开关，默认全关（基线逐位一致；`hvac_upgrades` 汇总块无论开关状态都报告各标志与除霜事件/电量计量）：
@@ -489,7 +505,7 @@ summary.csv（单行 — 标量 KPI）：
 | `annual_ghi_kwh_m2` | kWh/m²/年 | 仿真窗口的年 GHI 总辐照（round 21）：对齐本地自然年内 `Σ GHI ÷ 1000` — 使太阳能资源可直接从 summary.csv 审计 |
 | `moisture_clamp_stats` / `temperature_clamp_stats` | dict | 湿度积分器削顶事件（饱和上限 / 零下限）与温度削顶事件 |
 | `dehumidifier_performance` | dict | 名义 vs 实际（受室内湿存水限制）除湿量；`removal_limited_*` |
-| `deh_smer` | dict | 有效/送达/额定 SMER（kg/kWh，压缩机输入口径，不含风机）；`deh_comp_energy_kwh` 不含风机，`deh_total_energy_kwh` 含风机 |
+| `deh_smer` | dict | 有效/送达/额定 SMER（kg/kWh，压缩机输入口径，不含风机）；`smer_curve` / `smer_map` 标志标明生效的空气侧修正；`deh_comp_energy_kwh` 不含风机，`deh_total_energy_kwh` 含风机 |
 | `hvac_upgrades` | dict | R34 HVAC 升级开关与计量：`cop_soft_cap` / `defrost` 模式、`defrost_events`、`defrost_energy_kwh`、`crankcase_energy_kwh`（默认全关路径计量恒为 0） |
 | `full_load_diagnostics` | dict | 各设备满载运行的小时数/占比/最长连续时长 + 告警阈值 |
 | `rh_setpoint_pct` / `rh_exceed_hours` / `rh_exceed_pct` | % / h / 分数（0-1） | RH 目标与控制偏差：室内 RH **高于**设定值（严格 `>`）的小时数及其占全年比例（见上方 RH 合规说明） |

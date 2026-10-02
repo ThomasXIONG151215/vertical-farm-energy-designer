@@ -35,6 +35,21 @@ RH).  Moisture capacity is unchanged; the compressor power for the same
 condensate rises as 1/SMER_eff (P = M * 3.6e6 / SMER_eff), which restores the
 1.5-2x dry-air pessimism the constant-SMER assumption was missing.
 
+Operating-condition (T, RH) maps (R34/W2-C, upgrade D1): with ``smer_map=True``
+the device is isomorphic to the EnergyPlus ``ZoneHVAC:Dehumidifier:DX`` model --
+TWO normalized biquadratic curves of the inlet air state (E+ v9.5.0 reference
+curves ZoneDehumidWaterRemoval / ZoneDehumidEnergyFactor, fitted by NREL to the
+DOE 10 CFR 430 Appendix X1 test matrix):
+
+    M         = M_nom * m * WR(T_z, RH_z)          (capacity also derated)
+    SMER_eff  = smer * smer_speed_mod(m) * EF(T_z, RH_z)
+    P_comp    = M * 3.6e6 / SMER_eff               (same P2-5 basis as above)
+
+Both maps are exactly 1.0 at the DOE rating point (26.7 C / 60 % RH); inputs
+are clamped to the E+ curve domain [21, 32.22] C x [40, 80] % RH (no
+extrapolation).  ``smer_map`` and ``smer_curve`` are mutually exclusive -- they
+model the same DOE dry-air SMER penalty on two functional forms.
+
 Control modes (P1-1): ``control`` selects how S_DH is produced from the
 humidity error ``RH_z - deh_setpoint``:
     * ``"vfd"``    (default) variable-speed modulation inside the proportional
@@ -81,6 +96,43 @@ _W_NOM_DOE = temp_rh_to_ah(26.7, 60.0)
 # the evaporator approaches the dew point and condensate per kWh falls; the
 # floor 0.25 bounds the penalty, the ceiling 1.0 forbids beating the rating.
 _SMER_AIR_B0, _SMER_AIR_EXP, _SMER_AIR_FLOOR = 0.25, 0.7, 0.25
+
+# R34/W2-C (D1): EnergyPlus ZoneHVAC:Dehumidifier:DX isomorphic (T, RH)
+# biquadratic maps.  Coefficients are the REFERENCE curves shipped with
+# EnergyPlus (v9.5.0 testfiles/SingleFamilyHouse_HP_Slab_Dehumidification.idf,
+# curve objects ZoneDehumidWaterRemoval / ZoneDehumidEnergyFactor), fitted by
+# NREL to the DOE 10 CFR 430 Appendix X1 dehumidifier test matrix:
+#     f(T, RH) = a + b*T + c*T^2 + d*RH + e*RH^2 + f*T*RH
+# with x = inlet dry-bulb temperature (C) and y = inlet relative humidity (%).
+# E+ Curve:Biquadratic semantics: inputs are clamped to the min/max x/y domain
+# BEFORE evaluation (no extrapolation); domain x in [21.0, 32.22] C (70-90 F),
+# y in [40, 80] % RH.  The published curves evaluate to ~0.9806 (WR) and
+# ~0.9750 (EF) at the DOE rating point (26.7 C / 60 % RH) -- i.e. not exactly
+# normalized -- so the runtime modifiers divide by the rating-point raw value
+# (IEEE-754 x/x = 1.0 exactly, per the E+ I/O Reference requirement that the
+# curves "should be normalized to have the value of 1.0 at the rating point").
+# Unlike the R33 power law (ceiling 1.0), the E+ curves may legitimately
+# EXCEED 1.0 in wetter-than-rated air (EF ~1.12 at 21 C / 68 % RH): the rating
+# point is an anchor, not a cap, per the E+ model.
+_WR_MAP_COEF = (-2.724878664080, 0.100711983591, -0.000990538285,
+                0.050053043874, -0.000203629282, -0.000341750531)
+_EF_MAP_COEF = (-2.388319068955, 0.093047739452, -0.001369700327,
+                0.066533716758, -0.000343198063, -0.000562490295)
+_MAP_T_MIN, _MAP_T_MAX = 21.0, 32.22  # E+ curve x domain (C)
+_MAP_RH_MIN, _MAP_RH_MAX = 40.0, 80.0  # E+ curve y domain (% RH)
+_MAP_FLOOR = 0.05  # normalized-output floor (safety only; in-domain > 0.34)
+
+
+def _biquad_raw(coef, T_c, rh_pct):
+    """E+ Curve:Biquadratic with domain-clamped inputs (min/max x/y)."""
+    a, b, c, d, e, f = coef
+    x = min(max(T_c, _MAP_T_MIN), _MAP_T_MAX)
+    y = min(max(rh_pct, _MAP_RH_MIN), _MAP_RH_MAX)
+    return a + b * x + c * x * x + d * y + e * y * y + f * x * y
+
+
+_WR_MAP_RATED = _biquad_raw(_WR_MAP_COEF, 26.7, 60.0)  # ~0.980619
+_EF_MAP_RATED = _biquad_raw(_EF_MAP_COEF, 26.7, 60.0)  # ~0.975010
 
 
 class EnthalpyEfficiency:
@@ -130,6 +182,11 @@ class DEHDevice:
         # SMER correction (SMER_eff = smer * clamp(0.25+0.75*(W_z/W_nom)^0.7,
         # 0.25, 1.0), W_nom anchored at DOE 26.7 C / 60 % RH).  False =
         # constant rated SMER, bit-identical to the pre-R33 path.
+        smer_map: bool = False,  # R34/W2-C (D1): EnergyPlus Dehumidifier:DX
+        # isomorphic (T, RH) biquadratic maps (capacity M = M_nom*WR(T,RH),
+        # SMER_eff = smer*EF(T,RH), both 1.0 at the DOE 26.7 C / 60 % RH
+        # rating point, inputs clamped to the E+ curve domain).  Mutually
+        # exclusive with smer_curve.  False = bit-identical pre-R34 path.
         tau_q: float = 90.0,
         tau_m: float = 120.0,
         mod_band_rh: float = 4.0,  # VFD proportional band (% RH)
@@ -138,6 +195,12 @@ class DEHDevice:
         if control not in DEH_CONTROL_MODES:
             raise ValueError(
                 f"DEH control must be one of {'|'.join(DEH_CONTROL_MODES)}, got {control!r}"
+            )
+        if smer_map and smer_curve:
+            raise ValueError(
+                "smer_map and smer_curve are mutually exclusive air-side SMER "
+                "corrections (both model the same DOE rating-point dry-air "
+                "penalty on two functional forms); enable exactly one."
             )
         self.P_ref = P_ref_w
         self.poly_e = poly_e
@@ -148,6 +211,7 @@ class DEHDevice:
         # power; fan_power_w is metered separately in P_elec / Q_DH.
         self.smer = smer
         self.smer_curve = smer_curve
+        self.smer_map = smer_map
         self.fan_power_w = fan_power_w
         self.mod_band_rh = mod_band_rh
         self.control = control
@@ -195,6 +259,21 @@ class DEHDevice:
             1.0,
         )
 
+    def _wr_map_mod(self, T_z: float, RH_z: float) -> float:
+        """Water-removal CAPACITY modifier (R34/W2-C): the E+ reference
+        biquadratic WR(T, RH), normalized to exactly 1.0 at the DOE rating
+        point (26.7 C / 60 % RH).  Falls steeply in cold/dry air (0.349 at
+        the 21 C / 40 % RH domain corner); may exceed 1.0 in warm/wet air."""
+        return max(_biquad_raw(_WR_MAP_COEF, T_z, RH_z) / _WR_MAP_RATED, _MAP_FLOOR)
+
+    def _ef_map_mod(self, T_z: float, RH_z: float) -> float:
+        """Energy-factor (SMER) modifier (R34/W2-C): the E+ reference
+        biquadratic EF(T, RH), normalized to exactly 1.0 at the DOE rating
+        point.  Drier air degrades (0.617 at the 21 C / 40 % RH corner, the
+        same DOE dry-air physics as the R33 power law); humid air may beat
+        the rating (1.124 at 21 C / 68 % RH) -- anchor, not cap, per E+."""
+        return max(_biquad_raw(_EF_MAP_COEF, T_z, RH_z) / _EF_MAP_RATED, _MAP_FLOOR)
+
     def step(
         self,
         T_z: float,
@@ -206,7 +285,8 @@ class DEHDevice:
         """Advance one timestep.
 
         Returns dict with Q_DH_W, M_deh_kgs, P_elec_W, is_on, S_DH,
-        latent_cop (with legacy ``eta`` alias) and smer_air_mod (R33).
+        latent_cop (with legacy ``eta`` alias), smer_air_mod (R33) and
+        wr_map_mod / ef_map_mod (R34, 1.0 when the map is off).
 
         ``control="vfd"`` (default): variable-speed modulation (second-round
         research, DOE 87 FR 35286): capacity scales linearly with m
@@ -223,9 +303,22 @@ class DEHDevice:
         ``smer_curve=True`` (R33/B10): the air-side operating-condition factor
         ``smer_air = clamp(0.25 + 0.75*(W_z/W_nom)^0.7, 0.25, 1.0)`` (W_nom at
         the DOE 26.7 C / 60 % RH rating point) multiplies the effective SMER
-        in BOTH control modes — full speed included — so
+        in BOTH control modes -- full speed included -- so
         ``SMER_eff = smer * smer_speed_mod(m) * smer_air`` and the compressor
         power for the same condensate rises as 1/smer_air.
+
+        ``smer_map=True`` (R34/W2-C, exclusive with smer_curve): the E+
+        Dehumidifier:DX (T, RH) maps replace the air-side factor -- capacity
+        AND efficiency both follow the inlet air state:
+
+            M        = M_nom * m * wr_map(T_z, RH_z)
+            SMER_eff = smer * smer_speed_mod(m) * ef_map(T_z, RH_z)
+            P_comp   = M * 3.6e6 / SMER_eff = P_full*m*wr_map/(smer_mod*ef_map)
+
+        At the DOE rating point wr_map = ef_map = 1.0 exactly, so the map-on
+        machine is bit-identical to map-off there.  Both default-off factors
+        are exactly 1.0 and multiply through IEEE-754 exactly, so the default
+        path is bit-identical to the pre-R34 baselines (zero drift).
         """
         mod = self.comp.update(
             RH_z - deh_setpoint, dt, on_threshold=0.0, off_threshold=-self.comp.deadband
@@ -243,6 +336,17 @@ class DEHDevice:
         # missing.  Default off: the 1.0 factor multiplies through IEEE-754
         # exactly, so the pre-R33 path is bit-identical (zero drift).
         smer_air = self._smer_air_mod(W_z) if self.smer_curve else 1.0
+        # R34/W2-C: E+ (T, RH) maps.  wr_map derates the water-removal
+        # CAPACITY as well (the E+ Water Removal curve); ef_map is the
+        # air-side SMER factor (the E+ Energy Factor curve) and REPLACES the
+        # R33 factor (mutually exclusive switches).  Default off: both are
+        # exactly 1.0 and multiply through IEEE-754 exactly (zero drift).
+        if self.smer_map:
+            wr_map = self._wr_map_mod(T_z, RH_z)
+            ef_map = self._ef_map_mod(T_z, RH_z)
+        else:
+            wr_map = 1.0
+            ef_map = 1.0
         # L_v(T_z) evaluated every step so the post-shutdown condensate drip
         # (M_act > 0) releases latent heat at the current room temperature.
         L_v = latent_heat_vaporization(T_z) * 1000.0
@@ -251,15 +355,17 @@ class DEHDevice:
             P_full = self._poly_power(T_z, W_z)
             smer_mod = self._smer_speed_mod(s_dh)
             # VFD compressor power: P/P_rated = m / smer_mod (DOE curve:
-            # capacity linear, SMER falling, so power super-linear).  With
-            # the air curve on, the SAME removal demand draws
-            # P = M*3.6e6/SMER_eff = P_full*m/(smer_mod*smer_air).
-            P_comp = P_full * s_dh / max(smer_mod * smer_air, 1e-6)
+            # capacity linear, SMER falling, so power super-linear).  With an
+            # air-side factor on (smer_air from smer_curve, or ef_map from
+            # smer_map) and the capacity map wr_map (smer_map only), the SAME
+            # removal demand draws P = M*3.6e6/SMER_eff
+            #                            = P_full*m*wr_map/(smer_mod*ef_map*smer_air).
+            P_comp = P_full * s_dh * wr_map / max(smer_mod * smer_air * ef_map, 1e-6)
             # Specific Moisture Extraction Rate (kg water / kWh COMPRESSOR
             # input, P2-5): m_dh [kg/s] = SMER * P_comp [W] / 3.6e6 [J/kWh].
             # The fan is intentionally excluded from the SMER denominator and
-            # counted exactly once in P_elec below — no double-count.
-            m_dh = self.smer * smer_mod * smer_air * P_comp / 3.6e6
+            # counted exactly once in P_elec below -- no double-count.
+            m_dh = self.smer * smer_mod * smer_air * ef_map * P_comp / 3.6e6
             # MINOR-7 (D): latent heat evaluated at room temperature T_z so the
             # condenser term exactly cancels the engine's evaporative sink
             # (engine L_v = latent_heat_vaporization(T_z)*1000) — the closure
@@ -298,8 +404,10 @@ class DEHDevice:
             "mod": mod,
             "S_DH": s_dh,
             "latent_cop": latent_cop,
-            "eta": latent_cop,  # DEPRECATED alias (P2-10) — use "latent_cop"
+            "eta": latent_cop,  # DEPRECATED alias (P2-10) -- use "latent_cop"
             "smer_air_mod": smer_air,  # R33: air-side factor (1.0 when curve off)
+            "wr_map_mod": wr_map,  # R34: E+ capacity factor (1.0 when map off)
+            "ef_map_mod": ef_map,  # R34: E+ energy-factor factor (1.0 when map off)
         }
 
 

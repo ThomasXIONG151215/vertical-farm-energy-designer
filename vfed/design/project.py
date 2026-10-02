@@ -595,6 +595,24 @@ class DEHConfig:
     #   modes (vfd stacks with the DOE part-load speed curve; on_off gets the
     #   air factor at full speed).  false (default) = constant rated SMER,
     #   bit-identical to the pre-R33 baselines.
+    smer_map: bool = False
+    #   R34/W2-C (D1, layerB top-1 upgrade): EnergyPlus
+    #   ZoneHVAC:Dehumidifier:DX isomorphic operating-condition map.  true =
+    #   two normalized biquadratic curves of the inlet air state (T_z, RH_z),
+    #   coefficients = the E+ reference curves (v9.5.0
+    #   SingleFamilyHouse_HP_Slab_Dehumidification.idf, NREL fit to the DOE
+    #   10 CFR 430 Appendix X1 test matrix), both exactly 1.0 at the rating
+    #   point 26.7 °C / 60 % RH, inputs clamped to the E+ curve domain
+    #   [21, 32.22] °C × [40, 80] % RH:
+    #     capacity  M = M_nom × WR(T_z, RH_z)   (capacity also derated)
+    #     SMER_eff  = smer × EF(T_z, RH_z)      (vfd: × part-load speed mod)
+    #     P_comp    = M × 3.6e6 / SMER_eff      (same P2-5 compressor basis)
+    #   Corner behaviour: 15 °C/40 % RH → wr 0.349 / ef 0.617 (SMER_eff =
+    #   0.617×rated, inside the B10 fix band); 21 °C/68 % RH → ef 1.124
+    #   (wetter-than-rated air may beat the rating: anchor, not cap, per E+).
+    #   Mutually exclusive with smer_curve (same DOE dry-air physics, two
+    #   functional forms).  false (default) = bit-identical to the pre-R34
+    #   baselines.
     control: str = "vfd"
     #   DEH control mode (P1-1): "vfd" = variable-speed modulation inside
     #   comp_mod_band_rh (DOE 87 FR 35286 part-load SMER penalty applies);
@@ -1270,6 +1288,27 @@ class DesignProject:
                 f"{type(_smer_curve).__name__}: {_smer_curve!r}. true applies the "
                 f"DOE rating-point SMER correction (SMER_eff = smer * clamp(0.25 + "
                 f"0.75*(W_z/W_nom)^0.7, 0.25, 1.0), W_nom at 26.7 C / 60 % RH)."
+            )
+        # R34/W2-C: smer_map is a boolean switch (same pattern) and is
+        # MUTUALLY EXCLUSIVE with smer_curve -- both are air-side SMER
+        # corrections anchored at the same DOE rating point; enabling both
+        # would double-count the dry-air penalty.
+        _smer_map = deh_cfg.get("smer_map")
+        if _smer_map is not None and not isinstance(_smer_map, bool):
+            raise ValueError(
+                f"deh.smer_map must be a boolean (true/false), got "
+                f"{type(_smer_map).__name__}: {_smer_map!r}. true applies the "
+                f"EnergyPlus Dehumidifier:DX (T, RH) biquadratic maps "
+                f"(M = M_nom*WR(T,RH), SMER_eff = smer*EF(T,RH), both 1.0 at "
+                f"26.7 C / 60 % RH)."
+            )
+        if _smer_map is True and _smer_curve is True:
+            raise ValueError(
+                f"deh.smer_map and deh.smer_curve are mutually exclusive "
+                f"(both are DOE rating-point air-side SMER corrections; "
+                f"enabling both would double-count the dry-air penalty). "
+                f"Enable exactly one -- smer_map is the EnergyPlus "
+                f"Dehumidifier:DX (T, RH) biquadratic upgrade."
             )
         rh_sp = sp_cfg.get("RH")
         if rh_sp is not None and not (0.0 <= rh_sp <= 100.0):

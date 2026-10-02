@@ -593,6 +593,7 @@ def _build_devices(p, P_atm: float = 101.325):
         fan_power_w=p.deh.fan_power_w,
         smer=p.deh.smer,
         smer_curve=p.deh.smer_curve,
+        smer_map=p.deh.smer_map,
         tau_q=p.deh.tau_q,
         tau_m=p.deh.tau_m,
         mod_band_rh=p.deh.comp_mod_band_rh,
@@ -1350,9 +1351,12 @@ class DesignEngine:
         # carries the air-side correction (P = M*3.6e6/SMER_eff in the device
         # step), so effective/delivered are on the SMER_eff basis directly;
         # curve off (default) leaves both ratios bitwise unchanged.
+        # R34/W2-C: smer_map=True swaps in the E+ (T, RH) biquadratic maps
+        # (capacity AND efficiency); the flag is reported alongside.
         summary["deh_smer"] = {
             "control_mode": p.deh.control,
             "smer_curve": bool(p.deh.smer_curve),
+            "smer_map": bool(p.deh.smer_map),
             "effective_smer_kg_per_kwh": round(deh_perf["deh_nominal_kg"] / deh_comp_kwh, 3)
             if deh_comp_kwh > 0.0
             else None,

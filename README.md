@@ -229,6 +229,22 @@ SMER_eff = smer × clamp(0.25 + 0.75 × (W_z / W_nom)^0.7, 0.25, 1.0)
 - The `deh_smer` summary block reports `smer_curve` plus effective/delivered SMER on the corrected basis
 - Default `false` = constant rated SMER, bit-identical to every pre-existing baseline
 
+### DEH EnergyPlus (T, RH) performance maps (`deh.smer_map`, default `false`)
+
+The R33 power law corrects SMER on humidity alone and keeps capacity fixed. Set `deh.smer_map: true` to switch to the model isomorphic to EnergyPlus `ZoneHVAC:Dehumidifier:DX` — TWO normalized biquadratic curves of the inlet air state, using the E+ reference coefficients (v9.5.0 `SingleFamilyHouse_HP_Slab_Dehumidification.idf`, NREL's fit to the DOE 10 CFR 430 Appendix X1 test matrix; inputs clamped to the curve domain 21–32.22 °C and 40–80 % RH, no extrapolation):
+
+```
+M        = M_nom x m x WR(T_z, RH_z)        (capacity is derated too)
+SMER_eff = smer x smer_speed_mod(m) x EF(T_z, RH_z)
+P_comp   = M x 3.6e6 / SMER_eff             (same compressor-input basis)
+```
+
+- `WR(T,RH) = a + b·T + c·T² + d·RH + e·RH² + f·T·RH` with `(-2.724878664080, 0.100711983591, -0.000990538285, 0.050053043874, -0.000203629282, -0.000341750531)`; `EF` with `(-2.388319068955, 0.093047739452, -0.001369700327, 0.066533716758, -0.000343198063, -0.000562490295)`
+- Both maps are exactly 1.0 at the DOE rating point 26.7 °C / 60 % RH (the published E+ curves evaluate to ~0.981/0.975 there, so the runtime modifiers normalize by the rating-point value)
+- Corner behaviour: 15 °C/40 % RH (clamped to 21/40) → `wr` 0.349 / `ef` 0.617, i.e. `SMER_eff = 0.617 × rated` (inside the R33 fix band) AND capacity down to 35 %; 21 °C/68 % RH → `ef` 1.124 — wetter-than-rated air may beat the rating (anchor, not cap, per E+)
+- Mutually exclusive with `deh.smer_curve` (same DOE dry-air physics on two functional forms — fail-fast at load time)
+- The `deh_smer` summary block reports `smer_map`; default `false` = bit-identical to every pre-existing baseline
+
 ### HVAC COP soft cap, crankcase heater, defrost (default off)
 
 Three additive HVAC switches, all default-off (bit-identical baselines; the `hvac_upgrades` summary block reports the flags plus defrost event/energy meters either way):
@@ -526,7 +542,7 @@ summary.csv (single row — scalar KPIs):
 | `annual_ghi_kwh_m2` | kWh/m²/yr | Annual GHI insolation of the simulation window (round 21): `Σ GHI ÷ 1000` over the aligned local calendar year — makes the solar resource auditable from summary.csv itself |
 | `moisture_clamp_stats` / `temperature_clamp_stats` | dict | Humidity-integrator clip events (saturation cap / zero floor) and temperature clip events |
 | `dehumidifier_performance` | dict | Nominal vs actual (inventory-capped) moisture removal; `removal_limited_*` |
-| `deh_smer` | dict | Effective / delivered / rated SMER (kg/kWh, compressor input, fan excluded); `deh_comp_energy_kwh` excludes the fan, `deh_total_energy_kwh` includes it |
+| `deh_smer` | dict | Effective / delivered / rated SMER (kg/kWh, compressor input, fan excluded); `smer_curve` / `smer_map` flags name the active air-side correction; `deh_comp_energy_kwh` excludes the fan, `deh_total_energy_kwh` includes it |
 | `hvac_upgrades` | dict | R34 HVAC upgrade flags + meters: `cop_soft_cap` / `defrost` mode, `defrost_events`, `defrost_energy_kwh`, `crankcase_energy_kwh` (all-zero meters on the default all-off path) |
 | `full_load_diagnostics` | dict | Hours/pct/longest streak at rated capacity per device + warning criteria |
 | `rh_setpoint_pct` / `rh_exceed_hours` / `rh_exceed_pct` | % / h / fraction (0-1) | RH target and control deviation: hours with indoor RH **above** the setpoint (strict `>`), and their share of the year (see RH compliance note above) |
