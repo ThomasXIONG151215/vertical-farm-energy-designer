@@ -523,6 +523,38 @@ class HVACConfig:
     #   VFD part-load: COP rises as speed falls (50%→1.33x, 30%→1.54x);
     #   coefficients from Effsys2/KTH Madani + Szreder&Miara 2020 + Fahlén 2012.
     #   "flat" = Maxa i-290 conservative (COP≈const).
+    cop_soft_cap: bool = False
+    #   R34/H1a: cooling-COP soft ceiling (carnot mode only).  true =
+    #   COP_cool = min(carnot_cop, 5.25 - 0.16*max(lift-21, 0)), lift =
+    #   T_cond - T_evap (K), replacing the flat 4.5 ceiling that pinned
+    #   ~25% of 609 cooling hours (B3 conservative at mild lift / B7
+    #   optimistic annual weighted COP).  Calibrated on the GB 21455-2019
+    #   IPLV(C) four-point weights (0.023/0.415/0.461/0.101 at
+    #   100/75/50/25%): flat 5.25 ceiling below the A25/A27 lift (21 K)
+    #   inside the 5.0-5.5 mild band, converging 0.16/K to 3.65 at the
+    #   A35/A27 lift (31 K; Carnot 3.30 still binds there).  false
+    #   (default) = flat 4.5 cap, bit-identical to every pre-R34 baseline.
+    crankcase_heat_w: float = 0.0
+    #   R34/H2: crankcase-heater power (W, typical 30-80).  Drawn only
+    #   while the compressor is OFF (winter off-cycle protection) and
+    #   counted BOTH in HVAC electricity and as a room heat gain.
+    #   0.0 (default) = no heater, bit-identical.
+    defrost: str = "off"  # R34/H3: off | timed | on_demand
+    #   Heat-pump defrost (heat_mode=heat_pump, heating mode, T_ext below
+    #   defrost_threshold_c only; 609 Shanghai heating hours = 0 so the
+    #   default path never fires).  "timed" = discrete reverse-cycle events
+    #   every defrost_interval_min of frost-condition heating for
+    #   defrost_duration_min: heat delivery stops (COP x 0), the DOE-2.1E
+    #   reverse-cycle load is drawn from the room, compressor at rated
+    #   draw; annualised multiplier = duration/interval.  "on_demand" =
+    #   DOE-2.1E continuous frost factors: T_coil = 0.82*T_ext - 8.589,
+    #   d_omega = max(1e-6, W_out - W_sat(T_coil)), t_frac =
+    #   1/(1+0.01446/d_omega), capacity x 0.875*(1-t_frac), power x
+    #   0.954*(1-t_frac), averaged reverse-cycle load
+    #   0.01*t_frac*(7.222-T_ext)*(Q_rated/1.01667).
+    defrost_threshold_c: float = 4.0  # outdoor temp below which frost applies (°C); DOE-2.1E timed threshold
+    defrost_interval_min: float = 90.0  # timed defrost cycle interval (min); typical 60-120
+    defrost_duration_min: float = 5.0  # timed defrost event duration (min); typical 3-10
     eta_II: float = 0.35  # carnot-mode 2nd-law efficiency (−); typical 0.2-0.5
     delta_T_evap: float = 8.0  # evaporator approach (K): T_evap = T_indoor − ΔT_evap; typical 5-10
     delta_T_cond: float = 15.0  # condenser approach (K): T_cond = T_ext + ΔT_cond; typical 10-20
@@ -1299,6 +1331,95 @@ class DesignProject:
         if _speed_curve is not None and _speed_curve not in ("default", "flat"):
             raise ValueError(
                 f"hvac.speed_curve must be one of " f"default|flat, got {_speed_curve}"
+            )
+        # R34/H1a: cop_soft_cap is a boolean switch -- YAML strings like
+        # "true" or the numbers 0/1 must not coerce (same pattern as
+        # deh.smer_curve, battery.allow_grid_charging).
+        _cop_soft_cap = hvac_cfg.get("cop_soft_cap")
+        if _cop_soft_cap is not None and not isinstance(_cop_soft_cap, bool):
+            raise ValueError(
+                f"hvac.cop_soft_cap must be a boolean (true/false), got "
+                f"{type(_cop_soft_cap).__name__}: {_cop_soft_cap!r}. true "
+                f"applies the lift-dependent cooling-COP ceiling "
+                f"min(carnot, 5.25 - 0.16*max(lift-21, 0)) (GB 21455-2019 "
+                f"IPLV-calibrated, carnot mode only)."
+            )
+        # R34/H2: crankcase heater must be a sane wattage (real units
+        # 30-80 W; a value beyond ~1 kW is a unit typo, not a heater).
+        _crankcase = hvac_cfg.get("crankcase_heat_w")
+        if _crankcase is not None and (
+            isinstance(_crankcase, bool) or not isinstance(_crankcase, (int, float))
+        ):
+            raise ValueError(
+                f"hvac.crankcase_heat_w must be a number (W), got "
+                f"{type(_crankcase).__name__}: {_crankcase!r}"
+            )
+        if _crankcase is not None and not (0.0 <= float(_crankcase) <= 1000.0):
+            raise ValueError(
+                f"hvac.crankcase_heat_w must be in [0, 1000] W (typical "
+                f"30-80 W crankcase heaters), got {_crankcase}"
+            )
+        # R34/H3: defrost enum + parameter guards.  An unknown mode must
+        # fail fast (no silent fallback), defrost on a resistive unit is a
+        # config contradiction (no outdoor coil to frost), and
+        # duration >= interval would trap the unit in permanent defrost.
+        _defrost = hvac_cfg.get("defrost")
+        if _defrost is not None and _defrost not in ("off", "timed", "on_demand"):
+            raise ValueError(
+                f"hvac.defrost must be one of off|timed|on_demand, got "
+                f"{_defrost!r}. 'timed' = discrete reverse-cycle events "
+                f"(defrost_interval_min/defrost_duration_min); 'on_demand' "
+                f"= DOE-2.1E continuous frost factors; 'off' (default) = "
+                f"no frost derating."
+            )
+        _heat_mode_cfg = hvac_cfg.get("heat_mode") or HVACConfig.heat_mode
+        if _defrost not in (None, "off") and _heat_mode_cfg != "heat_pump":
+            raise ValueError(
+                f"hvac.defrost='{_defrost}' models heat-pump coil frost but "
+                f"hvac.heat_mode='{_heat_mode_cfg}'; set heat_mode=heat_pump "
+                f"or defrost=off."
+            )
+        _df_thr = hvac_cfg.get("defrost_threshold_c")
+        if _df_thr is not None and (
+            isinstance(_df_thr, bool) or not isinstance(_df_thr, (int, float))
+        ):
+            raise ValueError(
+                f"hvac.defrost_threshold_c must be a number (degC), got "
+                f"{type(_df_thr).__name__}: {_df_thr!r}"
+            )
+        if _df_thr is not None and not (-30.0 <= float(_df_thr) <= 10.0):
+            raise ValueError(
+                f"hvac.defrost_threshold_c must be in [-30, 10] degC (frost "
+                f"physics; DOE-2.1E timed threshold 4), got {_df_thr}"
+            )
+        _df_int = hvac_cfg.get("defrost_interval_min")
+        _df_dur = hvac_cfg.get("defrost_duration_min")
+        for _fname, _fval in (
+            ("defrost_interval_min", _df_int),
+            ("defrost_duration_min", _df_dur),
+        ):
+            if _fval is not None and (
+                isinstance(_fval, bool) or not isinstance(_fval, (int, float))
+            ):
+                raise ValueError(
+                    f"hvac.{_fname} must be a number (min), got "
+                    f"{type(_fval).__name__}: {_fval!r}"
+                )
+        if _df_int is not None and float(_df_int) <= 0.0:
+            raise ValueError(
+                f"hvac.defrost_interval_min must be > 0 min, got {_df_int}"
+            )
+        if _df_dur is not None and float(_df_dur) <= 0.0:
+            raise ValueError(
+                f"hvac.defrost_duration_min must be > 0 min, got {_df_dur}"
+            )
+        _df_int_eff = float(_df_int) if _df_int is not None else HVACConfig.defrost_interval_min
+        _df_dur_eff = float(_df_dur) if _df_dur is not None else HVACConfig.defrost_duration_min
+        if _df_dur_eff >= _df_int_eff:
+            raise ValueError(
+                f"hvac.defrost_duration_min ({_df_dur_eff}) must be < "
+                f"hvac.defrost_interval_min ({_df_int_eff}) or the unit "
+                f"never leaves defrost."
             )
         _cop_mode = hvac_cfg.get("cop_mode")
         if _cop_mode is not None and _cop_mode not in ("carnot", "constant", "linear", "table"):

@@ -113,7 +113,14 @@ def test_summary_additive_keys(sim_shanghai_2025):
         "battery_charge_kwh",
         "battery_recon_grid_kwh",
     }
-    assert set(s) == OLD_SUMMARY_KEYS | set(RH_KPIS) | set(OPEX_KPIS) | ROUND21_B_KEYS
+    # R34: HVAC additive-upgrade self-evidence block (H1a cop_soft_cap /
+    # H2 crankcase / H3 defrost flags + meters, all-off defaults on the
+    # 609 path; identities in tests/test_27_hvac_upgrades.py).
+    ROUND34_KEYS = {"hvac_upgrades"}
+    assert (
+        set(s)
+        == OLD_SUMMARY_KEYS | set(RH_KPIS) | set(OPEX_KPIS) | ROUND21_B_KEYS | ROUND34_KEYS
+    )
 
 
 # ── 609@Shanghai2025 aligned-window KPI pins (self-test measured) ──────────

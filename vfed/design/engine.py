@@ -462,6 +462,9 @@ def _build_devices(p, P_atm: float = 101.325):
         delta_T_evap=p.hvac.delta_T_evap,
         delta_T_cond=p.hvac.delta_T_cond,
         table=p.hvac.cop_table,
+        # R34/H1a: lift-dependent COP soft ceiling (default off = flat cap,
+        # bit-identical legacy path).
+        cop_soft_cap=p.hvac.cop_soft_cap,
     )
     cop_design = cop(p.hvac.design_T_ext, p.setpoints.T_light)
 
@@ -704,6 +707,13 @@ def _build_devices(p, P_atm: float = 101.325):
         coil_condense_max_kgs=p.hvac.coil_condense_max_gps * 1e-3,
         mod_band_c=p.hvac.comp_mod_band_c,
         speed_curve=p.hvac.speed_curve,
+        # R34/H2 + H3: crankcase heater + defrost (both default-off / zero,
+        # bit-identical to the pre-R34 device path).
+        crankcase_heat_w=p.hvac.crankcase_heat_w,
+        defrost=p.hvac.defrost,
+        defrost_threshold_c=p.hvac.defrost_threshold_c,
+        defrost_interval_min=p.hvac.defrost_interval_min,
+        defrost_duration_min=p.hvac.defrost_duration_min,
     )
 
     ode = RoomODESolver(
@@ -932,8 +942,18 @@ class DesignEngine:
             for s in range(sub):
                 Q_LED, P_led_s = led.step(hours[h])
                 T_sp = p.setpoints.T_light if is_light_h else p.setpoints.T_dark
+                # R34/H3: outdoor humidity ratio, hoisted above the HVAC
+                # step (pure function of weather + P_atm, so the hoist is
+                # value-identical) for the on_demand defrost factors.
+                W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h], pressure_kpa=P_atm)
                 hv = hvac.step(
-                    T_z, RH_z, T_ext[h], dt, T_setpoint=T_sp, T_heat_setpoint=p.setpoints.T_dark
+                    T_z,
+                    RH_z,
+                    T_ext[h],
+                    dt,
+                    T_setpoint=T_sp,
+                    T_heat_setpoint=p.setpoints.T_dark,
+                    W_ext=W_ext,
                 )
                 dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH)
                 # P0-4 full-load observation (read-only on device outputs).
@@ -964,7 +984,8 @@ class DesignEngine:
                 monthly_water_kg[month_idx] += E_trans * dt
                 cycle_h += dt / 3600.0
                 _, X_d = grow.step(T_z, light_wm2, X_d, dt)
-                W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h], pressure_kpa=P_atm)
+                # R34/H3: W_ext now computed above the HVAC step (hoisted,
+                # value-identical); the ODE branch below reuses it.
                 # R28: the ONLY branch point of the wall mass network.  With
                 # RC off the legacy single-node calls below are byte-identical
                 # to pre-R28 builds (zero drift by construction).
@@ -1341,6 +1362,18 @@ class DesignEngine:
             "rated_smer_kg_per_kwh": p.deh.smer,
             "deh_comp_energy_kwh": round(deh_comp_kwh, 2),
             "deh_total_energy_kwh": round(deh_kwh, 2),  # incl. fan
+        }
+
+        # R34: HVAC additive-upgrade self-evidence (H1a soft cap / H2
+        # crankcase / H3 defrost).  Flags + defrost event/energy meters so
+        # the switch-on footprint is visible next to the energy breakdown;
+        # all-off defaults leave the meters at exactly 0.
+        summary["hvac_upgrades"] = {
+            "cop_soft_cap": bool(p.hvac.cop_soft_cap),
+            "defrost": p.hvac.defrost,
+            "defrost_events": int(hvac.defrost_events),
+            "defrost_energy_kwh": round(hvac.energy_defrost_j / 3.6e6, 3),
+            "crankcase_energy_kwh": round(hvac.energy_crankcase_j / 3.6e6, 3),
         }
 
         # P0-4: rated-capacity (full-load) diagnostics — how often each

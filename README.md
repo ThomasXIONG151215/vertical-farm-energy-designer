@@ -229,6 +229,28 @@ SMER_eff = smer × clamp(0.25 + 0.75 × (W_z / W_nom)^0.7, 0.25, 1.0)
 - The `deh_smer` summary block reports `smer_curve` plus effective/delivered SMER on the corrected basis
 - Default `false` = constant rated SMER, bit-identical to every pre-existing baseline
 
+### HVAC COP soft cap, crankcase heater, defrost (default off)
+
+Three additive HVAC switches, all default-off (bit-identical baselines; the `hvac_upgrades` summary block reports the flags plus defrost event/energy meters either way):
+
+**`hvac.cop_soft_cap: true`** — replaces the flat 4.5 cooling-COP ceiling (which pinned ~25% of a mild-climate room's cooling hours at the cap) with a lift-dependent soft ceiling (Carnot mode only):
+
+```
+COP_cool = min(Carnot COP, 5.25 - 0.16 x max(lift - 21, 0))    [lift = T_cond - T_evap, K]
+```
+
+- Flat 5.25 ceiling below the A25/A27 knee lift (21 K with the default coil approaches), inside the 5.0-5.5 mild-weather band; the delivered COP at A25/A27 is the un-pinned Carnot 4.87 (real split-system fleet reaches 5-6 in mild weather)
+- Slope 0.16/K converges the ceiling to 3.65 at the A35/A27 lift (31 K), where the Carnot term (3.30) still binds, so the rating EER holds
+- Calibration anchor: GB 21455-2019 IPLV(C) four-point weights 0.023/0.415/0.461/0.101 at 100/75/50/25% load — the GB-weighted IPLV of the curve is 4.18 (with the VFD part-load boost)
+
+**`hvac.crankcase_heat_w`** (default 0, typical 30-80 W) — compressor-off crankcase-heater parasitic: a constant draw counted in HVAC electricity AND as a room heat gain whenever the compressor is off (winter off-cycle protection).
+
+**`hvac.defrost: timed | on_demand`** (default `off`) — heat-pump frost derating, active only in heating mode below `defrost_threshold_c` (default 4 °C, DOE-2.1E timed threshold):
+
+- `timed` — discrete reverse-cycle events: every `defrost_interval_min` (90) of frost-condition heating, a `defrost_duration_min` (5) event stops the heat delivery, draws the DOE-2.1E reverse-cycle load `0.01 x t_frac x (7.222 - T_ext) x (Q_heat_rated/1.01667)` from the room and burns the rated compressor draw (annualised multiplier = duration/interval; a duration shorter than the timestep is blended by time fraction so the event energy stays exact)
+- `on_demand` — DOE-2.1E continuous frost factors: `T_coil = 0.82 x T_ext - 8.589`, `d_omega = max(1e-6, W_out - W_sat(T_coil))`, `t_frac = 1/(1 + 0.01446/d_omega)`, heating capacity x `0.875(1 - t_frac)`, power x `0.954(1 - t_frac)` plus the averaged reverse-cycle load; dry air (no frost potential) leaves the step untouched
+- Constant -7 °C / 80% RH probe: heating electricity +13.7% (timed) / +11.4% (on_demand); a Shanghai room has zero heating hours, so 609 baselines are unaffected
+
 ## Architecture
 
 ```
@@ -505,6 +527,7 @@ summary.csv (single row — scalar KPIs):
 | `moisture_clamp_stats` / `temperature_clamp_stats` | dict | Humidity-integrator clip events (saturation cap / zero floor) and temperature clip events |
 | `dehumidifier_performance` | dict | Nominal vs actual (inventory-capped) moisture removal; `removal_limited_*` |
 | `deh_smer` | dict | Effective / delivered / rated SMER (kg/kWh, compressor input, fan excluded); `deh_comp_energy_kwh` excludes the fan, `deh_total_energy_kwh` includes it |
+| `hvac_upgrades` | dict | R34 HVAC upgrade flags + meters: `cop_soft_cap` / `defrost` mode, `defrost_events`, `defrost_energy_kwh`, `crankcase_energy_kwh` (all-zero meters on the default all-off path) |
 | `full_load_diagnostics` | dict | Hours/pct/longest streak at rated capacity per device + warning criteria |
 | `rh_setpoint_pct` / `rh_exceed_hours` / `rh_exceed_pct` | % / h / fraction (0-1) | RH target and control deviation: hours with indoor RH **above** the setpoint (strict `>`), and their share of the year (see RH compliance note above) |
 | `rh_p95_pct` / `rh_max_pct` / `rh_disease_risk_hours` | % / % / h | Indoor-RH 95th percentile and maximum; hours **at or above** `setpoints.rh_disease_risk_threshold` (grey-mould risk band, default 85 % RH, yaml-configurable) |

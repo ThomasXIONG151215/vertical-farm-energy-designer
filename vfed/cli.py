@@ -254,6 +254,15 @@ _YAML_SECTION_COMMENTS = {
         "#   eta_II / delta_T_evap / delta_T_cond - Carnot model parameters\n"
         "#   shr_BF      - coil bypass factor [0,1); 0.10-0.20 for a 4-row DX coil;\n"
         "#                 higher = less latent removed by the coil\n"
+        "#   cop_soft_cap - true = lift-dependent COP ceiling\n"
+        "#                 min(carnot, 5.25-0.16*max(lift-21,0)) replaces the flat\n"
+        "#                 4.5 cap (GB 21455-2019 IPLV-calibrated; carnot mode)\n"
+        "#   defrost     - off (default) | timed (reverse-cycle events every\n"
+        "#                 defrost_interval_min for defrost_duration_min) |\n"
+        "#                 on_demand (DOE-2.1E continuous frost factors);\n"
+        "#                 heat_pump heating below defrost_threshold_c only\n"
+        "#   crankcase_heat_w - compressor-off heater (W, typical 30-80);\n"
+        "#                 counted in HVAC electricity and as room heat gain\n"
         "#   datasheet aliases: cooling_capacity_kw (-> Q_cool_nom),\n"
         "#                      cop (-> cop_value), power_w (-> P_rated_w)\n"
         "#   Placeholder canonical keys at their class defaults (e.g.\n"
@@ -934,6 +943,24 @@ def _cmd_evaluate(args):
             f"(rated {sm.get('rated_smer_kg_per_kwh', 0.0):.2f}, "
             f"mode {sm.get('control_mode', 'vfd')})"
         )
+    # R34: HVAC additive upgrades self-evidence -- one line, only when an
+    # upgrade is actually active (all-off defaults print nothing, so the
+    # default console output is unchanged).
+    hu = summary.get("hvac_upgrades")
+    if hu:
+        _hu_parts = []
+        if hu.get("cop_soft_cap"):
+            _hu_parts.append("COP soft cap on")
+        if hu.get("defrost") not in (None, "off"):
+            _hu_parts.append(
+                f"defrost {hu['defrost']} "
+                f"({int(hu.get('defrost_events', 0))} events, "
+                f"{hu.get('defrost_energy_kwh', 0.0):.2f} kWh)"
+            )
+        if (hu.get("crankcase_energy_kwh") or 0.0) > 0.0:
+            _hu_parts.append(f"crankcase {hu['crankcase_energy_kwh']:.2f} kWh")
+        if _hu_parts:
+            print("  HVAC upgrades    = " + "; ".join(_hu_parts))
     # P0-4: full-load diagnostics — a device pinned at rated output hour
     # after hour usually means a setpoint the room cannot physically reach
     # (same reporting style as the capital = 0 warning below).

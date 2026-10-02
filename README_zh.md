@@ -223,6 +223,28 @@ SMER_eff = smer × clamp(0.25 + 0.75 × (W_z / W_nom)^0.7, 0.25, 1.0)
 - `deh_smer` 汇总块报告 `smer_curve` 开关以及修正口径下的有效/送达 SMER
 - 默认 `false` = 恒定额定 SMER，与既有全部基线逐位一致
 
+### HVAC COP 软顶、曲轴箱加热、除霜（默认全关）
+
+三个 additive HVAC 开关，默认全关（基线逐位一致；`hvac_upgrades` 汇总块无论开关状态都报告各标志与除霜事件/电量计量）：
+
+**`hvac.cop_soft_cap: true`** — 用随温升（lift）变化的软顶替换 4.5 平顶（平顶曾把温和气候房间约 25% 的制冷小时钉在顶上），仅 carnot 模式生效：
+
+```
+COP_cool = min(卡诺 COP, 5.25 - 0.16 × max(lift - 21, 0))    [lift = T_cond - T_evap, K]
+```
+
+- A25/A27 拐点温升（默认盘管逼近下 21 K）以下平顶 5.25，落在 5.0-5.5 温和气候带内；A25/A27 点的实际 COP 为解除钉顶后的卡诺值 4.87（真实多联机温和天气可达 5-6）
+- 拐点以上斜率 0.16/K，在 A35/A27 温升（31 K）处收敛到 3.65；该点卡诺项（3.30）仍然主导，额定 EER 保持不变
+- 标定锚：GB 21455-2019 IPLV(C) 四点权重 0.023/0.415/0.461/0.101（100/75/50/25% 负荷）——曲线的 GB 权重 IPLV 为 4.18（含 VFD 部分负荷加成）
+
+**`hvac.crankcase_heat_w`**（默认 0，典型 30-80 W）— 压缩机停机期间的曲轴箱加热寄生功率：压缩机停机的每个步长按恒功率计入 HVAC 电耗并作为室内得热（冬季停机保护）。
+
+**`hvac.defrost: timed | on_demand`**（默认 `off`）— 热泵制热除霜降额，仅在制热模式且 `defrost_threshold_c`（默认 4 °C，DOE-2.1E timed 阈值）以下生效：
+
+- `timed` — 离散逆循环除霜事件：每 `defrost_interval_min`（90）分钟结霜工况制热运行触发一次 `defrost_duration_min`（5）分钟事件，期间停止供热、按 DOE-2.1E 逆循环负荷公式 `0.01 × t_frac × (7.222 - T_ext) × (Q_heat_rated/1.01667)` 从室内吸热、压缩机按额定功率耗电（年化乘子 = duration/interval；事件时长小于步长时按时间比例混合，电量保持精确）
+- `on_demand` — DOE-2.1E 连续结霜修正因子：`T_coil = 0.82 × T_ext - 8.589`，`d_omega = max(1e-6, W_out - W_sat(T_coil))`，`t_frac = 1/(1 + 0.01446/d_omega)`，制热量 × `0.875(1 - t_frac)`、功率 × `0.954(1 - t_frac)` 并叠加时间平均逆循环负荷；干空气（无结霜势）时该步长不受影响
+- 恒定 −7 °C / 80% RH 探针：制热电量 +13.7%（timed）/ +11.4%（on_demand）；上海房间制热小时数为 0，609 基线不受影响
+
 ## 架构
 
 ```
@@ -468,6 +490,7 @@ summary.csv（单行 — 标量 KPI）：
 | `moisture_clamp_stats` / `temperature_clamp_stats` | dict | 湿度积分器削顶事件（饱和上限 / 零下限）与温度削顶事件 |
 | `dehumidifier_performance` | dict | 名义 vs 实际（受室内湿存水限制）除湿量；`removal_limited_*` |
 | `deh_smer` | dict | 有效/送达/额定 SMER（kg/kWh，压缩机输入口径，不含风机）；`deh_comp_energy_kwh` 不含风机，`deh_total_energy_kwh` 含风机 |
+| `hvac_upgrades` | dict | R34 HVAC 升级开关与计量：`cop_soft_cap` / `defrost` 模式、`defrost_events`、`defrost_energy_kwh`、`crankcase_energy_kwh`（默认全关路径计量恒为 0） |
 | `full_load_diagnostics` | dict | 各设备满载运行的小时数/占比/最长连续时长 + 告警阈值 |
 | `rh_setpoint_pct` / `rh_exceed_hours` / `rh_exceed_pct` | % / h / 分数（0-1） | RH 目标与控制偏差：室内 RH **高于**设定值（严格 `>`）的小时数及其占全年比例（见上方 RH 合规说明） |
 | `rh_p95_pct` / `rh_max_pct` / `rh_disease_risk_hours` | % / % / h | 室内 RH 第 95 百分位与最大值；**达到或超过** `setpoints.rh_disease_risk_threshold` 的小时数（灰霉病风险带，默认 85 % RH，yaml 可配置） |
