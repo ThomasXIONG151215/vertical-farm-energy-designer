@@ -129,11 +129,11 @@ def test_summary_additive_keys(sim_shanghai_2025):
 def test_shanghai_2025_rh_kpi_pins(sim_shanghai_2025):
     s = sim_shanghai_2025.summary
     assert s["rh_setpoint_pct"] == 65.0
-    assert s["rh_exceed_hours"] == 7095
-    assert s["rh_exceed_pct"] == 0.8099
-    assert s["rh_p95_pct"] == 69.1
-    assert s["rh_max_pct"] == 69.49
-    assert s["rh_disease_risk_hours"] == 0  # max 69.49 % < 85 % default band
+    assert s["rh_exceed_hours"] == 5368
+    assert s["rh_exceed_pct"] == 0.6128
+    assert s["rh_p95_pct"] == 67.74
+    assert s["rh_max_pct"] == 68.16
+    assert s["rh_disease_risk_hours"] == 0  # max 68.16 % < 85 % default band
 
 
 # ── same-array self-consistency: recompute from exported timeseries.csv ────
@@ -200,11 +200,11 @@ def test_threshold_validation_fails_fast(bad):
 
 def test_physics_zero_drift_pins(sim_shanghai_2025):
     s = sim_shanghai_2025.summary
-    assert s["annual_energy_kwh"] == pytest.approx(62444.50, abs=5e-3)
-    assert s["specific_energy_kwh_per_kg"] == pytest.approx(31.0499, abs=5e-4)
-    assert s["annual_harvest_kg"] == pytest.approx(100.55, abs=5e-3)
-    assert s["annual_grid_cost_net"] == pytest.approx(6244.45, abs=0.01)
-    assert s["lcoe"] == pytest.approx(0.6608, abs=5e-5)
+    assert s["annual_energy_kwh"] == pytest.approx(61582.59, abs=5e-3)
+    assert s["specific_energy_kwh_per_kg"] == pytest.approx(30.6261, abs=5e-4)
+    assert s["annual_harvest_kg"] == pytest.approx(100.54, abs=5e-3)
+    assert s["annual_grid_cost_net"] == pytest.approx(6158.26, abs=0.01)
+    assert s["lcoe"] == pytest.approx(0.6687, abs=5e-5)
 
 
 # ── monthly rh_exceed_hours closes against the annual scalar ───────────────

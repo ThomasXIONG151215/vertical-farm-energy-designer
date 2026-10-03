@@ -8,6 +8,30 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Changed
 
+- **609 preset baseline migration (R34/W3-D, counterpart alignment).**
+  `preset_609` now explicitly pins `deh.smer: 3.5` and `hvac.eta_II: 0.33`
+  (wave 1-A sensitivity scan, user-gym/benchmarks/route3_sensitivity_scan.md,
+  migration candidate D1):
+  - `deh.smer` 2.0 → 3.5 — rated SMER of a GB/T 19411 whole-facility
+    dehumidifier class (clears the B8 −47% conservatism vs the ENERGY STAR
+    IEF band).
+  - `hvac.eta_II` 0.35 → 0.33 — annual demand-weighted COP 3.99 → 3.85,
+    mid-band of the GB 21455 SCOP 3.0–4.0 comparison window (clears the B7
+    optimism flag). `delta_T_cond` stays 15 K.
+  - This is a **pure device re-calibration**, not a model-structure change:
+    `smer_curve` / `smer_map` / `cop_soft_cap` / `defrost` / crankcase all
+    remain default off. The reported **delivered SMER caliber switch
+    (0.77 → 1.03 kg/kWh)** is the direct arithmetic consequence of
+    re-rating smer 2.0 → 3.5 on the same delivered moisture and compressor
+    energy — no dispatch or physics-path change is involved.
+  - New authoritative 609 @ Shanghai 2025 baseline: annual 61582.59 kWh
+    (−1.38%), specific 30.6261 kWh/kg, harvest 100.54 kg, water 10.76 m³,
+    grid cost 6158.26, LCOE 0.6687, O&M 35021.51, GHI 1569.54 kWh/m²;
+    HVAC 10259.65 kWh, DEH total 9274.94 kWh (compressor 8924.59);
+    RH exceed 61.3% (5368 h), RH max 68.16%. Shanghai KPI pins
+    (tests 09/10/11/15) migrated and the shared 48 h zero-drift sha256
+    oracle (tests 23–28) re-captured.
+
 - **Currency conversion engine (round 26).** VFED now distinguishes
   *explicit* from *default* prices everywhere:
   - A price written in the project YAML is a **literal in the project

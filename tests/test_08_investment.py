@@ -229,16 +229,17 @@ def test_single_point_row_has_investment_columns(project_609):
 
 
 def test_single_point_payback_user13_econ_scenario(project_609):
-    """user13 audit repro (round 21 F1): PV 100 m2 (23.2558 kWp) priced
+    """user13 audit sizing (round 21 F1): PV 100 m2 (23.2558 kWp) priced
     per_kwp 3500 + battery 40 kWh priced per_kwh 500 -- the same sizing and
-    rates as ``user-gym/user13/u13_econ.yaml`` (annual load 62,444.5,
-    baseline grid bill 6,244.45).
+    rates as ``user-gym/user13/u13_econ.yaml``.  R34/W3-D: numbers re-pinned
+    on the re-calibrated 609 preset (deh.smer 3.5 / hvac.eta_II 0.33; annual
+    load 61,582.59, baseline grid bill 6,158.26).
 
     The audit's FAIL item: the exported ``payback_period`` (6.4914 yr) used
     the legacy hidden unit prices C_pv=500/kWp + c_energy=220/kWh
     (capital 20,427.907) and matched no documented formula.  Under the F1
     definition it becomes delta_capital / annual_savings = 101,395.349 /
-    3,146.920 = 32.2205 yr -- recomputable from the row's own columns."""
+    3,139.939 = 32.2921 yr -- recomputable from the row's own columns."""
     from vfed.design.presets import preset_609
     from vfed.design.sweep import sweep_design
 
@@ -255,15 +256,15 @@ def test_single_point_payback_user13_econ_scenario(project_609):
 
     # user13's delta_capital: 3500 x (100/4.3) + 500 x 40 = 101,395.3488...
     assert best["delta_capital"] == pytest.approx(3500.0 * 100.0 / 4.3 + 500.0 * 40.0, rel=1e-9)
-    # same savings regime as the audit (3,146.92 currency/yr)
-    assert best["annual_savings"] == pytest.approx(3146.92, abs=0.02)
+    # same savings regime as the audit (3,139.94 currency/yr post W3-D)
+    assert best["annual_savings"] == pytest.approx(3139.94, abs=0.02)
     # F1 identity: payback x annual_savings == delta capital
     assert best["payback_period"] == pytest.approx(
         best["delta_capital"] / best["annual_savings"], rel=1e-12
     )
-    # the audited value under the corrected definition (user13 hand-check:
-    # 101,395.3488 / 3,146.9201 = 32.2205), NOT the legacy 6.4914
-    assert best["payback_period"] == pytest.approx(32.2205, abs=5e-3)
+    # the corrected definition on the re-calibrated preset (hand-check:
+    # 101,395.3488 / 3,139.9393 = 32.2921), NOT the legacy 6.4914
+    assert best["payback_period"] == pytest.approx(32.2921, abs=5e-3)
     assert not math.isclose(best["payback_period"], 6.4914, abs_tol=0.5)
 
 

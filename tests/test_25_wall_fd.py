@@ -30,8 +30,9 @@ from vfed.design.project import DesignProject
 from vfed.physics.envelope import Envelope, distribute_nodes_fd
 from vfed.physics.ode import RoomODESolver
 
-# Zero-drift oracle: identical to test_23/test_24 (captured at HEAD=332b465).
-ZERO_DRIFT_SHA256 = "18735078ad6055df5cc1df28fdd0fc218837c090cd4e69d435ed114b0015c5b8"
+# Zero-drift oracle: identical to test_23/test_24 (re-captured at HEAD=01b7000
+# + R34/W3-D preset re-calibration deh.smer 3.5 / hvac.eta_II 0.33).
+ZERO_DRIFT_SHA256 = "1764f7e6ee6e185d41e8b438a2c3c81320f38e9d02468446dc5f249a25870192"
 
 # Single light layer, BESTEST-like: d=0.1 m, k=0.5, rho=500, c=1000, A=63.6.
 LAYER_1 = (0.1, 0.5, 500.0, 1000.0)

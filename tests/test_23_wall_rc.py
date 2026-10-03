@@ -4,7 +4,7 @@ Contract under test:
   * ``envelope.wall_rc_nodes: 0`` (default) is behaviourally IDENTICAL to the
     pre-R28 single-node envelope -- the engine's default path stays
     bit-for-bit (609 preset 48 h synthetic run timeseries sha256 oracle,
-    captured at HEAD=332b465 before any change).
+    re-captured at HEAD=01b7000 + R34/W3-D preset re-calibration).
   * ``wall_rc_nodes: 2`` activates the T_z + T_m two-state network with
     explicit conductances g_im (mass->air) / g_em (mass->outdoor) and
     capacity C_mass (Wh/K).  ode.py is untouched: T_m is stepped by the
@@ -28,9 +28,11 @@ from vfed.physics.envelope import Envelope
 from vfed.physics.ode import RoomODESolver
 
 # Zero-drift oracle: preset_609 on the deterministic 48 h synthetic weather
-# below, timeseries JSON sha256 -- captured at HEAD=332b465 BEFORE the R28
-# diff (R27 T2 protocol).  Any default-path float perturbation breaks it.
-ZERO_DRIFT_SHA256 = "18735078ad6055df5cc1df28fdd0fc218837c090cd4e69d435ed114b0015c5b8"
+# below, timeseries JSON sha256 -- re-captured at HEAD=01b7000 + R34/W3-D
+# preset re-calibration (deh.smer 2.0->3.5, hvac.eta_II 0.35->0.33; pure
+# parameter change, every switch still default off).  Any default-path
+# float perturbation breaks it.
+ZERO_DRIFT_SHA256 = "1764f7e6ee6e185d41e8b438a2c3c81320f38e9d02468446dc5f249a25870192"
 
 
 def synthetic_weather(n=48):

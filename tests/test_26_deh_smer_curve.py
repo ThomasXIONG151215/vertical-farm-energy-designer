@@ -30,9 +30,10 @@ from vfed.devices.dehumidifier import DEHDevice, _W_NOM_DOE
 from vfed.physics.psychrometrics import temp_rh_to_ah
 
 # Zero-drift oracle: preset_609 on the deterministic 48 h synthetic weather
-# below — the SAME sha256 constant the test_23/24/25 suites pin (captured at
-# HEAD=332b465).  Any default-path float perturbation breaks it.
-ZERO_DRIFT_SHA256 = "18735078ad6055df5cc1df28fdd0fc218837c090cd4e69d435ed114b0015c5b8"
+# below — the SAME sha256 constant the test_23/24/25 suites pin (re-captured
+# at HEAD=01b7000 + R34/W3-D preset re-calibration deh.smer 3.5 /
+# hvac.eta_II 0.33).  Any default-path float perturbation breaks it.
+ZERO_DRIFT_SHA256 = "1764f7e6ee6e185d41e8b438a2c3c81320f38e9d02468446dc5f249a25870192"
 
 W_1540 = temp_rh_to_ah(15.0, 40.0)  # B10 dry-cold probe condition
 

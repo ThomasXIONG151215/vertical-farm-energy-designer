@@ -195,14 +195,16 @@ def test_engine_carries_weather_attrs(sim_city_baseline):
 
 def test_engine_baseline_six_values_unchanged(sim_city_baseline):
     """Physics zero-drift pin: the P1-3b aligned-window authoritative
-    baseline must hold bitwise on the rounded summary values."""
+    baseline must hold bitwise on the rounded summary values.  R34/W3-D:
+    re-pinned after the 609 preset device re-calibration (deh.smer 2.0->3.5,
+    hvac.eta_II 0.35->0.33; route3_sensitivity_scan.md candidate D1)."""
     s = sim_city_baseline.summary
-    assert s["annual_energy_kwh"] == 62444.50
-    assert s["specific_energy_kwh_per_kg"] == 31.0499
-    assert s["annual_harvest_kg"] == 100.55
-    assert s["annual_water_m3"] == 10.37
-    assert s["annual_grid_cost_net"] == 6244.45
-    assert s["lcoe"] == 0.6608
+    assert s["annual_energy_kwh"] == 61582.59
+    assert s["specific_energy_kwh_per_kg"] == 30.6261
+    assert s["annual_harvest_kg"] == 100.54
+    assert s["annual_water_m3"] == 10.76
+    assert s["annual_grid_cost_net"] == 6158.26
+    assert s["lcoe"] == 0.6687
 
 
 def test_engine_caller_weather_without_attrs_degrades_to_empty():

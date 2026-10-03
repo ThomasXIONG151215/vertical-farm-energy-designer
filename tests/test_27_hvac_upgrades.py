@@ -47,8 +47,9 @@ from vfed.physics.psychrometrics import saturation_humidity, temp_rh_to_ah
 
 # Zero-drift oracle: preset_609 on the deterministic 48 h synthetic weather
 # below -- the SAME sha256 constant the test_23/24/25/26 suites pin
-# (captured at HEAD=332b465).  Any default-path float perturbation breaks it.
-ZERO_DRIFT_SHA256 = "18735078ad6055df5cc1df28fdd0fc218837c090cd4e69d435ed114b0015c5b8"
+# (re-captured at HEAD=01b7000 + R34/W3-D preset re-calibration deh.smer 3.5
+# / hvac.eta_II 0.33).  Any default-path float perturbation breaks it.
+ZERO_DRIFT_SHA256 = "1764f7e6ee6e185d41e8b438a2c3c81320f38e9d02468446dc5f249a25870192"
 
 # GB 21455-2019 IPLV(C) four-point weights (100/75/50/25% load).
 IPLV_WEIGHTS = (0.023, 0.415, 0.461, 0.101)

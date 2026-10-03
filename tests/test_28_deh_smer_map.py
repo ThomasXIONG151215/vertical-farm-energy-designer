@@ -47,9 +47,10 @@ from vfed.devices.dehumidifier import (
 from vfed.physics.psychrometrics import temp_rh_to_ah
 
 # Zero-drift oracle: the SAME constant the test_23/24/25/26/27 suites pin
-# (preset_609 48 h synthetic weather, captured at HEAD=332b465).  Any
+# (preset_609 48 h synthetic weather, re-captured at HEAD=01b7000 +
+# R34/W3-D preset re-calibration deh.smer 3.5 / hvac.eta_II 0.33).  Any
 # default-path float perturbation breaks it.
-ZERO_DRIFT_SHA256 = "18735078ad6055df5cc1df28fdd0fc218837c090cd4e69d435ed114b0015c5b8"
+ZERO_DRIFT_SHA256 = "1764f7e6ee6e185d41e8b438a2c3c81320f38e9d02468446dc5f249a25870192"
 
 W_1540 = temp_rh_to_ah(15.0, 40.0)  # B10 dry-cold probe condition
 W_2168 = temp_rh_to_ah(21.0, 68.0)  # layer-A measured-band probe condition

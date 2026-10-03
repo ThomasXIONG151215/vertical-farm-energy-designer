@@ -118,6 +118,23 @@ def preset_609() -> DesignProject:
             # P0-4: explicit dark-period setpoint (see docstring) — the 18 C class
             # default is unreachable against this room's night balance.
             "setpoints": {"T_dark": 21.0},
+            # R34/W3-D (609 counterpart alignment, sweep report route3): pin
+            # the two device-re calibration knobs recommended by the wave 1-A
+            # sensitivity scan (user-gym/benchmarks/route3_sensitivity_scan.md,
+            # migration candidate D1).
+            #   deh.smer 3.5  — rated SMER of a GB/T 19411 whole-facility
+            #                   dehumidifier class (delivered SMER ~1.03 at the
+            #                   609 load; the class default 2.0 carried the B8
+            #                   -47% conservatism vs the ENERGY STAR IEF band).
+            #   hvac.eta_II 0.33 — Carnot 2nd-law efficiency: moves the annual
+            #                   demand-weighted COP 3.99 -> 3.85, mid-band of
+            #                   the GB 21455 SCOP 3.0-4.0 comparison window,
+            #                   clearing the B7 optimism flag.
+            # Pure parameter re-calibration: every R33/R34 switch (smer_curve,
+            # smer_map, cop_soft_cap, defrost, crankcase) stays at its default
+            # OFF — no model-structure change.
+            "hvac": {"eta_II": 0.33},
+            "deh": {"smer": 3.5},
         }
     )
 
