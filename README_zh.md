@@ -261,6 +261,26 @@ COP_cool = min(卡诺 COP, 5.25 - 0.16 × max(lift - 21, 0))    [lift = T_cond -
 - `on_demand` — DOE-2.1E 连续结霜修正因子：`T_coil = 0.82 × T_ext - 8.589`，`d_omega = max(1e-6, W_out - W_sat(T_coil))`，`t_frac = 1/(1 + 0.01446/d_omega)`，制热量 × `0.875(1 - t_frac)`、功率 × `0.954(1 - t_frac)` 并叠加时间平均逆循环负荷；干空气（无结霜势）时该步长不受影响
 - 恒定 −7 °C / 80% RH 探针：制热电量 +13.7%（timed）/ +11.4%（on_demand）；上海房间制热小时数为 0，609 基线不受影响
 
+### 机械新风 + ERV/HRV 热回收（`envelope.erv_*`，默认关）
+
+密闭植物工厂本就有少量渗风（`envelope.ach`，不受控、无回收）。当设计明确要求机械新风——CO₂ 补给、气味/正压控制——若不回收，室外空气会以全强度落在房间热湿平衡上。四个 additive 围护字段建模该通道：
+
+```yaml
+envelope:
+  erv_enabled: true        # 开关（默认 false = 无该通道，逐位一致）
+  erv_flow_m3h: 500        # 机械新风量（m3/h；启用时必须 > 0）
+  erv_sensible_eff: 0.7    # 显热效率 [0, 0.95]；认证芯体 0.5-0.85
+  erv_latent_eff: 0.65     # 潜热效率；0 = 纯显热 HRV，>0 = 全热 ERV
+```
+
+- 固定效率模型（ASHRAE Handbook HVAC Systems and Equipment 第 26 章 Air-to-Air Energy Recovery Equipment）：质量流 `m_v = flow × rho/3600`，进入平衡的净新风负荷为未回收份额——显热 `(1 - eps_s) × m_v × cp × (T_ext - T_z)`，潜热 `(1 - eps_l) × m_v × (W_ext - W_z) × h_fg` 及对应质流；回收份额在芯体内部交换，不进入房间
+- `eps_s > 0` 冬季回收热量、夏季对称回收"冷量"（双向都缩小负荷）；`erv_latent_eff: 0` 为板式 HRV（全湿差通过），> 0（全热芯体典型 0.45-0.75）同时衰减含湿量差
+- 与 `ach` 独立：渗风通道照常运行，两股质量流叠加。选型挂钩：`hvac.auto_size` 将未回收新风折算为等效 ach，`deh.auto_size` 将其未回收水分计入设计湿负荷
+- `erv` summary 块（仅启用时出现）报告风量、两个效率与回收能量 `annual_recovered_sensible_kwh` / `annual_recovered_latent_kwh`（绝对 kWh，逐子步计量）；`vfed evaluate` 激活时打印一行自证
+- 加载即 fail-fast：启用而 `flow <= 0`、`flow > 0` 而开关未开（防静默无效）、效率越界 [0, 0.95]、非布尔/非数值
+- ERV 机组自身的风机/寄生功率尚未计量（预留接口）；启用该通道仅体现回收的热力学效果
+- 609 preset 不启用 ERV（奉贤为 `ach 0.001` 密闭房）；所有 609 基线在字段缺省时逐位一致
+
 ## 架构
 
 ```

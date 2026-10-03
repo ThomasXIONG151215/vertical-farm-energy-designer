@@ -240,10 +240,16 @@ _YAML_SECTION_COMMENTS = {
         "#                         # mass->outdoor conductances (W/K)\n"
         "#   wall_rc_nodes: 3   # 2R3C: adds surface node (C_surface Wh/K,\n"
         "#                      # g_sa surface->air, g_sm surface->mass, W/K)\n"
-        "#   solar_mass_fraction  # [0,1] window solar fed into the RC network\n"
-        "#                        # (1.0 = LBNL rule: solar lands on surfaces)\n"
-        "# ------------------------------------------------------------------\n"
-    ),
+         "#   solar_mass_fraction  # [0,1] window solar fed into the RC network\n"
+         "#                        # (1.0 = LBNL rule: solar lands on surfaces)\n"
+         "#   ERV/HRV mechanical fresh air (default off):\n"
+         "#   erv_enabled: true + erv_flow_m3h (m3/h) + erv_sensible_eff\n"
+         "#                 # [0,0.95] (default 0.7) + erv_latent_eff\n"
+         "#                 # (0 = sensible-only HRV; >0 = enthalpy ERV);\n"
+         "#                 # un-recovered share of the fresh air enters the\n"
+         "#                 # heat/moisture balance on top of ach leakage\n"
+         "# ------------------------------------------------------------------\n"
+     ),
     "hvac": (
         "# ------------------------------------------------------------------\n"
         "# hvac: air conditioning (cooling + dehumidification by coil)\n"
@@ -973,6 +979,20 @@ def _cmd_evaluate(args):
             _hu_parts.append(f"crankcase {hu['crankcase_energy_kwh']:.2f} kWh")
         if _hu_parts:
             print("  HVAC upgrades    = " + "; ".join(_hu_parts))
+    # R34/W3-E: ERV heat-recovery self-evidence -- one line, only when the
+    # mechanical fresh air is actually enabled (default off prints nothing,
+    # so the default console output is unchanged).
+    _erv = summary.get("erv")
+    if _erv:
+        _erv_kind = "ERV" if _erv.get("latent_eff", 0.0) > 0.0 else "HRV"
+        print(
+            f"  {_erv_kind} recovery    = "
+            f"{_erv.get('annual_recovered_sensible_kwh', 0.0):.1f} kWh sens + "
+            f"{_erv.get('annual_recovered_latent_kwh', 0.0):.1f} kWh latent "
+            f"(flow {_erv.get('flow_m3h', 0.0):.0f} m3/h, eps_s "
+            f"{_erv.get('sensible_eff', 0.0):.2f}, eps_l "
+            f"{_erv.get('latent_eff', 0.0):.2f})"
+        )
     # P0-4: full-load diagnostics — a device pinned at rated output hour
     # after hour usually means a setpoint the room cannot physically reach
     # (same reporting style as the capital = 0 warning below).

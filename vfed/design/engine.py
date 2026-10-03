@@ -84,6 +84,7 @@ def _limit_removal_by_inventory(
     E_trans_kgs=0.0,
     M_inf_kgs=0.0,
     M_perm_kgs=0.0,
+    M_erv_kgs=0.0,
     W_setpoint_kgs=None,
 ):
     """Cap nominal dehumidifier/HVAC moisture removal (kg/s) to what the room
@@ -100,9 +101,10 @@ def _limit_removal_by_inventory(
     arriving DURING the sub-step (P4-1d): transpiration, net infiltration and
     envelope permeance.  They are additional removal capacity, but only the
     NET source is used so a negative (drying) infiltration never inflates the
-    cap — this preserves the W_z >= 0 guarantee (when net >= 0 and the cap
+    cap -- this preserves the W_z >= 0 guarantee (when net >= 0 and the cap
     binds, W_z_new lands exactly at 0).  Defaults keep the legacy 5-arg call
-    bitwise identical.
+    bitwise identical.  ``M_erv_kgs`` (R34/W3-E) is the net ERV fresh-air
+    moisture, joining the same source sum (default 0 = bitwise identical).
 
     ``W_setpoint_kgs`` (optional): humidity-set-point clamp against
     overshoot.  A real VFD machine modulates down as RH approaches the set
@@ -122,7 +124,7 @@ def _limit_removal_by_inventory(
     removal_nom = M_deh_kgs + M_hvac_kgs
     if removal_nom <= 0.0 or dt <= 0.0:
         return M_deh_kgs, M_hvac_kgs, 1.0
-    source = max(0.0, E_trans_kgs + M_inf_kgs + M_perm_kgs)  # kg/s
+    source = max(0.0, E_trans_kgs + M_inf_kgs + M_perm_kgs + M_erv_kgs)  # kg/s
     if W_setpoint_kgs is not None and W_z <= W_setpoint_kgs:
         inventory = 0.0  # at/below set point: devices must not actively dry
     else:
@@ -278,6 +280,11 @@ def _wall_rc_stability_guard(p) -> None:
     c_z_j = e.C_z * 3600.0  # Wh/K -> J/K
     c_m_j = e.C_mass * 3600.0  # Wh/K -> J/K
     m_dot = e.ach * e.V_room * e.rho_air / 3600.0  # kg/s
+    # R34/W3-E: an enabled ERV adds its UNRECOVERED (1 - eps_s) share of
+    # the ventilation mass flow to the air-node conductance (the recovered
+    # share is exchanged inside the core, not with the room air).
+    if e.erv_enabled:
+        m_dot += (1.0 - e.erv_sensible_eff) * e.erv_flow_m3h * e.rho_air / 3600.0
     g_z_ext = e.U_wall_A + m_dot * e.cp_air  # W/K direct channel + infiltration
     a = (g_z_ext + e.g_im) / c_z_j
     b = (e.g_em + e.g_im) / c_m_j
@@ -323,6 +330,9 @@ def _wall_rc3_stability_guard(p) -> None:
     c_s_j = e.C_surface * 3600.0
     c_m_j = e.C_mass * 3600.0
     m_dot = e.ach * e.V_room * e.rho_air / 3600.0  # kg/s
+    # R34/W3-E: same unrecovered-ERV conductance term as the 2R2C guard.
+    if e.erv_enabled:
+        m_dot += (1.0 - e.erv_sensible_eff) * e.erv_flow_m3h * e.rho_air / 3600.0
     g_z_ext = e.U_wall_A + m_dot * e.cp_air  # W/K direct channel + infiltration
     a11 = -(g_z_ext + e.g_sa) / c_z_j
     a22 = -(e.g_sa + e.g_sm) / c_s_j
@@ -432,6 +442,13 @@ def _build_devices(p, P_atm: float = 101.325):
         h_ext_wm2=p.envelope.h_ext_wm2,
         wall_solar_abs=p.envelope.wall_solar_abs,
         h_int_c_wm2=p.envelope.h_int_c_wm2,
+        # R34/W3-E (H7) additive: ERV/HRV mechanical fresh air with heat
+        # recovery (default off = no mechanical ventilation channel,
+        # bit-for-bit the legacy path).
+        erv_enabled=p.envelope.erv_enabled,
+        erv_flow_m3h=p.envelope.erv_flow_m3h,
+        erv_sensible_eff=p.envelope.erv_sensible_eff,
+        erv_latent_eff=p.envelope.erv_latent_eff,
     )
     # R28: closed-form Euler stability guard (only active when RC is on).
     _wall_rc_stability_guard(p)
@@ -577,7 +594,19 @@ def _build_devices(p, P_atm: float = 101.325):
         m_dot = p.envelope.ach * p.envelope.V_room * p.envelope.rho_air / 3600.0
         m_inf = m_dot * max(0.0, W_ext - W_z)
         m_perm = p.envelope.permeance * max(0.0, W_ext - W_z)
-        moisture_load = max(0.0, m_transp + m_inf + m_perm)
+        # R34/W3-E: mechanical fresh air adds its un-recovered (1 - eps_l)
+        # share of the outdoor moisture surplus to the design moisture load
+        # (an HRV with eps_l=0 takes the full fresh-air moisture).
+        m_erv = 0.0
+        if p.envelope.erv_enabled:
+            m_erv = (
+                (1.0 - p.envelope.erv_latent_eff)
+                * p.envelope.erv_flow_m3h
+                * p.envelope.rho_air
+                / 3600.0
+                * max(0.0, W_ext - W_z)
+            )
+        moisture_load = max(0.0, m_transp + m_inf + m_perm + m_erv)
         P_ref = size_deh(moisture_load, p.deh.smer, p.deh.safety_factor)
 
     deh = DEHDevice(
@@ -661,11 +690,21 @@ def _build_devices(p, P_atm: float = 101.325):
         if p.hvac.P_rated_max > 0:
             P_rated = min(P_rated, p.hvac.P_rated_max * 1000.0)
     elif p.hvac.auto_size:
+        # R34/W3-E: the ERV's un-recovered ventilation sensible load is
+        # added as an equivalent infiltration ach at the design point
+        # ((1 - eps_s) * flow / V_room has the same m_dot*cp*(dT) effect).
+        _ach_sizing = p.envelope.ach
+        if p.envelope.erv_enabled:
+            _ach_sizing += (
+                (1.0 - p.envelope.erv_sensible_eff)
+                * p.envelope.erv_flow_m3h
+                / p.envelope.V_room
+            )
         P_rated = size_hvac(
             U_wall_A=_ua_env,
             A_window=p.envelope.A_window,
             eta_solar=p.envelope.eta_solar,
-            ach=p.envelope.ach,
+            ach=_ach_sizing,
             V_room=p.envelope.V_room,
             rho_air=p.envelope.rho_air,
             cp_air=p.envelope.cp_air,
@@ -922,6 +961,11 @@ class DesignEngine:
         # effective-SMER report.  Same basis as the rated ``deh.smer`` (P2-5
         # convention), so effective-vs-rated is an apples-to-apples ratio.
         deh_comp_kwh = 0.0
+        # R34/W3-E (H7): ERV recovered-energy meters (J, absolute values;
+        # sensible and latent split).  Zero on the default off path.
+        erv_rec_sens_j = 0.0
+        erv_rec_lat_j = 0.0
+        erv_on = env.erv_enabled
         for h in range(n):
             energy_wh = 0.0
             hvac_wh = 0.0
@@ -1044,6 +1088,21 @@ class DesignEngine:
                     Q_solar = env.Q_solar(GHI[h])
                 Q_inf, M_inf, Q_lat_inf = env.infiltration(T_ext[h], T_z, W_ext, W_z)
                 M_perm = env.envelope_moisture(W_ext, W_z)
+                # R34/W3-E (H7): mechanical fresh air through an ERV/HRV
+                # core -- an INDEPENDENT channel superposed on the ach
+                # infiltration above (guarded branch: disabled path touches
+                # no float, bit-for-bit identical to pre-W3-E builds).
+                Q_erv = M_erv = Q_lat_erv = 0.0
+                if erv_on:
+                    (
+                        Q_erv,
+                        M_erv,
+                        Q_lat_erv,
+                        _q_rec_s,
+                        _q_rec_l,
+                    ) = env.mechanical_ventilation(T_ext[h], T_z, W_ext, W_z)
+                    erv_rec_sens_j += abs(_q_rec_s) * dt
+                    erv_rec_lat_j += abs(_q_rec_l) * dt
                 # Transpiration evaporative cooling: water absorbs L_v from
                 # the air as it transitions to vapour.  This energy is later
                 # released when the DEH condenses the moisture (dh["Q_DH_W"]
@@ -1067,6 +1126,7 @@ class DesignEngine:
                     E_trans_kgs=E_trans,
                     M_inf_kgs=M_inf,
                     M_perm_kgs=M_perm,
+                    M_erv_kgs=M_erv,
                     W_setpoint_kgs=temp_rh_to_ah(T_z, p.setpoints.RH, pressure_kpa=P_atm),
                 )
                 # Heat-balance correction: dh["Q_DH_W"] carries the nominal
@@ -1092,6 +1152,12 @@ class DesignEngine:
                     + q_removal_corr
                 )
                 M_total = E_trans - M_deh_act - M_hvac_act + M_inf + M_perm
+                # R34/W3-E: superpose the ERV net fresh-air loads on both
+                # balances (guarded add -- the disabled path leaves the two
+                # sums above bit-for-bit untouched).
+                if erv_on:
+                    Q_total += Q_erv + Q_lat_erv
+                    M_total += M_erv
                 # ── humidity step with conservation accounting ─────────────
                 # step_humidity clamps W_z to [0, W_sat].  The clamped water is
                 # reported back so the room heat balance stays consistent:
@@ -1331,6 +1397,18 @@ class DesignEngine:
                 "T_wall_in_final_c": round(env.T_s, 3),
                 "T_wall_out_final_c": round(env.T_wall_out, 3),
                 "T_sol_air_final_c": round(env.T_sol_air, 3),
+            }
+        # R34/W3-E (H7): ERV/HRV heat-recovery self-evidence (enabled runs
+        # only -- the default off path adds no key, keeping the test_11
+        # exact-set pin intact).  Recovered energy is metered as absolute
+        # kWh, sensible and latent split.
+        if env.erv_enabled:
+            summary["erv"] = {
+                "flow_m3h": p.envelope.erv_flow_m3h,
+                "sensible_eff": p.envelope.erv_sensible_eff,
+                "latent_eff": p.envelope.erv_latent_eff,
+                "annual_recovered_sensible_kwh": round(float(erv_rec_sens_j) / 3.6e6, 2),
+                "annual_recovered_latent_kwh": round(float(erv_rec_lat_j) / 3.6e6, 2),
             }
 
         # P1-1: DEH effective-SMER report — the control strategy's efficiency

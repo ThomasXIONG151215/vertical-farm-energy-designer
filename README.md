@@ -267,6 +267,26 @@ COP_cool = min(Carnot COP, 5.25 - 0.16 x max(lift - 21, 0))    [lift = T_cond - 
 - `on_demand` — DOE-2.1E continuous frost factors: `T_coil = 0.82 x T_ext - 8.589`, `d_omega = max(1e-6, W_out - W_sat(T_coil))`, `t_frac = 1/(1 + 0.01446/d_omega)`, heating capacity x `0.875(1 - t_frac)`, power x `0.954(1 - t_frac)` plus the averaged reverse-cycle load; dry air (no frost potential) leaves the step untouched
 - Constant -7 °C / 80% RH probe: heating electricity +13.7% (timed) / +11.4% (on_demand); a Shanghai room has zero heating hours, so 609 baselines are unaffected
 
+### Mechanical fresh air with ERV/HRV heat recovery (`envelope.erv_*`, default off)
+
+Sealed plant factories leak a little (`envelope.ach`, uncontrolled infiltration, no recovery). When a design specifies deliberate mechanical fresh air — CO2 replenishment, odour/pressure control — the un-recovered outdoor air would otherwise land on the room balance at full strength. Four additive envelope fields model the channel:
+
+```yaml
+envelope:
+  erv_enabled: true        # switch (default false = no channel, bit-identical)
+  erv_flow_m3h: 500        # mechanical fresh-air flow (m3/h; required > 0 when enabled)
+  erv_sensible_eff: 0.7    # dry-bulb effectiveness [0, 0.95]; certified cores 0.5-0.85
+  erv_latent_eff: 0.65     # moisture effectiveness; 0 = sensible-only HRV, >0 = enthalpy ERV
+```
+
+- Fixed-effectiveness model (ASHRAE Handbook, HVAC Systems and Equipment, Ch. 26 *Air-to-Air Energy Recovery Equipment*): with mass flow `m_v = flow x rho/3600`, the NET fresh-air load entering the balances is the un-recovered share — sensible `(1 - eps_s) x m_v x cp x (T_ext - T_z)`, latent `(1 - eps_l) x m_v x (W_ext - W_z) x h_fg` plus the matching moisture flow. The recovered share is exchanged inside the core and never reaches the room
+- `eps_s > 0` recovers heat in winter and "coolth" in summer symmetrically (both directions shrink the load); `erv_latent_eff: 0` is a plate HRV (full humidity difference passes), `> 0` (typical enthalpy core 0.45-0.75) also attenuates the moisture difference
+- Independent of `ach`: the infiltration channel keeps running unchanged; the two mass flows superpose. Sizing hooks: `hvac.auto_size` adds the un-recovered fresh air as an equivalent ach, `deh.auto_size` adds its un-recovered moisture to the design load
+- The `erv` summary block (enabled runs only) reports the flow, both effectiveness values and the recovered energy as `annual_recovered_sensible_kwh` / `annual_recovered_latent_kwh` (absolute kWh, metered per substep); `vfed evaluate` prints a one-line self-evidence
+- Fail-fast at load time: enabled with `flow <= 0`, `flow > 0` with the switch off (silent no-op guard), effectiveness outside [0, 0.95], non-boolean/non-numeric values
+- Fan/parasitic power of the ERV unit itself is NOT yet metered (future interface); enabling the channel shows the thermodynamic effect of recovery only
+- The 609 preset does not enable ERV (Fengxian is a sealed room at `ach 0.001`); all 609 baselines are bit-identical with the fields absent
+
 ## Architecture
 
 ```

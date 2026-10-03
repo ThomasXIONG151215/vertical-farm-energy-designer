@@ -61,6 +61,17 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Added
 
+- **ERV/HRV mechanical fresh air with heat recovery (R34/W3-E, H7).** New
+  additive envelope fields `erv_enabled` (default `false`, bit-identical
+  baselines) / `erv_flow_m3h` / `erv_sensible_eff` [0, 0.95] (default 0.7)
+  / `erv_latent_eff` [0, 0.95] (default 0 = sensible-only HRV, >0 =
+  enthalpy ERV). Fixed-effectiveness model (ASHRAE HVAC Systems and
+  Equipment Ch. 26): the un-recovered share `(1-eps)` of the fresh-air
+  sensible/latent load superposes on the room balances on top of `ach`
+  infiltration; recovered energy is metered in the `erv` summary block
+  (sensible/latent kWh split) and a one-line `vfed evaluate` self-evidence.
+  Fail-fast: enabled without flow, flow without enabled, effectiveness out
+  of band. The 609 preset does not enable ERV.
 - `vfed design fx` — prints the built-in FX reference snapshot (CNY/USD/EUR
   and more, per 1 USD, snapshot date annotated, reference values only).
 - `vfed evaluate` prints a `USD equivalent` line for the headline LCOE when

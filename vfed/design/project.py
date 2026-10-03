@@ -475,6 +475,26 @@ class EnvelopeConfig:
     #   (g_c = h_int_c_wm2 * wall_area_m2).  The radiative share to the
     #   internal mass runs through g_sm (LBNL BESTEST: h_c = 3.0 fixed,
     #   h_r ~ 5.3 -> total 8.29 = 1/R_si per ASHRAE 140).
+    # ── R34/W3-E (H7): mechanical fresh air + ERV/HRV heat recovery ──
+    erv_enabled: bool = False
+    #   true = a mechanical ventilation stream of erv_flow_m3h m3/h runs
+    #   through a heat-recovery core, IN ADDITION to the ach infiltration
+    #   (both channels superpose; the ERV flow does not replace leakage).
+    #   false (default) = no mechanical ventilation, bit-for-bit legacy.
+    erv_flow_m3h: float = 0.0
+    #   Mechanical fresh-air volume flow (m3/h); required > 0 when
+    #   erv_enabled (fail-fast otherwise).  Typical PFAL fresh air
+    #   0.5-2 room volumes/h (100-400 m3/h on a 200 m3 room).
+    erv_sensible_eff: float = 0.7
+    #   Sensible (dry-bulb) recovery effectiveness [0, 0.95].  Fixed-
+    #   effectiveness model per ASHRAE Handbook HVAC Systems and Equipment
+    #   Ch. 26; certified cores rate 0.5-0.85 (AHRI 1060 / EN 13141).
+    #   Net fresh-air sensible load = (1 - eps_s)*m_v*cp*(T_ext - T_z).
+    erv_latent_eff: float = 0.0
+    #   Latent (moisture) recovery effectiveness [0, 0.95].  0 (default) =
+    #   sensible-only HRV (plate exchanger); > 0 = enthalpy ERV (membrane /
+    #   enthalpy wheel, typically 0.45-0.75) that also recovers moisture:
+    #   net fresh-air latent load = (1 - eps_l)*m_v*(W_ext - W_z)*h_fg.
 
 
 @dataclass
@@ -1945,6 +1965,56 @@ class DesignProject:
                 "wall_solar_abs / h_int_c_wm2 require wall_fd_nodes > 0 -- "
                 "they would otherwise be silently ignored "
                 f"(wall_fd_nodes={_env_cfg.wall_fd_nodes})."
+            )
+
+        # ── R34/W3-E (H7): ERV/HRV mechanical fresh-air guards ──
+        # Same rules as the Envelope constructor (defence in depth): boolean
+        # switch, flow>0 iff enabled (an enabled ERV with no flow is a config
+        # error; a positive flow with the switch off would be silently
+        # ignored), effectiveness bands [0, 0.95].
+        _erv_enabled = _env_cfg.erv_enabled
+        if not isinstance(_erv_enabled, bool):
+            raise ValueError(
+                f"envelope.erv_enabled must be a boolean (true/false), got "
+                f"{type(_erv_enabled).__name__}: {_erv_enabled!r}. true turns "
+                f"on the mechanical fresh-air channel with ERV/HRV heat "
+                f"recovery (erv_flow_m3h + erv_sensible_eff/erv_latent_eff)."
+            )
+        _erv_flow = _env_cfg.erv_flow_m3h
+        if isinstance(_erv_flow, bool) or not isinstance(_erv_flow, (int, float)):
+            raise ValueError(
+                f"envelope.erv_flow_m3h must be a number (m3/h), got "
+                f"{type(_erv_flow).__name__}: {_erv_flow!r}"
+            )
+        if float(_erv_flow) < 0.0:
+            raise ValueError(
+                f"envelope.erv_flow_m3h must be >= 0 m3/h, got {_erv_flow}"
+            )
+        for _eff_name in ("erv_sensible_eff", "erv_latent_eff"):
+            _eff_val = getattr(_env_cfg, _eff_name)
+            if isinstance(_eff_val, bool) or not isinstance(_eff_val, (int, float)):
+                raise ValueError(
+                    f"envelope.{_eff_name} must be a number (recovery "
+                    f"effectiveness), got {type(_eff_val).__name__}: {_eff_val!r}"
+                )
+            if not (0.0 <= float(_eff_val) <= 0.95):
+                raise ValueError(
+                    f"envelope.{_eff_name} must be within [0, 0.95] "
+                    f"(certified core band 0.5-0.85 sensible / 0.45-0.75 "
+                    f"enthalpy), got {_eff_val}"
+                )
+        if _erv_enabled and not (float(_erv_flow) > 0.0):
+            raise ValueError(
+                f"envelope.erv_enabled=true requires erv_flow_m3h > 0 m3/h "
+                f"(got {_erv_flow}); an enabled ERV with no flow is a config "
+                f"error, not a zero-flow machine."
+            )
+        if not _erv_enabled and float(_erv_flow) > 0.0:
+            raise ValueError(
+                f"envelope.erv_flow_m3h > 0 ({_erv_flow}) requires "
+                f"envelope.erv_enabled=true -- otherwise the mechanical "
+                f"fresh air is silently ignored. See also envelope.ach for "
+                f"uncontrolled infiltration (no heat recovery)."
             )
 
         project = cls(

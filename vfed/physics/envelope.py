@@ -373,6 +373,26 @@ class Envelope:
         Exterior solar absorptance [0, 1]; 0 (default) = sol-air disabled.
     h_int_c_wm2 : float
         Interior convective film (W/m2K); required > 0 when ``wall_fd_nodes > 0``.
+    erv_enabled : bool
+        R34/W3-E (H7): true = a mechanical fresh-air stream of
+        ``erv_flow_m3h`` m3/h runs through an ERV/HRV heat-recovery core,
+        IN ADDITION to the ``ach`` infiltration (the two channels
+        superpose; the ERV flow does not replace leakage).  False
+        (default) = no mechanical ventilation, bit-for-bit legacy path.
+    erv_flow_m3h : float
+        Mechanical fresh-air volume flow (m3/h); required > 0 when
+        ``erv_enabled``.  Typical PFAL fresh air 0.5-2 room volumes/h
+        (100-400 m3/h on a 200 m3 room).
+    erv_sensible_eff : float
+        Sensible (dry-bulb) recovery effectiveness in [0, 0.95].
+        Fixed-effectiveness model per ASHRAE Handbook HVAC Systems and
+        Equipment, Ch. 26 (Air-to-Air Energy Recovery Equipment);
+        certified cores rate 0.5-0.85 (AHRI 1060 / EN 13141 classes).
+    erv_latent_eff : float
+        Latent (moisture) recovery effectiveness in [0, 0.95].
+        0 (default) = sensible-only HRV (plate heat exchanger);
+        > 0 = enthalpy ERV (membrane / enthalpy wheel) that also
+        transfers moisture; enthalpy cores typically rate 0.45-0.75.
     """
 
     def __init__(
@@ -399,6 +419,10 @@ class Envelope:
         h_ext_wm2: float = 0.0,
         wall_solar_abs: float = 0.0,
         h_int_c_wm2: float = 0.0,
+        erv_enabled: bool = False,
+        erv_flow_m3h: float = 0.0,
+        erv_sensible_eff: float = 0.7,
+        erv_latent_eff: float = 0.0,
     ):
         self.U_wall_A = U_wall_A
         self.A_window = A_window
@@ -408,6 +432,54 @@ class Envelope:
         self.rho_air = rho_air
         self.cp_air = cp_air
         self.V_room = V_room
+        # R34/W3-E (H7): ERV/HRV mechanical fresh air (defence-in-depth
+        # guards; DesignProject.from_dict enforces the same rules at load
+        # time, this catches programmatic Envelope(...) constructions).
+        if not isinstance(erv_enabled, bool):
+            raise ValueError(
+                f"erv_enabled must be a boolean, got "
+                f"{type(erv_enabled).__name__}: {erv_enabled!r}"
+            )
+        if isinstance(erv_flow_m3h, bool) or not isinstance(
+            erv_flow_m3h, (int, float)
+        ):
+            raise ValueError(
+                f"erv_flow_m3h must be a number (m3/h), got "
+                f"{type(erv_flow_m3h).__name__}: {erv_flow_m3h!r}"
+            )
+        if float(erv_flow_m3h) < 0.0:
+            raise ValueError(f"erv_flow_m3h must be >= 0, got {erv_flow_m3h}")
+        for _eff_name, _eff_val in (
+            ("erv_sensible_eff", erv_sensible_eff),
+            ("erv_latent_eff", erv_latent_eff),
+        ):
+            if isinstance(_eff_val, bool) or not isinstance(_eff_val, (int, float)):
+                raise ValueError(
+                    f"{_eff_name} must be a number (effectiveness), got "
+                    f"{type(_eff_val).__name__}: {_eff_val!r}"
+                )
+            if not (0.0 <= float(_eff_val) <= 0.95):
+                raise ValueError(
+                    f"{_eff_name} must be within [0, 0.95] (certified core "
+                    f"band 0.5-0.85 sensible / 0.45-0.75 enthalpy), got "
+                    f"{_eff_val}"
+                )
+        if erv_enabled and not (float(erv_flow_m3h) > 0.0):
+            raise ValueError(
+                f"erv_enabled=true requires erv_flow_m3h > 0 m3/h (got "
+                f"{erv_flow_m3h}); an enabled ERV with no flow is a config "
+                f"error, not a zero-flow machine."
+            )
+        if not erv_enabled and float(erv_flow_m3h) > 0.0:
+            raise ValueError(
+                f"erv_flow_m3h > 0 ({erv_flow_m3h}) requires "
+                f"erv_enabled=true -- otherwise the mechanical fresh air "
+                f"is silently ignored."
+            )
+        self.erv_enabled = erv_enabled
+        self.erv_flow_m3h = float(erv_flow_m3h)
+        self.erv_sensible_eff = float(erv_sensible_eff)
+        self.erv_latent_eff = float(erv_latent_eff)
         # R28 step 3: solar-split fraction (only consumed on RC paths; the
         # engine reads it every substep, so store unconditionally).
         if not (0.0 <= solar_mass_fraction <= 1.0):
@@ -746,3 +818,57 @@ class Envelope:
     def envelope_moisture(self, W_ext: float, W_z: float) -> float:
         """Passive moisture migration through envelope (kg/s, + into room)."""
         return self.permeance * (W_ext - W_z)
+
+    # -- Mechanical ventilation with ERV/HRV heat recovery (R34/W3-E) ----
+    def mechanical_ventilation(
+        self, T_ext: float, T_z: float, W_ext: float, W_z: float
+    ) -> Tuple[float, float, float, float, float]:
+        """Mass-flow mechanical fresh air through an ERV/HRV core.
+
+        The ventilation mass flow ``m_v = erv_flow_m3h * rho_air / 3600``
+        is INDEPENDENT of the ``ach`` infiltration channel (leakage keeps
+        running; both superpose).  Recovery follows the fixed-effectiveness
+        model of ASHRAE Handbook HVAC Systems and Equipment, Ch. 26
+        (Air-to-Air Energy Recovery Equipment): with effectiveness eps the
+        supply stream leaves the core at the eps-weighted state of the two
+        streams, so the NET load imposed on the room is the un-recovered
+        (1 - eps) share of the full mass-flow expression::
+
+            Q_sens_net = (1 - eps_s) * m_v * cp * (T_ext - T_z)   [W, + into room]
+            M_lat_net  = (1 - eps_l) * m_v * (W_ext - W_z)        [kg/s, + into room]
+            Q_lat_net  = M_lat_net * L_v(T_z)                     [W, + into room]
+
+        eps_s > 0 recovers heat in winter (T_ext < T_z) and "coolth" in
+        summer (T_ext > T_z) symmetrically -- both directions reduce the
+        magnitude of the net load.  eps_l = 0 (HRV) passes the full
+        humidity difference; eps_l > 0 (enthalpy ERV) attenuates it.
+
+        Returns
+        -------
+        (Q_sens_net_W, M_lat_net_kgs, Q_lat_net_W, Q_rec_sens_W, Q_rec_lat_W)
+            The three NET terms (same sign convention as :meth:`infiltration`)
+            plus the two RECOVERED fluxes for metering.  ``Q_rec_sens =
+            eps_s * m_v * cp * (T_ext - T_z)`` and ``Q_rec_lat =
+            eps_l * m_v * (W_ext - W_z) * L_v(T_z)`` carry the sign of the
+            driving difference (negative in winter = heat retained); the
+            engine meters their absolute values as recovered energy.
+            Disabled ERV returns all zeros.
+        """
+        if not self.erv_enabled or self.erv_flow_m3h <= 0.0:
+            return 0.0, 0.0, 0.0, 0.0, 0.0
+        m_v = self.erv_flow_m3h * self.rho_air / 3600.0  # kg/s
+        q_full_sens = m_v * self.cp_air * (T_ext - T_z)  # W, un-recovered basis
+        m_full_lat = m_v * (W_ext - W_z)  # kg/s
+        # Same evaluation order as infiltration() ((M*lv)*1000) so the
+        # eps=0 channel is bitwise identical to the infiltration expression.
+        Q_sens_net = (1.0 - self.erv_sensible_eff) * q_full_sens
+        M_lat_net = (1.0 - self.erv_latent_eff) * m_full_lat
+        Q_lat_net = M_lat_net * latent_heat_vaporization(T_z) * 1000.0
+        Q_rec_sens = self.erv_sensible_eff * q_full_sens
+        Q_rec_lat = (
+            self.erv_latent_eff
+            * m_full_lat
+            * latent_heat_vaporization(T_z)
+            * 1000.0
+        )
+        return Q_sens_net, M_lat_net, Q_lat_net, Q_rec_sens, Q_rec_lat
