@@ -6,6 +6,28 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ## [Unreleased]
 
+### Added
+
+- **DEH identified setpoint-modulation map (commissioning mode).**
+  `DEHDevice` accepts `setpoint_modulation` (a measured `lookup` on the
+  humidity setpoint, optional `lookup_dark` for the dark photoperiod, and
+  `rh_err_coef` linear feedback) plus `floor_w` (minimum electrical power
+  while commanded on). `step()` gains an `is_light` keyword selecting the
+  dark table. With a map installed the device drops the generic
+  proportional-band/DOE part-load curves: power is linear in the map value
+  (`P = P_ref·poly(T,W)·S_DH`) and moisture removal uses a **constant
+  effective SMER** (`M = smer·P/3.6e6`) — `smer` in this mode is a
+  commissioning value absorbing envelope/infiltration/HVAC-latent residual,
+  not a rated SMER. `tau_q`/`tau_m` accept scalar or `(rise, fall)` tuples
+  for asymmetric transient lags. Stock behaviour without a map is
+  unchanged. `DEHConfig`/`DesignEngine` forward the new fields, and the
+  `609` preset ships the Fengxian-identified numbers (twin JSONs,
+  2026-09-22): P_ref 1554.3 W, 6-term poly, dual 9-point lookups with
+  rh_err feedback 0.009808, effective SMER 0.25, zero fan power (net
+  metering). Validated head-to-head against the reference implementation
+  (P/M identical to 0.000 W on an 84-cell grid; holdout one-step P_deh MAE
+  389 W vs 507 W for the prior calibrated local model).
+
 ### Changed
 
 - **Currency conversion engine (round 26).** VFED now distinguishes

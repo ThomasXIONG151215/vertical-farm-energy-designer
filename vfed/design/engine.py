@@ -419,6 +419,8 @@ def _build_devices(p, P_atm: float = 101.325):
         tau_m=p.deh.tau_m,
         mod_band_rh=p.deh.comp_mod_band_rh,
         control=p.deh.control,
+        setpoint_modulation=p.deh.setpoint_modulation,
+        floor_w=p.deh.floor_w,
     )
     # DEH net sensible heat rejection at the design point: P_comp + fan only.
     # m_dh*L_v must NOT be added here — the transpiration portion cancels
@@ -713,7 +715,9 @@ class DesignEngine:
                 hv = hvac.step(
                     T_z, RH_z, T_ext[h], dt, T_setpoint=T_sp, T_heat_setpoint=p.setpoints.T_dark
                 )
-                dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH)
+                dh = deh.step(
+                    T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH, is_light=is_light_h
+                )
                 # P0-4 full-load observation (read-only on device outputs).
                 if hv["mode"] == "cool" and hv["P_elec_W"] >= hvac_cool_full_w:
                     cool_full_s += 1
