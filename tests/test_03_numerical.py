@@ -530,11 +530,6 @@ def _deh_scenario(humid_outdoor: bool = True):
     from vfed.design.presets import preset_609
 
     p = preset_609()
-    # preset_609 now carries the identified commissioning map (on_off +
-    # setpoint_modulation); these tests exercise the GENERIC stock VFD
-    # modulator, so pin the fixture back explicitly.
-    p.deh.setpoint_modulation = None
-    p.deh.control = "vfd"
     p.envelope.V_room = 80.0
     p.envelope.C_z = 50000.0
     p.setpoints.RH = 50.0

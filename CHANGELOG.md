@@ -21,12 +21,14 @@ semantic — behaviour changes are called out explicitly under **Changed**.
   not a rated SMER. `tau_q`/`tau_m` accept scalar or `(rise, fall)` tuples
   for asymmetric transient lags. Stock behaviour without a map is
   unchanged. `DEHConfig`/`DesignEngine` forward the new fields, and the
-  `609` preset ships the Fengxian-identified numbers (twin JSONs,
-  2026-09-22): P_ref 1554.3 W, 6-term poly, dual 9-point lookups with
-  rh_err feedback 0.009808, effective SMER 0.25, zero fan power (net
-  metering). Validated head-to-head against the reference implementation
-  (P/M identical to 0.000 W on an 84-cell grid; holdout one-step P_deh MAE
-  389 W vs 507 W for the prior calibrated local model).
+  new **`609_identified` preset** ships the Fengxian-identified numbers
+  (twin JSONs, 2026-09-22): P_ref 1554.3 W, 6-term poly, dual 9-point
+  lookups with rh_err feedback 0.009808, effective SMER 0.25, zero fan
+  power (net metering). `preset_609()` itself stays on the stock DEH so
+  published baselines remain reproducible. Validated head-to-head against
+  the reference implementation (P/M identical to 0.000 W on an 84-cell
+  grid; holdout one-step P_deh MAE 389 W vs 507 W for the prior
+  calibrated local model).
 
 ### Changed
 
