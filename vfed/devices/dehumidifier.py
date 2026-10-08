@@ -50,6 +50,20 @@ are clamped to the E+ curve domain [21, 32.22] C x [40, 80] % RH (no
 extrapolation).  ``smer_map`` and ``smer_curve`` are mutually exclusive -- they
 model the same DOE dry-air SMER penalty on two functional forms.
 
+Identified setpoint-modulation map (commissioning mode): when
+``setpoint_modulation`` is provided, S_DH comes from a MEASURED lookup table
+keyed on the humidity setpoint (optional light/dark table pair + proportional
+``rh_err_coef`` feedback) instead of the generic proportional band.  Compressor
+power is then LINEAR in S_DH (no DOE part-load division) and moisture removal
+uses a constant EFFECTIVE SMER (a commissioning value that absorbs the rest of
+the moisture-balance chain — infiltration, HVAC latent, transpiration model
+error).  This lets field-identified device behaviour (e.g. setpoint-grading
+curves identified from sub-metering) run inside the energy-conservation shell
+unchanged.  The R33/R34 air-side factors (``smer_curve`` / ``smer_map``) are
+intentionally NOT applied in this mode — the effective SMER already absorbs
+them.  When ``setpoint_modulation`` is None the stock vfd/on_off
+behaviour is byte-identical to before.
+
 Control modes (P1-1): ``control`` selects how S_DH is produced from the
 humidity error ``RH_z - deh_setpoint``:
     * ``"vfd"``    (default) variable-speed modulation inside the proportional
@@ -61,13 +75,33 @@ humidity error ``RH_z - deh_setpoint``:
       modifier is 1.0 at m = 1, i.e. the machine runs at its RATED SMER.
 """
 
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 from ..physics.psychrometrics import latent_heat_vaporization, temp_rh_to_ah
 from .compressor import CompressorState
 from .lag import FirstOrderLag
 
 __all__ = ["DEHDevice", "EnthalpyEfficiency", "size_deh"]
+
+
+def _as_tau_pair(value, name: str) -> Tuple[float, float]:
+    """Normalise a lag time-constant to ``(tau_rise, tau_fall)``.
+
+    Accepts a scalar (symmetric, the historical behaviour) or a
+    ``(rise, fall)`` tuple for asymmetric transients (e.g. coil warm-up vs
+    cool-down identified from field data).
+    """
+    if isinstance(value, (tuple, list)):
+        if len(value) != 2:
+            raise ValueError(f"{name} tuple must be (rise, fall), got {value!r}")
+        rise, fall = float(value[0]), float(value[1])
+        if rise <= 0.0 or fall <= 0.0:
+            raise ValueError(f"{name} time constants must be > 0, got {value!r}")
+        return rise, fall
+    tau = float(value)
+    if tau <= 0.0:
+        raise ValueError(f"{name} time constant must be > 0, got {value!r}")
+    return tau, tau
 
 # P1-1: DEH control modes.  "vfd" = variable-speed (DOE part-load SMER curve),
 # "on_off" = bang-bang cycling at full speed (rated SMER).  An unknown value
@@ -191,6 +225,13 @@ class DEHDevice:
         tau_m: float = 120.0,
         mod_band_rh: float = 4.0,  # VFD proportional band (% RH)
         control: str = "vfd",  # "vfd" | "on_off" (P1-1)
+        # Identified setpoint-modulation map (commissioning mode):
+        # {"lookup": {sp: S_DH}, "lookup_dark": {sp: S_DH},
+        #  "rh_err_coef": float}.  None -> stock vfd/on_off behaviour.
+        setpoint_modulation: Optional[dict] = None,
+        # Minimum electrical power while the unit is commanded ON (W).  Some
+        # identified units never drop below a standby/minimum draw; 0 disables.
+        floor_w: float = 0.0,
     ):
         if control not in DEH_CONTROL_MODES:
             raise ValueError(
@@ -215,6 +256,21 @@ class DEHDevice:
         self.fan_power_w = fan_power_w
         self.mod_band_rh = mod_band_rh
         self.control = control
+        # Identified map mode: parse + fail-fast validate the commissioning
+        # tables.  All moisture/power equations switch to the identified form
+        # whenever the map is present (see step()).
+        if setpoint_modulation is not None:
+            parsed = self._validate_modulation_map(setpoint_modulation)
+            self.setpoint_modulation = dict(setpoint_modulation)
+            self._mod_light = parsed["lookup"]
+            self._mod_dark = parsed["lookup_dark"]
+            self._rh_err_coef = parsed["rh_err_coef"]
+        else:
+            self.setpoint_modulation = None
+            self._mod_light, self._mod_dark, self._rh_err_coef = None, None, 0.0
+        if floor_w < 0.0:
+            raise ValueError(f"floor_w must be >= 0, got {floor_w!r}")
+        self.floor_w = floor_w
         # P1-1: both modes share one CompressorState hysteresis (deadband +
         # min_on/min_off anti-short-cycling).  "on_off" passes
         # proportional_band=0 -> bang-bang, m = 1 exactly while ON, so the DOE
@@ -228,8 +284,80 @@ class DEHDevice:
             proportional_band=0.0 if control == "on_off" else mod_band_rh,
             m_min=_DEH_SPEED_M_MIN,
         )
-        self.lag_q = FirstOrderLag(tau_rise=tau_q, tau_fall=tau_q)
-        self.lag_m = FirstOrderLag(tau_rise=tau_m, tau_fall=tau_m)
+        self.lag_q = FirstOrderLag(*_as_tau_pair(tau_q, "tau_q"))
+        self.lag_m = FirstOrderLag(*_as_tau_pair(tau_m, "tau_m"))
+
+    @staticmethod
+    def _validate_modulation_map(sm: dict) -> dict:
+        """Fail-fast validation of the identified setpoint-modulation map.
+
+        Schema: {"lookup": {sp: S_DH} (required, >= 2 points, S in [0, 1]),
+                 "lookup_dark": {sp: S_DH} (optional),
+                 "rh_err_coef": float (optional, default 0.0)}.
+        Unknown keys are rejected.  Returns normalised tables as sorted lists
+        of (setpoint, S_DH) float pairs.
+        """
+        if not isinstance(sm, dict):
+            raise ValueError(
+                f"setpoint_modulation must be a dict, got {type(sm).__name__}"
+            )
+        unknown = set(sm) - {"lookup", "lookup_dark", "rh_err_coef"}
+        if unknown:
+            raise ValueError(
+                f"setpoint_modulation unknown keys {sorted(unknown)}; "
+                "expected {'lookup', 'lookup_dark', 'rh_err_coef'}"
+            )
+        if "lookup" not in sm:
+            raise ValueError("setpoint_modulation requires a 'lookup' table")
+
+        def _norm(table, name):
+            if not isinstance(table, dict) or len(table) < 2:
+                raise ValueError(
+                    f"setpoint_modulation {name} needs >= 2 points, got {table!r}"
+                )
+            pts = []
+            for k, v in table.items():
+                kf, vf = float(k), float(v)
+                if not 0.0 <= vf <= 1.0:
+                    raise ValueError(
+                        f"setpoint_modulation {name} values must be in [0, 1], "
+                        f"got {k}: {v}"
+                    )
+                pts.append((kf, vf))
+            pts.sort()
+            return pts
+
+        return {
+            "lookup": _norm(sm["lookup"], "lookup"),
+            "lookup_dark": (
+                _norm(sm["lookup_dark"], "lookup_dark")
+                if "lookup_dark" in sm
+                else None
+            ),
+            "rh_err_coef": float(sm.get("rh_err_coef", 0.0)),
+        }
+
+    def _map_modulation(self, deh_setpoint: float, rh_z: float, is_light: bool) -> float:
+        """Identified S_DH from the commissioning map.
+
+        Flat extrapolation at the table endpoints, linear interpolation
+        inside, plus proportional feedback on the live humidity error.
+        """
+        table = self._mod_light
+        if not is_light and self._mod_dark is not None:
+            table = self._mod_dark
+        if deh_setpoint <= table[0][0]:
+            base = table[0][1]
+        elif deh_setpoint >= table[-1][0]:
+            base = table[-1][1]
+        else:
+            for (x0, y0), (x1, y1) in zip(table, table[1:]):
+                if x0 <= deh_setpoint <= x1:
+                    frac = (deh_setpoint - x0) / (x1 - x0) if x1 > x0 else 0.0
+                    base = y0 + frac * (y1 - y0)
+                    break
+        s = base + self._rh_err_coef * (rh_z - deh_setpoint)
+        return min(max(s, 0.0), 1.0)
 
     def reset(self) -> None:
         self.comp.reset(False)
@@ -281,8 +409,12 @@ class DEHDevice:
         W_z: float,
         dt: float = 60.0,
         deh_setpoint: float = 60.0,
+        is_light: bool = True,
     ) -> Dict[str, float]:
         """Advance one timestep.
+
+        ``is_light`` selects the ``lookup_dark`` table of an identified
+        ``setpoint_modulation`` map when False (ignored in stock modes).
 
         Returns dict with Q_DH_W, M_deh_kgs, P_elec_W, is_on, S_DH,
         latent_cop (with legacy ``eta`` alias), smer_air_mod (R33) and
@@ -319,6 +451,13 @@ class DEHDevice:
         machine is bit-identical to map-off there.  Both default-off factors
         are exactly 1.0 and multiply through IEEE-754 exactly, so the default
         path is bit-identical to the pre-R34 baselines (zero drift).
+
+        ``setpoint_modulation`` map (commissioning mode): S_DH comes from the
+        measured table (light/dark pair + rh_err feedback) instead of the
+        proportional band; the CompressorState hysteresis still gates ON/OFF.
+        Power is linear in S_DH, moisture uses the constant EFFECTIVE SMER,
+        and ``floor_w`` enforces a minimum draw while ON.  The R33/R34
+        air-side factors are bypassed in this mode (see module docstring).
         """
         mod = self.comp.update(
             RH_z - deh_setpoint, dt, on_threshold=0.0, off_threshold=-self.comp.deadband
@@ -351,29 +490,42 @@ class DEHDevice:
         # (M_act > 0) releases latent heat at the current room temperature.
         L_v = latent_heat_vaporization(T_z) * 1000.0
         if mod > 0.0:
-            s_dh = mod
             P_full = self._poly_power(T_z, W_z)
-            smer_mod = self._smer_speed_mod(s_dh)
-            # VFD compressor power: P/P_rated = m / smer_mod (DOE curve:
-            # capacity linear, SMER falling, so power super-linear).  With an
-            # air-side factor on (smer_air from smer_curve, or ef_map from
-            # smer_map) and the capacity map wr_map (smer_map only), the SAME
-            # removal demand draws P = M*3.6e6/SMER_eff
-            #                            = P_full*m*wr_map/(smer_mod*ef_map*smer_air).
-            P_comp = P_full * s_dh * wr_map / max(smer_mod * smer_air * ef_map, 1e-6)
-            # Specific Moisture Extraction Rate (kg water / kWh COMPRESSOR
-            # input, P2-5): m_dh [kg/s] = SMER * P_comp [W] / 3.6e6 [J/kWh].
-            # The fan is intentionally excluded from the SMER denominator and
-            # counted exactly once in P_elec below -- no double-count.
-            m_dh = self.smer * smer_mod * smer_air * ef_map * P_comp / 3.6e6
-            # MINOR-7 (D): latent heat evaluated at room temperature T_z so the
-            # condenser term exactly cancels the engine's evaporative sink
-            # (engine L_v = latent_heat_vaporization(T_z)*1000) — the closure
-            # gap is identically zero at every temperature (no fixed h_fg).
-            P_elec = P_comp + self.fan_power_w
-            # Fan motor + air friction heat is released into the room airflow
-            # (dehumidifier exhausts into the same space).
-            Q_sens_target = P_comp + self.fan_power_w
+            if self.setpoint_modulation is not None:
+                # Identified commissioning map: S_DH from the measured
+                # setpoint-grading table (+ proportional rh_err feedback).
+                # Power is LINEAR in S_DH (no DOE part-load division) and the
+                # SMER is an EFFECTIVE constant — see module docstring.
+                # smer_air / ef_map / wr_map are intentionally bypassed: the
+                # effective SMER already absorbs the air-side behaviour.
+                s_dh = self._map_modulation(deh_setpoint, RH_z, is_light)
+                P_comp = P_full * s_dh
+                m_dh = self.smer * P_comp / 3.6e6
+                P_elec = max(P_comp + self.fan_power_w, self.floor_w)
+                Q_sens_target = P_elec
+            else:
+                s_dh = mod
+                smer_mod = self._smer_speed_mod(s_dh)
+                # VFD compressor power: P/P_rated = m / smer_mod (DOE curve:
+                # capacity linear, SMER falling, so power super-linear).  With an
+                # air-side factor on (smer_air from smer_curve, or ef_map from
+                # smer_map) and the capacity map wr_map (smer_map only), the SAME
+                # removal demand draws P = M*3.6e6/SMER_eff
+                #                            = P_full*m*wr_map/(smer_mod*ef_map*smer_air).
+                P_comp = P_full * s_dh * wr_map / max(smer_mod * smer_air * ef_map, 1e-6)
+                # Specific Moisture Extraction Rate (kg water / kWh COMPRESSOR
+                # input, P2-5): m_dh [kg/s] = SMER * P_comp [W] / 3.6e6 [J/kWh].
+                # The fan is intentionally excluded from the SMER denominator and
+                # counted exactly once in P_elec below -- no double-count.
+                m_dh = self.smer * smer_mod * smer_air * ef_map * P_comp / 3.6e6
+                # MINOR-7 (D): latent heat evaluated at room temperature T_z so the
+                # condenser term exactly cancels the engine's evaporative sink
+                # (engine L_v = latent_heat_vaporization(T_z)*1000) — the closure
+                # gap is identically zero at every temperature (no fixed h_fg).
+                P_elec = P_comp + self.fan_power_w
+                # Fan motor + air friction heat is released into the room airflow
+                # (dehumidifier exhausts into the same space).
+                Q_sens_target = P_comp + self.fan_power_w
             M_target = m_dh
             # Latent COP for reporting (P2-10): condensation power per unit of
             # compressor input (fan excluded) — renamed from the misleading

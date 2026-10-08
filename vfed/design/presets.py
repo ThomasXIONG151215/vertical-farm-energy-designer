@@ -13,7 +13,7 @@ numerically identical to an equivalent YAML, and programmatic consumers
 of the ``None`` sentinels.
 """
 
-from .project import DesignProject
+from .project import DEHConfig, DesignProject
 
 __all__ = ["preset_default", "preset_609", "PRESETS"]
 
@@ -139,7 +139,71 @@ def preset_609() -> DesignProject:
     )
 
 
+def preset_609_identified() -> DesignProject:
+    """preset_609 + identified DEH commissioning map (609 digital twin).
+
+    Same room/site/LED/setpoints as preset_609; the DEH device is replaced
+    by the identified commissioning configuration ported from the 609
+    digital twin (models/deh_{power_coeffs_calibrated, modulation}.json,
+    updater re-calibration 2026-09-22).  Gate evidence (holdout week
+    2026-09-16..23, one-step replay): P_deh MAE 389 W vs twin-local-hybrid
+    507 W; free-run RH MAE 14.98 % (conservation-stable).  smer = 0.25 is
+    an EFFECTIVE commissioning value (train bias-zero crossing, absorbing
+    infiltration / HVAC-latent / transpiration residual) — NOT a physical
+    SMER claim.  fan_power_w = 0 because P_ref was identified against the
+    NET meter (fan included).
+
+    preset_609 itself stays on stock DEH: its published annual baselines
+    (Energy & Buildings 361:117462) must remain reproducible.
+    """
+    p = preset_609()
+    p.name = "fengxian_lettuce_609_identified"
+    p.deh = DEHConfig(
+        P_ref_w=1554.3,
+        poly_e=(1.0, 0.013103, 0.002662, 0.002768, 0.002078, -0.002861),
+        T_mean=21.4,
+        T_std=1.69,
+        W_mean=0.011328,
+        W_std=0.001357,
+        smer=0.25,
+        control="on_off",
+        fan_power_w=0.0,
+        tau_q=(90.0, 30.0),
+        tau_m=(120.0, 20.0),
+        setpoint_modulation={
+            "lookup": {
+                "30": 0.7170938104635799,
+                "40": 0.7267837146359536,
+                "45": 0.7331191679313002,
+                "50": 0.679025751897272,
+                "55": 0.6916748161497909,
+                "60": 0.6401562306454929,
+                "70": 0.06810030491865396,
+                "75": 0.1330467536187675,
+                "80": 0.04261066155552269,
+            },
+            "lookup_dark": {
+                "30": 0.9568670496712134,
+                "40": 0.9754835034269306,
+                "45": 0.918017000012886,
+                "50": 0.8945194671329542,
+                "55": 0.793355848954101,
+                "60": 0.9485119179365091,
+                "70": 0.4638576553329792,
+                "75": 0.4905356512715363,
+                "80": 0.488775933693853,
+            },
+            "rh_err_coef": 0.009808,
+        },
+    )
+    return p
+
+
 PRESETS = {
     "609": {"label": "609 — Fengxian Lettuce PFAL", "factory": preset_609},
+    "609_identified": {
+        "label": "609 Identified — Fengxian Lettuce PFAL, twin-identified DEH",
+        "factory": preset_609_identified,
+    },
     "default": {"label": "Default", "factory": preset_default},
 }

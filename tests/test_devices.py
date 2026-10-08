@@ -326,3 +326,103 @@ def test_deh_on_off_hysteresis_anti_short_cycling():
     out = deh.step(22.0, 50.0, 0.010, dt=60.0, deh_setpoint=63.0)
     assert out["is_on"] is False
     assert out["P_elec_W"] == 0.0
+
+
+# ── DEH identified setpoint-modulation map (commissioning mode) ──────
+
+def _map_device(**overrides):
+    """DEHDevice with a small identified map; poly pinned at the centre
+    so P_full == P_ref exactly (tn = wn = 0 at T=22, W=0.012)."""
+    mod = {
+        "lookup": {"40": 0.90, "50": 0.80, "60": 0.60},
+        "lookup_dark": {"40": 0.95, "50": 0.85, "60": 0.70},
+    }
+    params = dict(
+        P_ref_w=2000.0, smer=0.5, control="on_off", fan_power_w=0.0,
+        setpoint_modulation=mod,
+    )
+    params.update(overrides)
+    return DEHDevice(**params)
+
+
+def test_deh_map_rejects_bad_schemas():
+    """Fail-fast on malformed maps — no silent fallback to the stock
+    modulator (an empty/garbage map would silently mis-commission a unit)."""
+    with pytest.raises(ValueError, match="lookup"):
+        DEHDevice(setpoint_modulation={"rh_err_coef": 0.01})  # lookup missing
+    with pytest.raises(ValueError, match=">= 2"):
+        DEHDevice(setpoint_modulation={"lookup": {"60": 0.6}})  # 1 point
+    with pytest.raises(ValueError, match="0.*1"):
+        DEHDevice(setpoint_modulation={"lookup": {"40": 0.9, "60": 1.5}})  # > 1
+    with pytest.raises(ValueError, match="unknown"):
+        DEHDevice(setpoint_modulation={"lookup": {"40": 0.9, "60": 0.6},
+                                       "typo_key": 1})  # unknown key
+
+
+def test_deh_map_power_grading_by_setpoint():
+    """P: deeper setpoint -> HIGHER power (identified demand grading),
+    linear in S_DH: P = P_ref * S_DH, no DOE part-load division."""
+    deh = _map_device()
+    out50 = deh.step(22.0, 65.0, 0.012, dt=600.0, deh_setpoint=50.0, is_light=True)
+    out60 = deh.step(22.0, 65.0, 0.012, dt=600.0, deh_setpoint=60.0, is_light=True)
+    assert out50["S_DH"] == pytest.approx(0.80)
+    assert out60["S_DH"] == pytest.approx(0.60)
+    assert out50["P_elec_W"] == pytest.approx(2000.0 * 0.80)
+    assert out60["P_elec_W"] == pytest.approx(2000.0 * 0.60)
+    # Linear law: P ratio equals S_DH ratio exactly (DOE path would deviate)
+    assert (out50["P_elec_W"] / out60["P_elec_W"]) == pytest.approx(0.80 / 0.60)
+
+
+def test_deh_map_rh_err_feedback():
+    """Same setpoint, wetter room -> higher S_DH by rh_err_coef*(RH-sp)."""
+    deh = _map_device(setpoint_modulation={
+        "lookup": {"40": 0.90, "60": 0.60}, "rh_err_coef": 0.01})
+    out = deh.step(22.0, 62.0, 0.012, dt=600.0, deh_setpoint=60.0, is_light=True)
+    assert out["S_DH"] == pytest.approx(0.60 + 0.01 * (62.0 - 60.0))
+
+
+def test_deh_map_dark_table_selected_by_is_light():
+    """is_light=False selects lookup_dark when present."""
+    deh = _map_device()
+    light = deh.step(22.0, 65.0, 0.012, dt=600.0, deh_setpoint=60.0, is_light=True)
+    dark = deh.step(22.0, 65.0, 0.012, dt=600.0, deh_setpoint=60.0, is_light=False)
+    assert light["S_DH"] == pytest.approx(0.60)
+    assert dark["S_DH"] == pytest.approx(0.70)
+
+
+def test_deh_map_constant_smer_moisture():
+    """Settled moisture follows M = smer * P_comp / 3.6e6 — a CONSTANT
+    effective SMER (map mode has no part-load SMER curve by design)."""
+    deh = _map_device()
+    for _ in range(60):  # >> tau_m
+        out = deh.step(22.0, 65.0, 0.012, dt=60.0, deh_setpoint=60.0, is_light=True)
+    assert out["M_deh_kgs"] == pytest.approx(0.5 * out["P_elec_W"] / 3.6e6, rel=1e-6)
+
+
+def test_deh_map_asymmetric_tau_tuple_and_scalar():
+    """tau_q/tau_m accept (rise, fall) tuples for identified asymmetric
+    transients; scalars keep the historical symmetric behaviour."""
+    deh = _map_device(tau_q=(90, 30), tau_m=(120, 20))
+    assert deh.lag_q.tau_rise == pytest.approx(90.0)
+    assert deh.lag_q.tau_fall == pytest.approx(30.0)
+    deh2 = _map_device()  # class default tau_q=90 scalar
+    assert deh2.lag_q.tau_rise == pytest.approx(deh2.lag_q.tau_fall)
+    with pytest.raises(ValueError, match="tau_q"):
+        DEHDevice(tau_q=(90, 0))  # non-positive member rejected
+
+
+def test_deh_map_floor_w_binds():
+    """floor_w: commissioning power floor for high-floor inverter units —
+    a weakly-identified low-S_DH setpoint still draws at least floor_w."""
+    deh = _map_device(setpoint_modulation={"lookup": {"40": 0.9, "80": 0.05}},
+                      floor_w=400.0)
+    out = deh.step(22.0, 85.0, 0.014, dt=600.0, deh_setpoint=80.0, is_light=True)
+    assert out["S_DH"] == pytest.approx(0.05)  # demand grading still reported
+    assert out["P_elec_W"] == pytest.approx(400.0)  # floor binds over 100 W
+
+
+def test_deh_map_absent_keeps_stock_default():
+    """No map -> stock modulator untouched (backward compatibility)."""
+    deh = DEHDevice()
+    assert deh.setpoint_modulation is None
+    assert deh.control == "vfd"  # legacy default path

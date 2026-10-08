@@ -648,6 +648,20 @@ class DEHConfig:
     #   VFD dehumidifier: SMER FALLS as speed falls (DOE 87 FR 35286 — opposite
     #   of AC; dew-point approach gets worse at low speed).  SMER(m) curve in
     #   dehumidifier.py; constant-SMER assumption valid only for m≥0.75.
+    setpoint_modulation: Optional[dict] = None
+    #   Identified setpoint-modulation map (commissioning mode).  When set,
+    #   overrides the generic vfd/on_off modulator inside a measured lookup:
+    #   S_DH = clip(interp(deh_setpoint, lookup[|lookup_dark])
+    #               + rh_err_coef·(RH_z − deh_setpoint), 0, 1);
+    #   P_comp = P_full·S_DH (linear — no DOE part-load division);
+    #   M = smer·P_comp/3.6e6 (constant EFFECTIVE SMER that absorbs
+    #   infiltration / HVAC-latent / transpiration residual error — NOT a
+    #   physical SMER claim).  Schema (fail-fast, unknown keys rejected):
+    #   {"lookup": {sp: S, ...} ≥2 pts, values in [0,1],
+    #    "lookup_dark": optional dark-period table,
+    #    "rh_err_coef": float, default 0.0}.
+    #   None → stock vfd/on_off behaviour (byte-identical legacy path).
+    floor_w: float = 0.0  # min electrical power while ON (W); commissioning floor for high-floor inverter units; 0 = off
     min_on_s: float = 180.0  # anti-short-cycle min compressor run time (s); typical 120-300
     min_off_s: float = 180.0  # anti-short-cycle min compressor stop time (s); typical 120-300
     fan_power_w: float = 40.0  # fan power (W); metered OUTSIDE smer (P2-5), fan heat stays in room; ≈2% of full load
