@@ -1,0 +1,48 @@
+# UC Davis butterhead lettuce PFAL environment benchmark config (DIAGNOSTIC v1).
+# Derived from preset-609 physics. Room geometry, light regime and setpoints are
+# ASSUMED values — the public dataset (Karimzadeh 2024, NFT two-tier rack, 70
+# heads, 2024-02-21..03-23) carries no lighting/power/room metadata. Every
+# assumption is surfaced in the benchmark report scope section; do not cite
+# numbers from this config as measured facts.
+name: uc_davis_lettuce_2024
+
+site:
+  lat: 38.545          # UC Davis campus, Davis CA
+  lon: -121.74
+  tz_hours: -8.0       # PST (experiment ran Feb-Mar, no DST inside window)
+  year: 2024           # ERA5 archive year covering the observed window
+
+envelope:
+  U_wall_A: 15.0       # ~3x3x2.8 m insulated lab room, 100 mm PIR panel
+  A_window: 0.0        # interior PFAL rack, no glazing
+  eta_solar: 0.15
+  ach: 1.0             # ventilated university lab (not an airtight production
+                       # PFAL); v1 used 0.1 which pinned RH at the DEH setpoint
+  permeance: 0.0
+  V_room: 25.0         # assumed shell around the two-tier rack
+  C_z: 300.0           # Wh/K (ODE contract). 25 m3 air ~8 + rack/nutrient/
+                       # equipment mass ~290. v1 erred with 30000 (J/K slip,
+                       # x3600 thermal inertia -> flat-lined T_z; see report)
+
+led:
+  light_start_hour: 8  # inferred from observed diel T (rise at 08:00), v1 report
+  photoperiod_hours: 14.0
+  heat_fraction: 1.0
+  ppfd_target: 250.0   # butterhead commercial band (ASSUMED)
+  covered_area: 5.8    # two tiers x (1.2 m x 2.4 m)
+  efficacy: 2.5
+
+setpoints:
+  T_light: 24.5        # inferred from observed light-phase T (24-25 C)
+  T_dark: 18.5         # inferred from observed dark-phase T (18.3-19.0 C)
+  RH: 70.0             # NOT matched: observed room is dry (43-52%); RH channel
+                       # stays DIAGNOSTIC pending ventilation assumption work
+
+hvac:
+  auto_size: true      # size from design load; do not inherit 609 fixed powers
+
+deh:
+  auto_size: true
+
+# transpiration: default model-coupled van_henten (the physics under test)
+# crop_cycle_days: default 30.0 == observed DAT span 0..30

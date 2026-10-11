@@ -41,7 +41,6 @@ MODULES = [
     ("vfed.pvbes.energy_system", "EnergySystem"),
     ("vfed.agent.evaluator", "agent_evaluate"),
     ("vfed.weather.weather_bridge", "fetch_weather"),
-    ("vfed.weather.geocode", "geocode_city"),
 ]
 
 
