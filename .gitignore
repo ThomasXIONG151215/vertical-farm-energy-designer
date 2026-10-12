@@ -44,3 +44,16 @@ research/**/*.csv
 research/**/*.epw
 research/**/*.zip
 research/**/*.xlsm
+
+# External datasets (2026-10-11): raw data files are regeneratable from
+# upstream sources (see data/植物工厂运行数据资源清单.md), only track the
+# per-dataset documentation files (数据说明.md)
+data/datasets/**
+!data/datasets/**/
+!data/datasets/**/*.md
+
+# Original UC Davis archive (unpacked copy lives in data/datasets/)
+data/Lettuce_growth.zip
+
+# EnergyPlus benchmark outputs (regeneratable: run_energyplus.py / build_idf.py)
+scripts/benchmarks/bestest/energyplus/out*/

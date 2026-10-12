@@ -1,0 +1,276 @@
+!- What: ASHRAE 140 BESTEST Case 900FF (E+ re-implementation)
+!- Source: LBNL modelica-buildings Buildings/ThermalZones/Detailed/Validation/BESTEST (2022 rev, issues #3005/#3396)
+!- Geometry: 6x8x2.7 m, south window 12 m2, 200 W int gain, 0.414 ACH, free float
+!- Gate: annual loads / FF stats must land in the 140-2020 bands (run_energyplus.py)
+
+  Material,
+    WOOD-SIDING, !- Name
+    Rough, !- Roughness
+    0.0090, !- Thickness {m}
+    0.140, !- Conductivity {W/m-K}
+    530.0, !- Density {kg/m3}
+    900.0, !- Specific Heat {J/kg-K}
+    0.9, !- Thermal Absorptance
+    0.6, !- Solar Absorptance
+    0.6; !- Visible Absorptance
+  Material,
+    WALL-INSUL, !- Name
+    Rough, !- Roughness
+    0.0615, !- Thickness {m}
+    0.040, !- Conductivity {W/m-K}
+    10.0, !- Density {kg/m3}
+    1400.0, !- Specific Heat {J/kg-K}
+    0.9, !- Thermal Absorptance
+    0.6, !- Solar Absorptance
+    0.6; !- Visible Absorptance
+  Material,
+    WALL-INNER, !- Name
+    Rough, !- Roughness
+    0.1000, !- Thickness {m}
+    0.510, !- Conductivity {W/m-K}
+    1400.0, !- Density {kg/m3}
+    1000.0, !- Specific Heat {J/kg-K}
+    0.9, !- Thermal Absorptance
+    0.6, !- Solar Absorptance
+    0.6; !- Visible Absorptance
+  Material,
+    ROOF-DECK, !- Name
+    Rough, !- Roughness
+    0.0190, !- Thickness {m}
+    0.140, !- Conductivity {W/m-K}
+    530.0, !- Density {kg/m3}
+    900.0, !- Specific Heat {J/kg-K}
+    0.9, !- Thermal Absorptance
+    0.6, !- Solar Absorptance
+    0.6; !- Visible Absorptance
+  Material,
+    ROOF-INSUL, !- Name
+    Rough, !- Roughness
+    0.1118, !- Thickness {m}
+    0.040, !- Conductivity {W/m-K}
+    12.0, !- Density {kg/m3}
+    840.0, !- Specific Heat {J/kg-K}
+    0.9, !- Thermal Absorptance
+    0.6, !- Solar Absorptance
+    0.6; !- Visible Absorptance
+  Material,
+    ROOF-GYPSUM, !- Name
+    Rough, !- Roughness
+    0.0100, !- Thickness {m}
+    0.160, !- Conductivity {W/m-K}
+    950.0, !- Density {kg/m3}
+    840.0, !- Specific Heat {J/kg-K}
+    0.9, !- Thermal Absorptance
+    0.6, !- Solar Absorptance
+    0.6; !- Visible Absorptance
+  Material:NoMass,
+    FLOOR-INSUL-R, !- Name
+    Rough, !- Roughness
+    25.175, !- Thermal Resistance {m2-K/W}
+    0.9, !- Thermal Absorptance
+    0.6, !- Solar Absorptance
+    0.6; !- Visible
+  Material,
+    FLOOR-MASS, !- Name
+    Rough, !- Roughness
+    0.0800, !- Thickness {m}
+    1.130, !- Conductivity {W/m-K}
+    1400.0, !- Density {kg/m3}
+    1000.0, !- Specific Heat {J/kg-K}
+    0.9, !- Thermal Absorptance
+    0.6, !- Solar Absorptance
+    0.6; !- Visible Absorptance
+
+  Construction,
+    WALL-CASE, !- Name
+    WOOD-SIDING,
+    WALL-INSUL,
+    WALL-INNER;
+  Construction,
+    ROOF-CASE, !- Name
+    ROOF-DECK,
+    ROOF-INSUL,
+    ROOF-GYPSUM;
+  Construction,
+    FLOOR-CASE, !- Name
+    FLOOR-INSUL-R,
+    FLOOR-MASS;
+  Construction,
+    WIN-CASE, !- Name
+    GLASS-CASE,
+    AIR-GAP-CASE,
+    GLASS-CASE;
+
+  WindowMaterial:Glazing,
+    GLASS-CASE, !- Name
+    SpectralAverage, !- Optical Data Type
+    , !- Data File
+    0.003048, !- Thickness {m}
+    0.834, !- Solar Transmittance
+    0.075, !- Front Solar Reflectance
+    0.075, !- Back Solar Reflectance
+    0.834, !- Visible Transmittance
+    0.075, !- Front Visible Reflectance
+    0.075, !- Back Visible Reflectance
+    0.0, !- Infrared Transmittance
+    0.84, !- Front Emissivity
+    0.84, !- Back Emissivity
+    1.0, !- Conductivity {W/m-K}
+    1.0; !- Dirt Correction
+  WindowMaterial:Gas,
+    AIR-GAP-CASE, !- Name
+    Air, 0.012; !- Gas Type, Thickness
+
+  Version,23.1;
+  Timestep,6;
+  GlobalGeometryRules, LowerLeftCorner, Counterclockwise, Relative, Relative;
+  Building,
+    BESTEST-CASE, !- Name
+    0, !- North Axis
+    Country, !- Terrain
+    , !- Loads Convergence
+    , !- Temp Convergence
+    FullInteriorAndExterior, !- Solar Distribution
+    25, !- Max Warmup Days
+    6; !- Min Warmup
+  SimulationControl, No, No, No, No, Yes;
+  RunPeriod,
+    RP, !- Name
+    1, 1, , 12, 31, , !- begin m/d/yr, end m/d/yr
+    Sunday, !- Day of Week
+    Yes, !- Use Weather File DOW
+    Yes, !- Use Weather File Holidays
+    Yes; !- Use Weather File Daylight Saving
+  Zone,
+    ZONE1, !- Name
+    0, 0, 0, 0, !- dir/x/y/z
+    , !- Zone Type
+    1, !- Multiplier
+    , !- Ceiling Height
+    , !- Volume
+    48.0, !- Floor Area
+    , !- Inside Convection
+    , !- Outside Convection
+    Yes; !- Part of Total Floor Area
+
+  BuildingSurface:Detailed,
+    FLOOR, !- Name
+    Floor, !- Surface Type
+    FLOOR-CASE, !- Construction Name
+    ZONE1, !- Zone Name
+    , !- Space Name
+    Outdoors, !- Outside Boundary Condition
+    , !- Outside Boundary Condition Object
+    NoSun, !- Sun Exposure
+    NoWind, !- Wind Exposure
+    , !- View Factor to Ground
+    4, !- Number of Vertices
+    0.000, 0.000, 0.000,
+    0.000, 8.000, 0.000,
+    6.000, 8.000, 0.000,
+    6.000, 0.000, 0.000;
+  BuildingSurface:Detailed,
+    ROOF, !- Name
+    Roof, !- Surface Type
+    ROOF-CASE, !- Construction Name
+    ZONE1, !- Zone Name
+    , !- Space Name
+    Outdoors, !- Outside Boundary Condition
+    , !- Outside Boundary Condition Object
+    SunExposed, !- Sun Exposure
+    WindExposed, !- Wind Exposure
+    , !- View Factor to Ground
+    4, !- Number of Vertices
+    0.000, 0.000, 2.700,
+    6.000, 0.000, 2.700,
+    6.000, 8.000, 2.700,
+    0.000, 8.000, 2.700;
+  BuildingSurface:Detailed,
+    SOUTH-WALL, !- Name
+    Wall, !- Surface Type
+    WALL-CASE, !- Construction Name
+    ZONE1, !- Zone Name
+    , !- Space Name
+    Outdoors, !- Outside Boundary Condition
+    , !- Outside Boundary Condition Object
+    SunExposed, !- Sun Exposure
+    WindExposed, !- Wind Exposure
+    , !- View Factor to Ground
+    4, !- Number of Vertices
+    0.000, 0.000, 0.000,
+    6.000, 0.000, 0.000,
+    6.000, 0.000, 2.700,
+    0.000, 0.000, 2.700;
+  BuildingSurface:Detailed,
+    NORTH-WALL, !- Name
+    Wall, !- Surface Type
+    WALL-CASE, !- Construction Name
+    ZONE1, !- Zone Name
+    , !- Space Name
+    Outdoors, !- Outside Boundary Condition
+    , !- Outside Boundary Condition Object
+    SunExposed, !- Sun Exposure
+    WindExposed, !- Wind Exposure
+    , !- View Factor to Ground
+    4, !- Number of Vertices
+    6.000, 8.000, 0.000,
+    0.000, 8.000, 0.000,
+    0.000, 8.000, 2.700,
+    6.000, 8.000, 2.700;
+  BuildingSurface:Detailed,
+    EAST-WALL, !- Name
+    Wall, !- Surface Type
+    WALL-CASE, !- Construction Name
+    ZONE1, !- Zone Name
+    , !- Space Name
+    Outdoors, !- Outside Boundary Condition
+    , !- Outside Boundary Condition Object
+    SunExposed, !- Sun Exposure
+    WindExposed, !- Wind Exposure
+    , !- View Factor to Ground
+    4, !- Number of Vertices
+    6.000, 0.000, 0.000,
+    6.000, 8.000, 0.000,
+    6.000, 8.000, 2.700,
+    6.000, 0.000, 2.700;
+  BuildingSurface:Detailed,
+    WEST-WALL, !- Name
+    Wall, !- Surface Type
+    WALL-CASE, !- Construction Name
+    ZONE1, !- Zone Name
+    , !- Space Name
+    Outdoors, !- Outside Boundary Condition
+    , !- Outside Boundary Condition Object
+    SunExposed, !- Sun Exposure
+    WindExposed, !- Wind Exposure
+    , !- View Factor to Ground
+    4, !- Number of Vertices
+    0.000, 8.000, 0.000,
+    0.000, 0.000, 0.000,
+    0.000, 0.000, 2.700,
+    0.000, 8.000, 2.700;
+  FenestrationSurface:Detailed,
+    WIN-S, !- Name
+    Window, !- Class
+    WIN-CASE, !- Construction
+    SOUTH-WALL, !- Building Surface
+    , !- Outside Facing Env
+    , !- View Factor to Ground
+    , !- Frame/Divider
+    1, !- Multiplier
+    4, !- Number of Vertices
+    0.000, 0, 0.350, 6.000, 0, 0.350, 6.000, 0, 2.350, 0.000, 0, 2.350;
+
+  Schedule:Compact,
+    ALWAYS, Fraction, Through: 12/31, For: AllDays, Until: 24:00, 1.0;
+  OtherEquipment,
+    INT-GAIN, None, ZONE1, ALWAYS, EquipmentLevel, 200.0, , , 0.0, 0.6, 0.0; !- 200W, 0 latent, 0.6 radiant (120W rad + 80W conv), 0 lost
+  ZoneInfiltration:DesignFlowRate,
+    INFIL, ZONE1, ALWAYS, AirChanges/Hour, 0, 0, 0, 0.414, 1;
+!- E+ 23.1: ACH value is field 8; field 5 is Design Flow Rate
+
+
+  Output:VariableDictionary, IDF;
+  Output:Variable, *, Zone Mean Air Temperature, Hourly;
+  Output:Variable, *, Infiltration Latent Heat Loss Energy, Hourly;
+  Output:Variable, *, Infiltration Latent Heat Gain Energy, Hourly;

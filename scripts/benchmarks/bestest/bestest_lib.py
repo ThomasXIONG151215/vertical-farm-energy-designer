@@ -639,8 +639,17 @@ def run_case(
     h_c: Optional[float] = None,
     equip_rad_w: Optional[float] = None,
     mod_band: Optional[float] = None,
+    hourly_out: Optional[Dict[str, np.ndarray]] = None,
+    summary_out: Optional[Dict] = None,
+    wet: bool = False,
 ) -> CaseResult:
     """Run one BESTEST case on the dual-year weather and return year-2 KPIs.
+
+    ``wet=True`` (Case 600p, the in-house plant-factory variant) enables the
+    wet path on the Case 600 skeleton: constant transpiration 7.08 L/day
+    (~200 W latent), DEH 15 L/day / SMER 2.0 / on_off, RH setpoint 60 --
+    mirroring the E+ case600p.idf DX humidistat cross-check (DIAGNOSTIC
+    only: vfed bang-bang vs E+ cycling PLR).
 
     Instrumentation (all restored in ``finally``):
       * ``vfed.physics.ode._DEFAULT_T_MAX = t_max`` -- the engine never passes
@@ -670,15 +679,18 @@ def run_case(
     if equip_rad_w is None:
         equip_rad_w = 120.0 if (rc3 or fd) else 0.0
 
+    # Case 600p shares the 600 skeleton parameters (INITIAL tables only
+    # key the base case names).
+    base_case = case[:-1] if case.endswith("p") else case
     if fd:
-        init = dict(INITIAL_FD[case])
+        init = dict(INITIAL_FD[base_case])
     elif rc3:
-        init = dict(INITIAL_RC3[case])
+        init = dict(INITIAL_RC3[base_case])
     elif rc:
         # defaults = the adopted (calibrated) section INITIAL_RC set
-        init = dict(INITIAL_RC[case])
+        init = dict(INITIAL_RC[base_case])
     else:
-        init = dict(INITIAL[case])
+        init = dict(INITIAL[base_case])
     cz = init["cz"] if cz is None else cz
     ua = init["ua"] if u_wall_a is None else u_wall_a
     eta = init["eta"] if eta_solar is None else eta_solar
@@ -707,6 +719,22 @@ def run_case(
         h_c=init.get("h_c", 3.0) if h_c is None else h_c,
         mod_band_c=1.0 if mod_band is None else mod_band,
     )
+    if wet:
+        # Case 600p wet path (E+ case600p.idf parity): latent source 7.08
+        # L/day ~= 200 W (E+ OtherEquipment latent 1.0), DEH 15 L/day /
+        # SMER 2.0 L/kWh == DX Rated Energy Factor, RH 60.  control="vfd"
+        # is the primary comparison: E+ DX modulates capacity via PLR with
+        # a constant Energy Factor (flat curves), so the apples-to-apples
+        # vfed counterpart is the variable-speed proportional-band mode
+        # (its DOE part-load SMER penalty smer_mod(m)=0.30+1.0467m-0.3467m^2
+        # is the documented model difference -- on_off ran 6.1x hot).
+        d["deh"] = {
+            "M_deh_nom": 15.0, "smer": 2.0, "control": "vfd",
+            "auto_size": False, "fan_power_w": 0.0,
+            "smer_curve": False, "smer_map": False,
+        }
+        d["transpiration"] = {"method": "daily", "daily_water_L": 7.08}
+        d["setpoints"]["RH"] = 60.0
     project = DesignProject.from_dict(d)
     dt = project.space.timestep_s
 
@@ -762,6 +790,16 @@ def run_case(
     t2 = t_z[n:]  # year 2 = periodic steady state
     # heat_wh/cool_wh are hourly energy in Wh; kWh needs /1000.
     h2, c2 = heat_wh[n:] / 1000.0, cool_wh[n:] / 1000.0
+    if hourly_out is not None:
+        hourly_out["heat_kwh"] = h2
+        hourly_out["cool_kwh"] = c2
+        hourly_out["t_z"] = t2
+        hourly_out["x_d"] = np.asarray(
+            result.timeseries["X_d"], dtype=float)[n:]
+        rh_z = np.asarray(result.timeseries["RH_z"], dtype=float)
+        e_deh = np.asarray(result.timeseries["E_deh_Wh"], dtype=float)
+        hourly_out["rh_z"] = rh_z[n:]
+        hourly_out["deh_kwh"] = e_deh[n:] / 1000.0
 
     clip = int(result.summary.get("moisture_clamp_stats", {}).get("temp_clip_events", 0))
     extra: Dict[str, float] = {
@@ -808,6 +846,8 @@ def run_case(
             equip_conv_w=80.0,
             equip_rad_w=float(rad_holder["w"]),
         )
+    if summary_out is not None:
+        summary_out.update(result.summary)
     return CaseResult(
         case=case,
         annual_heating_kwh=float(h2.sum()),
