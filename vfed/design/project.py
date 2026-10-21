@@ -46,6 +46,7 @@ __all__ = [
     "EnvelopeConfig",
     "HVACConfig",
     "DEHConfig",
+    "CO2Config",
     "LEDConfig",
     "VanHentenConfig",
     "TranspirationConfig",
@@ -102,6 +103,13 @@ HARD_LIMITS: Dict[str, Tuple[float, float]] = {
     "T_dark": (10, 28),
     "RH": (40, 90),
     "co2_ppm": (300, 2000),
+    # CO2 supplement (M1): outdoor/infiltration CO2, enrichment deadband
+    # half-width and injector capacity.  Registered in PARAM_PATH_MAP so
+    # sweep can scan them (the setpoint itself is swept via setpoints.
+    # co2_ppm, whose band above applies to BOTH semantics).
+    "outdoor_co2_ppm": (350, 800),
+    "co2_band_ppm": (10, 300),
+    "co2_capacity_g_per_h": (0, 10000),
     "crop_cycle_days": (15, 60),
     "pv_area": (0, 1000),
     "battery": (0, 500),
@@ -120,6 +128,9 @@ PARAM_PATH_MAP: Dict[str, Tuple[str, str]] = {
     "RH": ("setpoints", "RH"),
     "co2_ppm": ("setpoints", "co2_ppm"),
     "crop_cycle_days": ("setpoints", "crop_cycle_days"),
+    "outdoor_co2_ppm": ("envelope", "outdoor_co2_ppm"),
+    "co2_band_ppm": ("co2", "band_ppm"),
+    "co2_capacity_g_per_h": ("co2", "capacity_g_per_h"),
 }
 
 # PVBES sizing keys (pv_area / battery) have no nested section: their YAML
@@ -495,6 +506,13 @@ class EnvelopeConfig:
     #   sensible-only HRV (plate exchanger); > 0 = enthalpy ERV (membrane /
     #   enthalpy wheel, typically 0.45-0.75) that also recovers moisture:
     #   net fresh-air latent load = (1 - eps_l)*m_v*(W_ext - W_z)*h_fg.
+    outdoor_co2_ppm: float = 420.0
+    #   Outdoor / make-up air CO2 concentration (ppm).  NOAA GML 2024
+    #   global annual mean ~424 ppm; default 420 (hard limit 350-800;
+    #   urban-enriched sites configure 450-600).  Consumed by the CO2
+    #   concentration balance ONLY when co2.enabled=true (M1: drives the
+    #   ach infiltration exchange channel m_dot*(c_out - c_z)); the
+    #   default (CO2 off) path never reads it -- zero drift.
 
 
 @dataclass
@@ -673,6 +691,68 @@ class DEHConfig:
 
 
 @dataclass
+class CO2Config:
+    """CO2 enrichment device + indoor concentration-balance switch (M1).
+
+    Design proposal: .planning/2026-10-11_co2-model-supplement-proposal.md
+    (§2.3).  ``enabled: false`` (default) is the pre-CO2 legacy path
+    bit-for-bit: the engine integrates no concentration state, steps no
+    injector and appends no output column.  ``enabled: true`` turns on the
+    lumped CO2 mass balance (state = mixing ratio c_z, kg CO2 / kg air;
+    ode.py step_co2), the injector device (devices/co2.py CO2Device) and
+    the additive CO2 output columns.
+
+    M1 source/sink set: injector + crop photosynthesis sink (phi*A_canopy,
+    phi evaluated at the FIXED setpoint concentration via the current Van
+    Henten model -- dynamic concentration feedback is M2) + crop
+    respiration source (resp * 1.465 * A_canopy; dry matter -> CO2 mass,
+    Thornley & Johnson 2000) + ach infiltration exchange
+    m_dot*(c_out - c_z).  The ERV fresh-air channel is an M3 deliverable;
+    vaporisation cooling of the injected gas (~350-570 kJ/kg, i.e. ~5-8 W
+    at 50 g/h) is deliberately ignored (see devices/co2.py docstring; an
+    ``injection_heat`` switch is reserved for a future round).
+
+    Fields
+    ------
+    * ``setpoint_ppm``: enrichment setpoint (ppm).  ``None`` (default)
+      inherits ``setpoints.co2_ppm`` (single source of truth; see the
+      dual-semantics note on ``SetpointConfig.co2_ppm``).
+    * ``band_ppm``: deadband half-width (ppm).  Injector ON below
+      setpoint - band, OFF above setpoint + band (hard limit 10-300).
+    * ``control``: "on_off" (M1; bang-bang cycling at full capacity with
+      min_on/min_off anti-short-cycling).  "vfd" is a planned M2 mode and
+      is rejected here fail-fast.
+    * ``capacity_g_per_h``: maximum injection rate (g/h; hard limit
+      0-10000).  609 check point: ~45 g/h covers a mature canopy's gross
+      photosynthesis at 800 ppm.
+    * ``inject_in_dark``: false (default) = no injection during the dark
+      period (photosynthesis is zero; enrichment has no agronomic
+      benefit -- commercial PFAL practice injects in light only).
+    * ``min_on_s`` / ``min_off_s``: anti-short-cycle times (s) for the
+      on/off valve (CompressorState).
+    * ``power_w``: vaporiser/valve electrical draw (W) counted in P_tot
+      while the injector is commanded ON.
+    * ``tau_s``: first-order lag of the injection rate (s) -- solenoid
+      / vaporiser line response.
+    * ``co2_initial_ppm``: initial indoor concentration (ppm).  ``None``
+      -> the enrichment setpoint when enabled (avoids a start-up
+      transient, mirroring the T_z init-at-setpoint convention).
+    """
+
+    enabled: bool = False
+    setpoint_ppm: Optional[float] = None  # None -> setpoints.co2_ppm
+    band_ppm: float = 50.0
+    control: str = "on_off"
+    capacity_g_per_h: float = 200.0
+    inject_in_dark: bool = False
+    min_on_s: float = 0.0
+    min_off_s: float = 300.0
+    power_w: float = 50.0
+    tau_s: float = 30.0
+    co2_initial_ppm: Optional[float] = None  # None -> setpoint (when enabled)
+
+
+@dataclass
 class LEDConfig:
     power_w: float = 1300.0  # W electrical; EFFECTIVE only when auto_deduce=False (P5-6)
     light_start_hour: int = 6  # hour (0–23) when photoperiod begins
@@ -686,6 +766,15 @@ class LEDConfig:
     ppfd_target: float = 400.0  # µmol/(m²·s)
     covered_area: float = 45.0  # m²
     spectrum: str = "white"  # white | rb_3to1 | rb_4to1 | rb_2to1
+    # P3/A1 (light-temperature coupling): spatial per-layer PPFD
+    # (µmol/(m²·s), one entry per cultivation layer) from an external
+    # ray-traced light model (e.g. gadget/vfed-usd-lab Warp MCRT).  None
+    # (default) = legacy uniform ppfd_target, bit-identical.  When set, the
+    # canopy-mean of the layers drives growth/transpiration (engine uses
+    # LEDDevice.canopy_par_wm2) while power_w keeps driving the
+    # electrical/thermal side — fixture-to-canopy distribution losses become
+    # visible to the crop models but NOT to the energy balance.
+    ppfd_layers: Optional[List[float]] = None
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 
@@ -830,6 +919,13 @@ class TranspirationConfig:
     #   Stomata stay partly open at night (Caird et al. 2007: E_night/E_day
     #   5-15%, up to 30%; Kim et al. 2004: lettuce g_night/g_day 11-39%); PFAL
     #   night VPD ≈ day VPD → take 0.10-0.15.  0.0 = zero in the dark (legacy).
+    light_ref_wm2: Optional[float] = None
+    #   design PAR reference (W/m²) for the runtime light response (P3/A4):
+    #   when set (the engine wires led.par_wm2 here), the light-period factor
+    #   scales linearly as clamp(light_wm2/ref, 0, 1) instead of the legacy
+    #   binary 1.0 — below-design PPFD throttles transpiration (light-limited
+    #   stomata, linear regime), above-design is capped at the design rate
+    #   (conservative for DEH sizing).  None = legacy binary behaviour.
 
 
 @dataclass
@@ -842,7 +938,15 @@ class SetpointConfig:
     # Botrytis risk band) and emit an ASCII WARNING when the count > 0.
     # Reporting-only threshold — no device behaviour depends on it.
     rh_disease_risk_threshold: float = 85.0
-    co2_ppm: float = 800.0  # ambient CO₂ for plant growth model
+    co2_ppm: float = 800.0
+    # CO2 concentration setpoint (ppm) -- DUAL SEMANTICS (CO2 supplement
+    # proposal §2.3, semantic upgrade not a rename):
+    #   * co2.enabled = false (default): fixed ambient CO2 fed to the Van
+    #     Henten growth model's CO2 response curve all year (legacy
+    #     behaviour, unchanged).
+    #   * co2.enabled = true: enrichment target for the dynamic indoor
+    #     concentration balance (co2.setpoint_ppm = null, the default,
+    #     inherits THIS value so there is a single source of truth).
     crop_cycle_days: float = 30.0  # harvest interval (resets canopy dry weight)
 
 
@@ -938,6 +1042,7 @@ class DesignProject:
     envelope: EnvelopeConfig = field(default_factory=EnvelopeConfig)
     hvac: HVACConfig = field(default_factory=HVACConfig)
     deh: DEHConfig = field(default_factory=DEHConfig)
+    co2: CO2Config = field(default_factory=CO2Config)
     led: LEDConfig = field(default_factory=LEDConfig)
     transpiration: TranspirationConfig = field(default_factory=TranspirationConfig)
     setpoints: SetpointConfig = field(default_factory=SetpointConfig)
@@ -1040,6 +1145,15 @@ class DesignProject:
                 _tar.pop("export_price", None)
             if not _tar:
                 d.pop("tariff", None)
+        # CO2 supplement (M1): None sentinels (setpoint_ppm ->
+        # setpoints.co2_ppm, co2_initial_ppm -> setpoint) are omitted on
+        # serialization and re-derived on reload -- same roundtrip rule as
+        # the tariff/capital sentinels above.
+        _co2 = d.get("co2")
+        if isinstance(_co2, dict):
+            for _k in ("setpoint_ppm", "co2_initial_ppm"):
+                if _co2.get(_k) is None:
+                    _co2.pop(_k, None)
         return d
 
     def save(self, path) -> None:
@@ -1068,6 +1182,7 @@ class DesignProject:
             "envelope",
             "hvac",
             "deh",
+            "co2",
             "led",
             "transpiration",
             "setpoints",
@@ -1645,6 +1760,25 @@ class DesignProject:
             raise ValueError(
                 f"led.spectrum must be one of " f"white|rb_3to1|rb_4to1|rb_2to1, got {_spectrum}"
             )
+        # P3/A1: optional per-layer PPFD from an external ray-traced light
+        # model — numeric, non-empty, physically bounded (0, 2000] µmol/(m²·s).
+        _layers = led_cfg.get("ppfd_layers")
+        if _layers is not None:
+            if not isinstance(_layers, (list, tuple)) or len(_layers) == 0:
+                raise ValueError(
+                    "led.ppfd_layers must be a non-empty list of per-layer "
+                    f"PPFD values in umol/(m^2*s), got {_layers!r}"
+                )
+            for _i, _v in enumerate(_layers):
+                if (
+                    isinstance(_v, bool)
+                    or not isinstance(_v, (int, float))
+                    or not (0.0 < float(_v) <= 2000.0)
+                ):
+                    raise ValueError(
+                        f"led.ppfd_layers[{_i}] must be a number in (0, 2000] "
+                        f"umol/(m^2*s), got {_v!r}"
+                    )
 
         # ── design space: objective whitelist + range structure + timestep ──
         space_cfg = sub(DesignSpace, d.get("space", {}), yaml_path="space")
@@ -2031,12 +2165,78 @@ class DesignProject:
                 f"uncontrolled infiltration (no heat recovery)."
             )
 
+        # ── CO2 supplement (M1): fail-fast config guards ──
+        # The numeric bands (outdoor_co2_ppm / co2.band_ppm /
+        # co2.capacity_g_per_h) are enforced by the HARD_LIMITS guard above
+        # (same table sweep ranges are checked against); this block covers
+        # types, the control whitelist and the device-contract invariants
+        # (capacity / band / tau strictly > 0).
+        co2_cfg = sub(CO2Config, d.get("co2", {}), yaml_path="co2")
+        _co2_enabled = co2_cfg.get("enabled")
+        if _co2_enabled is not None and not isinstance(_co2_enabled, bool):
+            raise ValueError(
+                f"co2.enabled must be a boolean (true/false), got "
+                f"{type(_co2_enabled).__name__}: {_co2_enabled!r}. true turns "
+                f"on the indoor CO2 concentration balance and the enrichment "
+                f"injector device."
+            )
+        _co2_dark = co2_cfg.get("inject_in_dark")
+        if _co2_dark is not None and not isinstance(_co2_dark, bool):
+            raise ValueError(
+                f"co2.inject_in_dark must be a boolean (true/false), got "
+                f"{type(_co2_dark).__name__}: {_co2_dark!r}. false (default) "
+                f"holds injection during the dark period (no photosynthesis "
+                f"= no agronomic benefit)."
+            )
+        # M1 whitelist: "vfd" (proportional-band modulation, the DEH dual)
+        # is a planned M2 mode and must not silently fall back to on_off.
+        _co2_control = co2_cfg.get("control")
+        if _co2_control is not None and _co2_control not in ("on_off",):
+            raise ValueError(
+                f"co2.control must be 'on_off' (M1: bang-bang cycling at full "
+                f"capacity with min_on_s/min_off_s anti-short-cycling), got "
+                f"{_co2_control!r}. Proportional 'vfd' modulation is a planned "
+                f"follow-up mode."
+            )
+        _require_nonnegative(["min_on_s", "min_off_s", "power_w"], co2_cfg, "co2")
+        for _f, _unit in (("band_ppm", "ppm"), ("capacity_g_per_h", "g/h"), ("tau_s", "s")):
+            _v = co2_cfg.get(_f)
+            if _v is not None and not (_v > 0.0):
+                raise ValueError(
+                    f"co2.{_f} must be > 0 {_unit}, got {_v}"
+                )
+        # Setpoint / initial concentration: optional overrides of the
+        # setpoints.co2_ppm family -- same 300-2000 ppm band applies (the
+        # enrichment setpoint and the growth-model ambient share one
+        # physical parameter space).
+        for _f in ("setpoint_ppm", "co2_initial_ppm"):
+            _v = co2_cfg.get(_f)
+            if _v is None:
+                continue
+            if isinstance(_v, bool) or not isinstance(_v, (int, float)):
+                raise ValueError(
+                    f"co2.{_f} must be a number (ppm), got "
+                    f"{type(_v).__name__}: {_v!r}"
+                )
+            if not (300.0 <= float(_v) <= 2000.0):
+                raise ValueError(
+                    f"co2.{_f} must be in [300, 2000] ppm (the same band as "
+                    f"setpoints.co2_ppm), got {_v}"
+                )
+        _out_co2 = _env_cfg.outdoor_co2_ppm
+        if isinstance(_out_co2, bool) or not isinstance(_out_co2, (int, float)):
+            raise ValueError(
+                f"envelope.outdoor_co2_ppm must be a number (ppm), got "
+                f"{type(_out_co2).__name__}: {_out_co2!r}"
+            )
+
         project = cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**site_cfg),
             envelope=_env_cfg,
             hvac=HVACConfig(**hvac_cfg),
             deh=DEHConfig(**deh_cfg),
+            co2=CO2Config(**co2_cfg),
             led=LEDConfig(**led_cfg),
             transpiration=TranspirationConfig(**transp_cfg),
             setpoints=SetpointConfig(**sp_cfg),

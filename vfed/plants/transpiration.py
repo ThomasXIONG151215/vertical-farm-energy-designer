@@ -103,6 +103,9 @@ class TranspirationModel:
     #   light-period rate (all methods).  Physical basis: Caird et al. 2007
     #   (E_night/E_day 5-15%, up to 30%) × plant-factory night VPD ≈ day VPD
     #   → take 0.10-0.15.  0.0 restores the old "zero in the dark" behaviour.
+    light_ref_wm2: Optional[float] = None  # design PAR reference (W/m²);
+    #   see TranspirationConfig.light_ref_wm2 — the engine wires
+    #   led.par_wm2 here so the runtime factor is relative to design light.
 
     def step(
         self,
@@ -122,7 +125,24 @@ class TranspirationModel:
         not multiply it by dt again when accumulating water — that would
         double-count the time integration.
         """
-        light_factor = 1.0 if is_light else self.dark_transpiration_frac
+        # P3/A4 (light-temperature coupling): scale the light-period factor
+        # by the PAR actually reaching the canopy relative to the design
+        # reference (the engine wires led.par_wm2 into light_ref_wm2).
+        # Linear in the light-limited regime (PFAL lettuce stomata respond
+        # ~linearly below design PPFD), clamped at 1.0 so an above-design
+        # layer never exceeds the DEH design rate.  light_ref_wm2 unset or
+        # light_wm2 not supplied = legacy binary factor (bit-identical).
+        if is_light:
+            if (
+                light_wm2 is not None
+                and self.light_ref_wm2 is not None
+                and self.light_ref_wm2 > 0.0
+            ):
+                light_factor = min(1.0, max(0.0, light_wm2 / self.light_ref_wm2))
+            else:
+                light_factor = 1.0
+        else:
+            light_factor = self.dark_transpiration_frac
         area = self.area_m2
         if self.method == "van_henten":
             # Fallback only on direct TranspirationModel use — the engine

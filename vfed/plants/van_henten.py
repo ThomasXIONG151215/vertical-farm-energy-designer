@@ -107,6 +107,31 @@ class VanHenten:
         light_response = 1.0 - __import__("math").exp(-p["c_pl_d"] * X_d)
         return light_response * num / den
 
+    def fluxes(self, T_z: float, light: float, X_d: float) -> tuple:
+        """Instantaneous canopy fluxes at the given state, WITHOUT stepping.
+
+        Returns ``(phi, resp)``:
+          * ``phi``  -- canopy gross photosynthesis rate (kg CO2/(m2*s)),
+            the same quantity ``step()`` integrates (``_phi_phot_c``);
+          * ``resp`` -- dark-respiration rate (kg dry matter/(m2*s)), the
+            same Q10=2 van't Hoff term ``step()`` subtracts.
+
+        Read-only helper so the engine's CO2 mass balance (M1) can take
+        the photosynthesis sink / respiration source at the step-start
+        state while ``step()`` keeps advancing the biomass with the
+        identical numbers.  The expressions are literally those of
+        ``step()`` (shared code path, bitwise identical default path).
+        """
+        p = self.params
+        phi = self._phi_phot_c(X_d, T_z, light)
+        # Dark-respiration temperature response: van't Hoff / Q10 convention,
+        # Q10 = 2, reference T_ref = 25 °C → 2^((T - 25)/10) ≡ 2^(0.1·T - 2.5)
+        # (rate doubles every +10 °C).  Consistent with the 25 °C basis of
+        # c_resp_d.  Reference: van't Hoff (1884); standard plant-respiration
+        # practice, e.g. Thornley & Johnson (2000).
+        resp = p["c_resp_d"] * max(X_d, 0.0) * (2.0 ** (0.1 * T_z - 2.5))
+        return phi, resp
+
     def step(self, T_z: float, light: float, X_d: float, dt: float = 60.0) -> tuple[float, float]:
         """Advance the biomass state by *dt* seconds.
 
@@ -128,15 +153,8 @@ class VanHenten:
         X_d_new : float
             Updated dry weight (kg/m²).
         """
-        p = self.params
-        phi = self._phi_phot_c(X_d, T_z, light)
-        # Dark-respiration temperature response: van't Hoff / Q10 convention,
-        # Q10 = 2, reference T_ref = 25 °C → 2^((T - 25)/10) ≡ 2^(0.1·T - 2.5)
-        # (rate doubles every +10 °C).  Consistent with the 25 °C basis of
-        # c_resp_d.  Reference: van't Hoff (1884); standard plant-respiration
-        # practice, e.g. Thornley & Johnson (2000).
-        resp = p["c_resp_d"] * max(X_d, 0.0) * (2.0 ** (0.1 * T_z - 2.5))
-        dX_d = p["c_alpha_beta"] * phi - resp
+        phi, resp = self.fluxes(T_z, light, X_d)
+        dX_d = self.params["c_alpha_beta"] * phi - resp
         X_d_new = max(0.0, X_d + dX_d * dt)
         return dX_d, X_d_new
 

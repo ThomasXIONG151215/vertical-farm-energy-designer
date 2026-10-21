@@ -504,7 +504,9 @@ def test_auto_size_delegates_to_transpiration_model():
         p = preset_609()
         p.transpiration.method = method
         p.deh.auto_size = True
-        _, _, deh, _, _, _ = _build_devices(p)
+        # (7-tuple since the CO2 M1 supplement: env, hvac, deh, led,
+        # transp, ode, co2_dev)
+        _, _, deh, _, _, _, _ = _build_devices(p)
         assert deh.P_ref > 0.0, f"method={method}"
 
     # per-plant family needs a non-zero plant count for a positive design load.
@@ -513,7 +515,7 @@ def test_auto_size_delegates_to_transpiration_model():
         p.transpiration.method = method
         p.transpiration.plant_count = 100
         p.deh.auto_size = True
-        _, _, deh, _, _, _ = _build_devices(p)
+        _, _, deh, _, _, _, _ = _build_devices(p)
         assert deh.P_ref > 0.0, f"method={method}"
 
 

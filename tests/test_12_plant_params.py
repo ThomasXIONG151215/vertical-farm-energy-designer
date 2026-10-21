@@ -41,7 +41,7 @@ def test_plants_per_m2_derives_plant_count_in_engine():
     p = DesignProject.from_dict(
         {"transpiration": {"method": "per_plant", "plants_per_m2": 25.0}}
     )
-    _, _, _, _, transp, _ = _build_devices(p)
+    _, _, _, _, transp, _, _ = _build_devices(p)
     assert transp.plant_count == 1125
 
 
@@ -55,7 +55,7 @@ def test_plants_per_m2_derivation_tracks_covered_area():
             "transpiration": {"method": "per_plant", "plants_per_m2": 25.0},
         }
     )
-    _, _, _, _, transp, _ = _build_devices(p)
+    _, _, _, _, transp, _, _ = _build_devices(p)
     assert transp.plant_count == 2000
 
 
@@ -71,7 +71,7 @@ def test_per_plant_per_period_derivation_and_runtime():
             }
         }
     )
-    _, _, _, _, transp, _ = _build_devices(p)
+    _, _, _, _, transp, _, _ = _build_devices(p)
     assert transp.plant_count == 1125
     rate = transp.step(T_z=22.0, RH_z=65.0, is_light=True, dt=60.0, cycle_day=5.0)
     assert rate > 0.0
@@ -90,7 +90,7 @@ def test_explicit_plant_count_wins_over_density():
             }
         }
     )
-    _, _, _, _, transp, _ = _build_devices(p)
+    _, _, _, _, transp, _, _ = _build_devices(p)
     assert transp.plant_count == 100
 
 
@@ -155,14 +155,14 @@ def test_van_henten_sizing_independent_of_direct_set_defaults():
     from vfed.design.engine import _build_devices
 
     p_new = preset_609()
-    env_a, hvac_a, deh_a, led_a, transp_a, _ = _build_devices(p_new)
+    env_a, hvac_a, deh_a, led_a, transp_a, _, _ = _build_devices(p_new)
 
     p_old = preset_609()
     p_old.transpiration.daily_water_L = 40.0
     p_old.transpiration.ml_per_plant_day = 80.0
     p_old.transpiration.daily_water_L_period = [30.0, 45.0, 60.0]
     p_old.transpiration.ml_per_plant_day_period = [10.0, 30.0, 50.0]
-    env_b, hvac_b, deh_b, led_b, transp_b, _ = _build_devices(p_old)
+    env_b, hvac_b, deh_b, led_b, transp_b, _, _ = _build_devices(p_old)
 
     assert hvac_a.P_rated == pytest.approx(hvac_b.P_rated)
     assert deh_a.P_ref == pytest.approx(deh_b.P_ref)

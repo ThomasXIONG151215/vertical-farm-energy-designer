@@ -25,6 +25,7 @@ from ..physics.ode import RoomODESolver
 from ..physics.shr import DynamicSHR
 from ..devices.hvac import HVACDevice, COPModel, size_hvac
 from ..devices.dehumidifier import DEHDevice, size_deh
+from ..devices.co2 import CO2Device, DM_TO_CO2, mixing_ratio_to_ppm, ppm_to_mixing_ratio
 from ..devices.led import LEDDevice
 from ..plants.transpiration import TranspirationModel
 from ..plants.van_henten import VanHenten
@@ -467,6 +468,7 @@ def _build_devices(p, P_atm: float = 101.325):
         ppfd_target=p.led.ppfd_target,
         covered_area=p.led.covered_area,
         spectrum=p.led.spectrum,
+        ppfd_layers=p.led.ppfd_layers,  # P3/A1: spatial per-layer PPFD (None = uniform)
     )
     led_heat = led.power_w * p.led.heat_fraction
 
@@ -513,6 +515,9 @@ def _build_devices(p, P_atm: float = 101.325):
         stage_factor=_tcfg.stage_factor,
         dark_transpiration_frac=_tcfg.dark_transpiration_frac,
         area_m2=led.covered_area,
+        light_ref_wm2=led.par_wm2,  # P3/A4: design PAR — runtime light factor
+        # scales as clamp(light_wm2/par_wm2, 0, 1); with uniform legacy light
+        # light_wm2 == led.par_wm2 exactly, so the factor is 1.0 bit-identical.
     )
 
     # ── DEH sizing FIRST: HVAC auto-size must include the DEH's net
@@ -559,7 +564,9 @@ def _build_devices(p, P_atm: float = 101.325):
         # P4-11: use the LED-derived PAR flux so the pre-run growth/DEH
         # sizing matches the runtime light state (identical to ppfd/par_factor
         # under auto_deduce, tracks the configured power otherwise).
-        light_wm2 = led.par_wm2
+        # P3/A3: with ppfd_layers set, canopy_par_wm2 is the layer-mean PAR —
+        # the DEH-sizing pre-run sees the same (lower) crop light as runtime.
+        light_wm2 = led.canopy_par_wm2
         # P4-8: half-up rounding so the pre-run step count tracks the runtime
         # time-based harvest schedule (both rounded, no banker's tie).
         n_steps = max(144, int(p.setpoints.crop_cycle_days * 144.0 + 0.5))
@@ -761,7 +768,23 @@ def _build_devices(p, P_atm: float = 101.325):
     ode = RoomODESolver(
         C_z=p.envelope.C_z, V_room=p.envelope.V_room, rho_air=p.envelope.rho_air, P_atm=P_atm
     )
-    return env, hvac, deh, led, transp, ode
+    # ── CO2 enrichment injector (additive, CO2 supplement M1) ──
+    # Constructed ONLY when the project enables the CO2 balance; the
+    # default None keeps every legacy caller's path untouched (zero drift:
+    # the disabled path builds no device and runs no new float op).
+    co2_dev = None
+    if p.co2.enabled:
+        co2_dev = CO2Device(
+            capacity_g_per_h=p.co2.capacity_g_per_h,
+            band_ppm=p.co2.band_ppm,
+            control=p.co2.control,
+            inject_in_dark=p.co2.inject_in_dark,
+            min_on_s=p.co2.min_on_s,
+            min_off_s=p.co2.min_off_s,
+            power_w=p.co2.power_w,
+            tau_s=p.co2.tau_s,
+        )
+    return env, hvac, deh, led, transp, ode, co2_dev
 
 
 class DesignEngine:
@@ -853,7 +876,7 @@ class DesignEngine:
             )
         P_atm = float(np.mean(surface_pressure)) / 10.0  # hPa → kPa
 
-        env, hvac, deh, led, transp, ode = _build_devices(p, P_atm=P_atm)
+        env, hvac, deh, led, transp, ode, co2_dev = _build_devices(p, P_atm=P_atm)
 
         # P0-4 full-load observation thresholds (reporting only): the HVAC
         # draws its rated electrical input when the VFD sits at m = 1
@@ -889,6 +912,32 @@ class DesignEngine:
         T_z = p.setpoints.T_light
         W_z = temp_rh_to_ah(T_z, p.setpoints.RH, pressure_kpa=P_atm)
         RH_z = p.setpoints.RH
+        # ── CO2 concentration state (additive; CO2 supplement M1) ──────
+        # Zero drift: every float below sits behind the co2_on guard; the
+        # disabled default path initialises nothing and never reads these.
+        co2_on = p.co2.enabled
+        co2_sp_ppm = (
+            p.co2.setpoint_ppm if p.co2.setpoint_ppm is not None else p.setpoints.co2_ppm
+        )
+        if co2_on:
+            # Initial concentration at the setpoint (avoids a start-up
+            # transient -- same convention as T_z init at T_light), unless
+            # the user pins co2_initial_ppm.
+            c_z = ppm_to_mixing_ratio(
+                p.co2.co2_initial_ppm
+                if p.co2.co2_initial_ppm is not None
+                else co2_sp_ppm
+            )
+            c_out = ppm_to_mixing_ratio(p.envelope.outdoor_co2_ppm)
+            # Gamma (growth CO2 compensation point, kg/m3) in mixing-ratio
+            # form (kg/kg): divide by the configured room air density.
+            co2_gamma = p.growth.c_Gamma / p.envelope.rho_air
+            # ach infiltration mass flow (envelope.py:812 same expression);
+            # the ERV fresh-air CO2 channel is an M3 deliverable.
+            m_dot_ach_co2 = (
+                p.envelope.ach * p.envelope.V_room * p.envelope.rho_air / 3600.0
+            )
+            air_mass_co2 = p.envelope.V_room * p.envelope.rho_air
         # R28: 2R2C wall mass node starts consistent with the air node
         # (T_m init == T_z init; same warm-up caveat as the air node).
         # R28 step 3: 2R3C surface node T_s likewise.  R28 step 6: FD-wall
@@ -911,6 +960,21 @@ class DesignEngine:
         P_led = np.zeros(n)
         P_misc = np.zeros(n)
         X_d_arr = np.zeros(n)
+        # CO2 supplement (M1): additive output columns + accumulators,
+        # allocated ONLY when enabled (T_m/T_s convention: additive columns
+        # must not leak into the default path).
+        if co2_on:
+            CO2_z_out = np.zeros(n)  # ppm, substep mean
+            S_co2_inj_out = np.zeros(n)  # g/h, substep mean
+            E_co2_Wh = np.zeros(n)  # injector electricity, Wh per hour
+            monthly_co2_kg = np.zeros(12)
+            co2_inj_total_kg = 0.0
+            # Γ-floor clamp accounting (ode.step_co2 return_meta): a clamp
+            # is never silently dropped (P0-2 "钳位不静默").
+            co2_clamp_stats = {
+                "floor_clip_events": 0,
+                "floor_clip_co2_kg": 0.0,
+            }
         # P0-4: hourly "device at rated capacity" flags (reporting layer).
         hvac_cool_full_h = np.zeros(n, dtype=bool)
         hvac_heat_full_h = np.zeros(n, dtype=bool)
@@ -963,6 +1027,11 @@ class DesignEngine:
         # effective-SMER report.  Same basis as the rated ``deh.smer`` (P2-5
         # convention), so effective-vs-rated is an apples-to-apples ratio.
         deh_comp_kwh = 0.0
+        # P3/B3: hourly light-diagnostic accumulators (canopy-mean PPFD and
+        # LED heat released to the room), plain lists appended once per hour —
+        # additive timeseries columns, no physics impact.
+        ppfd_out: List[float] = []
+        qled_out: List[float] = []
         # R34/W3-E (H7): ERV recovered-energy meters (J, absolute values;
         # sensible and latent split).  Zero on the default off path.
         erv_rec_sens_j = 0.0
@@ -973,6 +1042,12 @@ class DesignEngine:
             hvac_wh = 0.0
             deh_wh = 0.0
             led_wh = 0.0
+            ppfd_sum = 0.0  # P3/B3
+            qled_sum = 0.0  # P3/B3
+            co2_ppm_sum = 0.0  # CO2 M1: substep accumulators (co2_on only)
+            co2_inj_sum = 0.0
+            co2_wh = 0.0
+            P_co2_s = 0.0
             t_sum, rh_sum = 0.0, 0.0
             tm_sum = 0.0  # R28: mass-node substep accumulator (RC on only)
             ts_sum = 0.0  # R28 step 3: surface-node substep accumulator (rc3 only)
@@ -1014,7 +1089,10 @@ class DesignEngine:
                     deh_full_s += 1
                 # P4-11: runtime PAR from the LED power state (matches the
                 # DEH-sizing light_wm2 above).
-                light_wm2 = led.par_wm2 if is_light_h else 0.0
+                # P3/A3: canopy_par_wm2 = layer-mean PAR when ppfd_layers is
+                # set (spatial light distribution reaches growth/transpiration),
+                # else the legacy power-derived par_wm2 (bit-identical).
+                light_wm2 = led.canopy_par_wm2 if is_light_h else 0.0
                 E_trans = transp.step(
                     T_z,
                     RH_z,
@@ -1032,6 +1110,45 @@ class DesignEngine:
                 total_water_kg += E_trans * dt
                 monthly_water_kg[month_idx] += E_trans * dt
                 cycle_h += dt / 3600.0
+                # ── CO2 mass balance (additive; CO2 supplement M1) ─────
+                # Sources/sinks at the FIXED setpoint concentration (M1 --
+                # the dynamic growth feedback is M2): injector (lagged
+                # device flux), crop photosynthesis sink phi*A_canopy and
+                # respiration source resp*DM_TO_CO2*A_canopy (phi/resp via
+                # the read-only grow.fluxes at the step-start state, the
+                # same values grow.step integrates below), plus the ach
+                # infiltration exchange m_dot*(c_out - c_z).  Photosynthesis
+                # is capped at the CO2 inventory above Γ available this
+                # sub-step (+ concurrent sources) so the sink can never
+                # draw c_z below the compensation point in one Euler step
+                # (mirror of _limit_removal_by_inventory); step_co2's Γ
+                # floor then reports any residual clamp, never silently.
+                if co2_on:
+                    phi_c, resp_c = grow.fluxes(T_z, light_wm2, X_d)
+                    inj = co2_dev.step(
+                        mixing_ratio_to_ppm(c_z), dt, co2_sp_ppm, is_light_h
+                    )
+                    S_inj_co2 = inj["S_inj_kgs"]
+                    S_resp_co2 = resp_c * DM_TO_CO2 * crop_area
+                    S_phot_co2 = phi_c * crop_area
+                    S_inf_co2 = m_dot_ach_co2 * (c_out - c_z)
+                    co2_sources = S_inj_co2 + S_resp_co2 + max(S_inf_co2, 0.0)
+                    uptake_cap = (c_z - co2_gamma) * air_mass_co2 / dt + co2_sources
+                    if S_phot_co2 > uptake_cap:
+                        S_phot_co2 = max(uptake_cap, 0.0)
+                    S_co2_total = S_inj_co2 + S_resp_co2 - S_phot_co2 + S_inf_co2
+                    c_z, cmeta = ode.step_co2(
+                        c_z, S_co2_total, dt, c_floor=co2_gamma, return_meta=True
+                    )
+                    if cmeta["floor_clipped_kg"] > 0.0:
+                        co2_clamp_stats["floor_clip_events"] += 1
+                        co2_clamp_stats["floor_clip_co2_kg"] += cmeta["floor_clipped_kg"]
+                    P_co2_s = inj["P_elec_W"]
+                    co2_ppm_sum += mixing_ratio_to_ppm(c_z)
+                    co2_inj_sum += S_inj_co2
+                    co2_wh += P_co2_s * dt / 3600.0
+                    co2_inj_total_kg += S_inj_co2 * dt
+                    monthly_co2_kg[month_idx] += S_inj_co2 * dt
                 _, X_d = grow.step(T_z, light_wm2, X_d, dt)
                 # R34/H3: W_ext now computed above the HVAC step (hoisted,
                 # value-identical); the ODE branch below reuses it.
@@ -1207,15 +1324,26 @@ class DesignEngine:
                         (1.0 - removal_scale) * (M_deh_nom + M_hvac_nom) * dt
                     )
                 P_tot = hv["P_elec_W"] + dh["P_elec_W"] + P_led_s + p.equipment_power_w
+                # CO2 M1: injector electricity joins the building total
+                # (guarded add -- the disabled path's P_tot is untouched).
+                if co2_on:
+                    P_tot += P_co2_s
                 energy_wh += P_tot * dt / 3600.0
                 hvac_wh += hv["P_elec_W"] * dt / 3600.0
                 deh_wh += dh["P_elec_W"] * dt / 3600.0
                 led_wh += P_led_s * dt / 3600.0
+                ppfd_sum += light_wm2 * led.par_factor  # P3/B3: W/m² → µmol/(m²·s)
+                qled_sum += Q_LED  # P3/B3: instantaneous LED heat (W)
                 t_sum += T_z
                 rh_sum += RH_z
                 if not (np.isfinite(T_z) and np.isfinite(W_z)):
                     raise RuntimeError(
                         f"NaN/inf state at hour {h}, sub-step {s}: " f"T_z={T_z}, W_z={W_z}"
+                    )
+                if co2_on and not np.isfinite(c_z):
+                    raise RuntimeError(
+                        f"NaN/inf CO2 state at hour {h}, sub-step {s}: "
+                        f"c_z={c_z} (check co2.capacity_g_per_h / growth params)"
                     )
             # An hour counts as "at rated capacity" when >= 99% of its
             # substeps ran at full output (a full hour at rated = rated W
@@ -1236,8 +1364,17 @@ class DesignEngine:
             P_hvac[h] = hvac_wh
             P_deh[h] = deh_wh
             P_led[h] = led_wh
+            # P3/B3: hourly substep-mean canopy PPFD (µmol/(m²·s); 0 in the
+            # dark) and LED heat to the room (W) — additive output columns.
+            ppfd_out.append(ppfd_sum / sub)
+            qled_out.append(qled_sum / sub)
             P_misc[h] = p.equipment_power_w  # W × 1h = Wh
             X_d_arr[h] = X_d
+            # CO2 M1: hourly output columns (substep means; E in Wh).
+            if co2_on:
+                CO2_z_out[h] = co2_ppm_sum / sub
+                S_co2_inj_out[h] = co2_inj_sum / sub * 3.6e6  # kg/s -> g/h
+                E_co2_Wh[h] = co2_wh
 
             # ── monthly accumulation ──
             monthly_energy[month_idx, 0] += load_kw[h]
@@ -1245,6 +1382,12 @@ class DesignEngine:
             monthly_energy[month_idx, 2] += deh_wh / 1000.0
             monthly_energy[month_idx, 3] += led_wh / 1000.0
             monthly_energy[month_idx, 4] += p.equipment_power_w / 1000.0
+            # CO2 M1: injector electricity folded into the "misc" bucket
+            # (energy_breakdown keeps its 4-key structure; documented
+            # attribution) so the monthly components close against the
+            # monthly total.
+            if co2_on:
+                monthly_energy[month_idx, 4] += co2_wh / 1000.0
             monthly_t_sum[month_idx] += T_z_out[h]
             monthly_rh_sum[month_idx] += RH_z_out[h]
             monthly_hours[month_idx] += 1
@@ -1331,6 +1474,12 @@ class DesignEngine:
         deh_kwh = float(np.sum(P_deh)) / 1000.0
         led_kwh = float(np.sum(P_led)) / 1000.0
         misc_kwh = p.equipment_power_w * n / 1000.0
+        # CO2 M1: injector electricity is folded into the "misc" bucket so
+        # energy_breakdown keeps its 4-key structure while the shares still
+        # close against annual_energy_kwh (attribution documented here and
+        # in the CO2 summary block: the device-level column is E_co2_Wh).
+        if co2_on:
+            misc_kwh += float(np.sum(E_co2_Wh)) / 1000.0
         denom = max(total_kwh, 1e-6)
         energy_breakdown = {
             "hvac_pct": round(hvac_kwh / denom, 4),
@@ -1478,6 +1627,27 @@ class DesignEngine:
             },
         }
 
+        # ── CO2 supplement KPIs (additive; co2.enabled only -- the default
+        # path adds no key, keeping the test_11 exact-set pin intact) ──
+        # Statistics run on the same CO2_z_out array that feeds the ts
+        # "CO2_z" column, so recomputing from timeseries.csv reproduces
+        # every value.  co2_below_setpoint_hours mirrors rh_exceed_hours
+        # (strict inequality on the substep-mean hourly value).
+        if co2_on:
+            summary["annual_co2_injected_kg"] = round(co2_inj_total_kg, 3)
+            summary["co2_mean_ppm"] = round(float(np.mean(CO2_z_out)), 1)
+            summary["co2_min_ppm"] = round(float(np.min(CO2_z_out)), 1)
+            summary["co2_max_ppm"] = round(float(np.max(CO2_z_out)), 1)
+            summary["co2_energy_kwh"] = round(float(np.sum(E_co2_Wh)) / 1000.0, 3)
+            summary["co2_below_setpoint_hours"] = int(
+                np.count_nonzero(CO2_z_out < co2_sp_ppm)
+            )
+            summary["co2_setpoint_ppm"] = co2_sp_ppm
+            summary["co2_clamp_stats"] = {
+                "floor_clip_events": co2_clamp_stats["floor_clip_events"],
+                "floor_clip_co2_kg": round(co2_clamp_stats["floor_clip_co2_kg"], 6),
+            }
+
         # ── P1-4: RH compliance / disease-risk KPIs (additive, reporting
         # only) ── How well the RH setpoint was actually held, and how long
         # the room sat in the grey-mould (Botrytis) disease-risk band — the
@@ -1533,6 +1703,10 @@ class DesignEngine:
             "avg_T_z": monthly_avg_T.tolist(),
             "avg_RH_z": monthly_avg_RH.tolist(),
         }
+        # CO2 M1: injected mass per calendar month (kg; closes against
+        # summary.annual_co2_injected_kg), co2.enabled only.
+        if co2_on:
+            monthly["co2_injected_kg"] = monthly_co2_kg.tolist()
 
         # ── timeseries dict ────────────────────────────────────────────────
         ts = {
@@ -1553,8 +1727,33 @@ class DesignEngine:
             "E_hvac_Wh": P_hvac.tolist(),
             "E_deh_Wh": P_deh.tolist(),
             "E_led_Wh": P_led.tolist(),
+            # P3/B3: light diagnostics (canopy-mean PPFD umol/(m^2*s) and LED
+            # heat W, hourly substep means) — emitted ONLY when the spatial
+            # light model is active, following the T_m/T_s convention that
+            # additive columns must not leak into the default path (the
+            # shared zero-drift sha256 oracle stays intact).
+            **(
+                {"PPFD_mean": ppfd_out, "Q_led_W": qled_out}
+                if led.ppfd_layers
+                else {}
+            ),
             "E_misc_Wh": P_misc.tolist(),
             "X_d": X_d_arr.tolist(),
+            # CO2 M1: enrichment columns, emitted ONLY when co2.enabled --
+            # additive columns must not leak into the default path (the
+            # shared zero-drift sha256 oracle stays intact).  CO2_z is the
+            # substep-mean indoor concentration (ppm), S_co2_inj_g_h the
+            # substep-mean injection rate (g/h), E_co2_Wh the injector
+            # electricity per hour.
+            **(
+                {
+                    "CO2_z": CO2_z_out.tolist(),
+                    "S_co2_inj_g_h": S_co2_inj_out.tolist(),
+                    "E_co2_Wh": E_co2_Wh.tolist(),
+                }
+                if co2_on
+                else {}
+            ),
             # P1-3b: ISO8601 local wall-clock timestamp per row (weather index
             # is naive local time on the aligned local calendar year) and the
             # tariff price actually applied to that hour.  Additive columns,

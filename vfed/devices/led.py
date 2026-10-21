@@ -25,7 +25,7 @@ Override ``auto_deduce=False`` to set ``power_w`` directly.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 __all__ = ["LEDDevice"]
 
@@ -52,11 +52,37 @@ class LEDDevice:
     ppfd_target: float = 400.0  # µmol/(m²·s)
     covered_area: float = 45.0  # m²
     spectrum: str = "white"  # white | rb_3to1 | rb_4to1 | rb_2to1
+    # P3/A1: per-layer PPFD (µmol/(m²·s)) from an external ray-traced light
+    # model.  None = legacy uniform mode (par_wm2 = ppfd_target/par_factor).
+    ppfd_layers: Optional[List[float]] = None
 
     @property
     def par_factor(self) -> float:
         """Spectrum-specific PPFD-to-PAR conversion factor (µmol/J)."""
         return _SPECTRUM_PAR_FACTOR.get(self.spectrum, 4.57)
+
+    @property
+    def ppfd_mean(self) -> Optional[float]:
+        """Canopy-mean PPFD (µmol/(m²·s)) across the configured layers, or
+        None when ``ppfd_layers`` is unset (legacy uniform mode)."""
+        if not self.ppfd_layers:
+            return None
+        return sum(self.ppfd_layers) / len(self.ppfd_layers)
+
+    @property
+    def canopy_par_wm2(self) -> float:
+        """Canopy PAR irradiance (W/m²) actually reaching the crop.
+
+        With ``ppfd_layers`` set this is the layer-mean PPFD converted
+        through the spectrum factor — fixture-to-canopy distribution losses
+        (non-uniformity, wall/aisle spill) become visible to the crop
+        models.  Otherwise the legacy power-derived :attr:`par_wm2`
+        (bit-identical to pre-P3 builds).
+        """
+        mean_ppfd = self.ppfd_mean
+        if mean_ppfd is None:
+            return self.par_wm2
+        return mean_ppfd / max(self.par_factor, 1e-9)
 
     @property
     def par_wm2(self) -> float:

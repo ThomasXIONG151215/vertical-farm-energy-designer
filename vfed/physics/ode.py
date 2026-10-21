@@ -7,12 +7,16 @@ Heat balance:
 Moisture (absolute humidity) balance:
     dW_z/dt = (E_trans - M_deh - M_hvac + M_infil + M_permeance) / (V_room * rho_air)
 
+CO2 (mixing ratio) balance, additive (CO2 supplement proposal §2.1, M1):
+    dc_z/dt = (S_inj + S_resp - S_phot + m_dot_vent*(c_out - c_z)) / (V_room * rho_air)
+
 Sign convention:
     Q_HVAC < 0 cooling, > 0 heating
     Q_DEH  > 0 dehumidifier condenser heat release
     Q_LED  > 0 LED heat addition
     E_trans > 0 plant transpiration (moisture source, kg/s)
     M_deh, M_hvac > 0 moisture removal (kg/s)
+    S_inj, S_resp > 0 CO2 sources (kg/s); S_phot > 0 CO2 sink (kg/s)
 """
 
 __all__ = ["RoomODESolver"]
@@ -146,3 +150,49 @@ class RoomODESolver:
                 "sat_clipped_kg": sat_clipped_kg,
             }
         return W_new
+
+    def step_co2(
+        self,
+        c_z: float,
+        S_total_kgs: float,
+        dt: float = 60.0,
+        c_floor: float = 0.0,
+        return_meta: bool = False,
+    ):
+        """Advance indoor CO2 mixing ratio (kg CO2 / kg air) by dt seconds
+        under the net CO2 mass flow S_total_kgs (kg/s).
+
+        Mirrors the ``step_humidity`` contract: explicit forward Euler on the
+        lumped room air mass (``air_mass = V_room * rho_air``), hard floor
+        clamp ``c_z >= c_floor``.  The floor is the photosynthetic CO2
+        compensation point Gamma in mixing-ratio form (the caller passes
+        ``growth.c_Gamma / rho_air``, ~4.3e-5 kg/kg for the 5.2e-5 kg/m3
+        default) -- photosynthesis cannot draw the room below it, exactly as
+        dehumidification cannot draw W_z below 0.  A clamp is NOT silent:
+        with ``return_meta=True`` the CO2 mass (kg) the clamp removed from
+        the balance is reported so the caller can keep bookkeeping honest.
+
+        Sequential-Euler ordering (same documented O(dt) convention as
+        step_humidity / step_temperature): the balance integrates from
+        step-start c_z with fluxes evaluated at the step-start state.  CO2
+        time constants (minutes-hours: air-mass store over vent flow and
+        photosynthetic draw) far exceed the 600 s project timestep, so the
+        ordering error is negligible and no stability guard is needed.
+
+        Returns:
+            float: the new mixing ratio, OR if ``return_meta`` is True a
+            ``(c_new, meta)`` tuple where ``meta`` has ``floor_clipped_kg``
+            (>0 CO2 the floor clamp removed, 0 no clip).
+        """
+        air_mass = self.V_room * self.rho_air
+        if air_mass <= 0.0:
+            raise ValueError("V_room * rho_air must be > 0 for CO2 integration")
+        dc = S_total_kgs * dt / air_mass
+        c_new = c_z + dc
+        floor_clipped_kg = 0.0
+        if c_new < c_floor:
+            floor_clipped_kg = (c_floor - c_new) * air_mass
+            c_new = c_floor
+        if return_meta:
+            return c_new, {"floor_clipped_kg": floor_clipped_kg}
+        return c_new
