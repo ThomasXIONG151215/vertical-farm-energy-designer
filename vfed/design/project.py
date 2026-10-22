@@ -779,6 +779,89 @@ class LEDConfig:
 
 
 @dataclass
+class VanHenten3Config:
+    """Three-state (X_d, C_buf, LAI) lettuce growth model parameters.
+
+    Ported from the MATLAB reference shipped with the BJAAF lettuce-growth
+    dataset (Mendeley DOI 10.17632/r7z9ttvkyh.2, ``Lettuce growth model
+    program`` .m files).  Defaults are the authors' frozen global set
+    (greenhouse, supplementary-lighting lettuce, Exp_c).  Field names match
+    ``VanHenten3State._defaults`` keys exactly (engine passes them through).
+
+    Calibration status (see vfed/calibration/ identifiability labels):
+      - ``epsilon_0`` 17e-9 kg/J is the author greenhouse value; transferred
+        unchanged to a PFAL recipe it overestimated UC Davis endpoints by
+        ~88 % (structure-diagnosis report); PFAL re-anchor ≈ 7.3e-9 kg/J.
+        Treat as TRANSFERRED/conditional per dataset.
+      - ``SLA_rf``/``sigmar`` constants are anchorable from paired LAI/X_d
+        observations (BJAAF ``SLA calibration`` / ``Root ratio`` sheets).
+    """
+
+    # AB — conversion efficiencies (c_beta*c_alpha = 0.544, same product as
+    # the 1-state c_alpha_beta)
+    c_beta: float = 0.8  # (-) buffer -> structural dry matter
+    c_alpha: float = 0.68  # (-) CO2 -> dry-matter conversion
+    # PLR — photosynthesis light response
+    c_r_PAR: float = 0.07  # (-) PAR reflection loss at canopy
+    sigma_PAR: float = 0.5  # (-) PAR fraction of shortwave
+    k_PAR: float = 0.9  # (-) canopy extinction coefficient
+    epsilon_0: float = 17e-9  # kg/J radiation use efficiency (author value;
+    #   PFAL transfer requires re-anchoring, see class docstring)
+    gamma_T20: float = 40.0  # ppm CO2 compensation at 20 C
+    Q_10_gamma: float = 2.0  # (-) Q10 of gamma(T)
+    T_0: float = 273.15  # K zero offset
+    rho_CO2_T0: float = 1.98  # kg/m3 CO2 density at T_0
+    M_CO2: float = 44e-3  # kg/mol CO2 molar mass
+    J_max_25: float = 210.15  # mumol/(m2*s) electron transport at 25 C
+    E_J: float = 37000.0  # J/mol activation energy (Arrhenius)
+    R_g: float = 8.314  # J/(mol*K) gas constant
+    c_S: float = 710.0  # J/mol deactivation entropy
+    c_H: float = 2.2e5  # J/mol deactivation enthalpy
+    # LA — leaf area
+    beta_I: float = -0.00474  # (m2/kg) SLA light-response slope
+    beta_Xh: float = 0.912  # (-) SLA humidity-response slope
+    SLA_rf: float = 47.93  # m2/kg reference specific leaf area
+    X_h_ref: float = 0.75  # (-) reference air humidity for SLA
+    I_a_L_ref: float = 50.3  # W/m2 reference absorbed shortwave for SLA
+    c_r_I: float = 0.22  # (-) shortwave reflection (stomata term)
+    k_I: float = 0.48  # (-) extinction for absorbed-shortwave term
+    # RD — maintenance respiration (shoot/root weighted, Q10 basis 25 C)
+    Q_10_Rd: float = 2.0  # (-)
+    c_Rd_25_s: float = 3.47e-7  # 1/s shoot coefficient at 25 C
+    c_Rd_25_r: float = 1.16e-7  # 1/s root coefficient at 25 C
+    # SR — shoot/root fraction sigmar = c1*ln(X_d/rho_c) + c2
+    c_sigmar_1: float = -0.026  # (-)
+    c_sigmar_2: float = -0.076  # (-)
+    # HB — non-structural carbon buffer regulation
+    RGR_max_20: float = 1.54e-6  # 1/s max structural growth rate at 20 C
+    sigmar_buf: float = 0.2  # (-) buffer capacity as fraction of X_d
+    Q10_gr: float = 1.6  # (-) Q10 of structural growth (below T_c_RGR)
+    T_c_RGR: float = 25.0  # C break temperature of the Q10 response
+    s_RGR_max: float = 10.0  # sigmoid steepness (T switch)
+    s_h_buf_1: float = 1000.0  # buffer-regulation sigmoid steepness
+    s_h_buf_2: float = 100.0  # soft-min steepness of h_buf
+    z_h_buf: float = 1e-12  # kg/(m2*s) numerical zero guard
+    # LR — leaf resistance (CO2 pathway: stomata + boundary + canopy + turb.)
+    r_H2O_min: float = 82.0  # s/m minimum stomatal resistance
+    L_e: float = 1.47  # (-) characteristic leaf length ratio
+    l_f: float = 0.1  # m leaf dimension
+    v_a: float = 0.09  # m/s air velocity
+    r_t: float = 50.0  # s/m turbulent resistance
+    c_rc_1: float = 0.315  # s/(m*C2) canopy-resistance T^2 term
+    c_rc_2: float = -27.35  # s/(m*C) canopy-resistance T term
+    c_rc_3: float = 790.7  # s/m canopy-resistance offset
+    s_f_Tc_s: float = 10.0  # light-switch sigmoid steepness
+    s_f_Xc_s_1: float = 10.0  # CO2-switch sigmoid steepness (spare)
+    s_f_Xc_s_2: float = 0.5  # CO2-switch sigmoid steepness
+    s_e_s_air: float = 10.0  # saturation-curve switch steepness
+    z_r_b: float = 1e-4  # numerical zero guard (boundary layer)
+    # 3-state specific
+    initial_lai: Optional[float] = None  # m2/m2 at reset; None -> x_d0*40
+    #   (40 m2/kg ≈ BJAAF paired LAI/X_d mean 37.6 rounded)
+    rho_c: float = 11.5  # plants/m2 planting density (sigmar reference)
+
+
+@dataclass
 class VanHentenConfig:
     """Van Henten 2003 one-state carbon-balance plant growth model.
 
@@ -828,6 +911,33 @@ class VanHentenConfig:
     #   real transplant seedlings ~15-80 g/m2,
     #   former 1 g/m2 was an order low (P3-14).  X_d resets to this at every
     #   harvest (sawtooth state).
+    model: str = "van_henten"  # growth-model selector:
+    #   "van_henten" (1-state X_d, legacy default, 609 baseline zero-drift)
+    #   "van_henten_3state" (X_d + C_buf + LAI, v0.5 structure upgrade,
+    #   BJAAF MATLAB port).  The 1-state scalar fields below still drive the
+    #   1-state model; the 3-state reads three_state below plus
+    #   initial_dry_weight.
+    three_state: VanHenten3Config = field(default_factory=VanHenten3Config)
+
+    def __post_init__(self) -> None:
+        if self.model not in ("van_henten", "van_henten_3state"):
+            raise ValueError(
+                "growth.model must be 'van_henten' or 'van_henten_3state',"
+                " got %r" % (self.model,)
+            )
+        if isinstance(self.three_state, dict):
+            known = set(VanHenten3Config.__dataclass_fields__)
+            unknown = set(self.three_state) - known
+            if unknown:
+                raise ValueError(
+                    "growth.three_state: unknown keys %s" % sorted(unknown)
+                )
+            self.three_state = VanHenten3Config(**self.three_state)
+        elif not isinstance(self.three_state, VanHenten3Config):
+            raise ValueError(
+                "growth.three_state must be a mapping or VanHenten3Config,"
+                " got %s" % type(self.three_state).__name__
+            )
 
 
 @dataclass

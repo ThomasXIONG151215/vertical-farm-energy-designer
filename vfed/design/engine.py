@@ -29,11 +29,51 @@ from ..devices.co2 import CO2Device, DM_TO_CO2, mixing_ratio_to_ppm, ppm_to_mixi
 from ..devices.led import LEDDevice
 from ..plants.transpiration import TranspirationModel
 from ..plants.van_henten import VanHenten
+from ..plants.van_henten_3state import VanHenten3State
 from ..weather.weather_bridge import fetch_weather
 from .fx import USD_C_ENERGY, USD_C_PV, resolve_unit_price
 from .result import SimulationResult
 
 __all__ = ["DesignEngine", "run_project", "full_load_warnings"]
+
+
+def _build_growth(p):
+    """Build the crop growth model selected by ``p.growth.model``.
+
+    ``van_henten`` (default): 1-state model, constructed with the exact
+    same eight parameter arguments as the historical inline calls — the
+    609 baseline must stay bit-identical (zero-drift gate).
+
+    ``van_henten_3state``: 3-state Van Henten variant ([X_d, C_buf, LAI],
+    BJAAF MATLAB port) with every parameter taken from the nested
+    ``growth.three_state`` config block; density (rho_c) and initial LAI
+    are passed explicitly, the remaining numeric fields by reflection.
+    """
+    g = p.growth
+    if g.model == "van_henten_3state":
+        ts = g.three_state
+        overrides = {
+            name: getattr(ts, name)
+            for name in type(ts).__dataclass_fields__
+            if name not in ("initial_lai", "rho_c")
+        }
+        return VanHenten3State(
+            co2_ppm=p.setpoints.co2_ppm,
+            rho_c=ts.rho_c,
+            initial_lai=ts.initial_lai,
+            **overrides,
+        )
+    return VanHenten(
+        co2_ppm=p.setpoints.co2_ppm,
+        c_alpha_beta=g.c_alpha_beta,
+        c_resp_d=g.c_resp_d,
+        c_pl_d=g.c_pl_d,
+        c_rad_phot=g.c_rad_phot,
+        c_co2_1=g.c_co2_1,
+        c_co2_2=g.c_co2_2,
+        c_co2_3=g.c_co2_3,
+        c_Gamma=g.c_Gamma,
+    )
 
 
 # ── P1-7: OPEX transparency ────────────────────────────────────────────
@@ -549,17 +589,7 @@ def _build_devices(p, P_atm: float = 101.325):
         # monotone over the cycle, so the peak rate equals the harvest-stage
         # design maturity; max-tracking is robust to any growth shape.  The
         # existing size_deh(safety_factor, default 1.2) margin applies on top.
-        grow = VanHenten(
-            co2_ppm=p.setpoints.co2_ppm,
-            c_alpha_beta=p.growth.c_alpha_beta,
-            c_resp_d=p.growth.c_resp_d,
-            c_pl_d=p.growth.c_pl_d,
-            c_rad_phot=p.growth.c_rad_phot,
-            c_co2_1=p.growth.c_co2_1,
-            c_co2_2=p.growth.c_co2_2,
-            c_co2_3=p.growth.c_co2_3,
-            c_Gamma=p.growth.c_Gamma,
-        )
+        grow = _build_growth(p)
         xd = p.growth.initial_dry_weight
         # P4-11: use the LED-derived PAR flux so the pre-run growth/DEH
         # sizing matches the runtime light state (identical to ppfd/par_factor
@@ -888,17 +918,9 @@ class DesignEngine:
         hvac_heat_full_w = 0.99 * (hvac.P_rated_heat + hvac.comp.fan_power_w)
 
         # ── plant growth model ─────────────────────────────────────────────
-        grow = VanHenten(
-            co2_ppm=p.setpoints.co2_ppm,
-            c_alpha_beta=p.growth.c_alpha_beta,
-            c_resp_d=p.growth.c_resp_d,
-            c_pl_d=p.growth.c_pl_d,
-            c_rad_phot=p.growth.c_rad_phot,
-            c_co2_1=p.growth.c_co2_1,
-            c_co2_2=p.growth.c_co2_2,
-            c_co2_3=p.growth.c_co2_3,
-            c_Gamma=p.growth.c_Gamma,
-        )
+        # Selected by p.growth.model: "van_henten" (1-state, default/609
+        # zero-drift) or "van_henten_3state" (3-state, LAI/C_buf states).
+        grow = _build_growth(p)
         X_d = p.growth.initial_dry_weight
         X_d_init = p.growth.initial_dry_weight  # reset point after each harvest
         crop_area = p.led.covered_area
@@ -1110,6 +1132,11 @@ class DesignEngine:
                 total_water_kg += E_trans * dt
                 monthly_water_kg[month_idx] += E_trans * dt
                 cycle_h += dt / 3600.0
+                # 3-state only: the rhs needs air humidity for stomatal
+                # resistance and SLA; keep the live room RH on the model.
+                # (1-state ignores RH; attribute is a no-op there.)
+                if isinstance(grow, VanHenten3State):
+                    grow.rh_pct = RH_z
                 # ── CO2 mass balance (additive; CO2 supplement M1) ─────
                 # Sources/sinks at the FIXED setpoint concentration (M1 --
                 # the dynamic growth feedback is M2): injector (lagged
@@ -1401,6 +1428,10 @@ class DesignEngine:
                 monthly_harvest[month_idx] += max(harvested, 0.0)
                 total_harvest_kg += max(harvested, 0.0)
                 X_d = X_d_init
+                # Reset the internal states (C_buf, LAI) alongside X_d so a
+                # new cycle starts from the seedling state.  No-op on the
+                # 1-state model (no internal states).
+                grow.reset(X_d_init)
                 cycle_h = 0.0  # stage clock resets with X_d (staged methods)
                 next_harvest_h += harvest_hours
 

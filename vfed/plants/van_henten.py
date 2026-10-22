@@ -158,6 +158,13 @@ class VanHenten:
         X_d_new = max(0.0, X_d + dX_d * dt)
         return dX_d, X_d_new
 
+    def reset(self, x_d0: float) -> None:  # noqa: ARG02 - interface parity
+        """No-op for interface parity with ``VanHenten3State.reset``.
+
+        The 1-state model keeps no internal state (X_d lives in the engine),
+        so harvest reset needs nothing here.
+        """
+
 
 # ------------------------------------------------------------------
 # ponytail: self-consistency snapshot (NOT a reference-parity test).
