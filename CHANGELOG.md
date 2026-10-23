@@ -64,6 +64,23 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Changed
 
+- **PV MPP temperature coefficient is now the nameplate `gamma_pmp` (P2-5).**
+  `pv.gamma_pmp` (relative, /K; default `-0.0030` = −0.30 %/K,
+  TOPCon-class nameplate) is the single coefficient driving the MPP
+  power's temperature dependence, replacing the legacy implicit stacking
+  `alpha_sc + beta_voc` = −0.205 %/K, which undercounted hot-hour
+  temperature loss by ~32 % (layerD benchmark D5, fill-factor loss
+  missing). `alpha_sc` / `beta_voc` remain as datasheet metadata only and
+  no longer drive the power chain; `pv: {gamma_pmp: -0.00205}` reproduces
+  the legacy output to within the second-order cross term (~0.1 % at
+  ΔT = 30 K). **Behaviour change:** PV generation with defaults shifts
+  (roughly −1 to −2 % annual in warm climates, growing with cell
+  temperature), so sweep PV/battery columns and any pinned absolute-PV
+  numbers move — regenerate reference CSVs (e.g. the r5 sweep) when
+  comparing. Projects without PV (the 609 preset) are unaffected. A
+  load-time band guard (−0.01, 0) /K rejects percent-form or wrong-sign
+  values. Tests: contract flow + band + single-coefficient semantics +
+  legacy reproduction pinned in test_04 §4.7.
 - **Incremental IRR now prefers the positive root (P1-1).** With a
   mid-life battery replacement the incremental stream is
   non-conventional and can carry three IRR roots; the legacy bracket

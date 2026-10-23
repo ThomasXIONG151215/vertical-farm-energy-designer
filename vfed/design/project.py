@@ -1071,6 +1071,12 @@ class PVConfig:
     V_mp_stc: float = 45.85  # STC 最大功率点电压 (V); P_module_STC = V_mp×I_mp ≈ 580.5 W
     alpha_sc: float = 0.00045  # 短路电流温度系数 (/K, 相对值 ≈0.045 %/K)——非 A/K
     beta_voc: float = -0.0025  # 开路电压温度系数 (/K, 相对值 ≈-0.25 %/K)——非 V/K
+    #   P2-5 后 alpha_sc/beta_voc 仅为数据手册元数据, 不再驱动功率链。
+    gamma_pmp: float = -0.0030  # Pmax 温度系数 (/K, 相对值 −0.30 %/K, 铭牌)——P2-5
+    #   MPP 功率温度依赖的唯一驱动系数, 替代 alpha_sc+beta_voc 的隐式叠加
+    #   (−0.205 %/K, 比 TOPCon 铭牌 −0.30 %/K 弱 ~32%, layerD 基准 D5
+    #   少计 ~1.3%/yr 温度损失)。复现旧行为: gamma_pmp: -0.00205
+    #   (残差为二阶交叉项, dT=30K 时 ~0.1%)。
     NOCT: float = 45.0  # 标称工作电池温度 (°C)
     eta_inv: float = 0.97  # 逆变器效率 (−)
     eta_system: float = 0.95  # 系统综合折减 (积灰/直流线损/失配, −); P6-7
@@ -1601,6 +1607,13 @@ class DesignProject:
         _pv_beta = pv_cfg.get("beta_voc")
         if _pv_beta is not None and not (-0.1 < _pv_beta < 0.0):
             raise ValueError(f"pv.beta_voc must be in (-0.1, 0) /K (relative), got {_pv_beta}")
+        # P2-5: same relative-coefficient regime as alpha/beta — rejects a
+        # percent-form or wrong-sign value (e.g. -0.30 or +0.003) at load.
+        _pv_gamma = pv_cfg.get("gamma_pmp")
+        if _pv_gamma is not None and not (-0.01 < _pv_gamma < 0.0):
+            raise ValueError(
+                f"pv.gamma_pmp must be in (-0.01, 0) /K (relative), got {_pv_gamma}"
+            )
 
         # ── HVAC COP / coil guards (fail-fast) ──
         # A negative COP silently flips the cooling cycle into a heater+humidifier

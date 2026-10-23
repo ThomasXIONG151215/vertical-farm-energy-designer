@@ -422,6 +422,7 @@ def _build_energy_system(project: DesignProject) -> EnergySystem:
         V_mp_stc=project.pv.V_mp_stc,
         alpha_sc=project.pv.alpha_sc,
         beta_voc=project.pv.beta_voc,
+        gamma_pmp=project.pv.gamma_pmp,  # P2-5
         NOCT=project.pv.NOCT,
         eta_inv=project.pv.eta_inv,
         C_pv=resolve_unit_price(

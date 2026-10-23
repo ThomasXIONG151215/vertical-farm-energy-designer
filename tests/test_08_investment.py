@@ -265,7 +265,10 @@ def test_single_point_payback_user13_econ_scenario(project_609):
     the legacy hidden unit prices C_pv=500/kWp + c_energy=220/kWh
     (capital 20,427.907) and matched no documented formula.  Under the F1
     definition it becomes delta_capital / annual_savings = 101,395.349 /
-    3,139.939 = 32.2921 yr -- recomputable from the row's own columns."""
+    3,100.569 = 32.7022 yr -- recomputable from the row's own columns.
+    P2-5 re-pin: nameplate gamma_pmp (-0.30 %/K) lowered PV output, so
+    annual_savings moved 3,139.94 -> 3,100.57 and payback 32.2921 ->
+    32.7022 (sanctioned baseline migration, same regime as round 35)."""
     from vfed.design.presets import preset_609
     from vfed.design.sweep import sweep_design
 
@@ -282,15 +285,15 @@ def test_single_point_payback_user13_econ_scenario(project_609):
 
     # user13's delta_capital: 3500 x (100/4.3) + 500 x 40 = 101,395.3488...
     assert best["delta_capital"] == pytest.approx(3500.0 * 100.0 / 4.3 + 500.0 * 40.0, rel=1e-9)
-    # same savings regime as the audit (3,139.94 currency/yr post W3-D)
-    assert best["annual_savings"] == pytest.approx(3139.94, abs=0.02)
+    # same savings regime as the audit (P2-5 re-pin: 3,100.57 currency/yr)
+    assert best["annual_savings"] == pytest.approx(3100.57, abs=0.02)
     # F1 identity: payback x annual_savings == delta capital
     assert best["payback_period"] == pytest.approx(
         best["delta_capital"] / best["annual_savings"], rel=1e-12
     )
     # the corrected definition on the re-calibrated preset (hand-check:
-    # 101,395.3488 / 3,139.9393 = 32.2921), NOT the legacy 6.4914
-    assert best["payback_period"] == pytest.approx(32.2921, abs=5e-3)
+    # 101,395.3488 / 3,100.5693 = 32.7022), NOT the legacy 6.4914
+    assert best["payback_period"] == pytest.approx(32.7022, abs=5e-3)
     assert not math.isclose(best["payback_period"], 6.4914, abs_tol=0.5)
 
 

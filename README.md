@@ -305,6 +305,8 @@ pv:
 
 Within a single sweep the derate is a common multiplier on every row, so the LCOE-optimal PV × battery ranking does not change; only absolute savings and payback shift.
 
+**PV temperature coefficient (`gamma_pmp`).** The MPP power's temperature dependence is the single nameplate coefficient `pv.gamma_pmp` (relative, /K), default `-0.0030` (−0.30 %/K, TOPCon-class nameplate). It replaces the earlier implicit stacking of `alpha_sc + beta_voc` (−0.205 %/K), which undercounted hot-hour temperature loss by ~32 % (layerD benchmark D5). `alpha_sc` / `beta_voc` remain datasheet metadata only. To reproduce the pre-P2-5 behaviour use `pv: {gamma_pmp: -0.00205}` (residual: the second-order cross term, ~0.1 % at ΔT = 30 K).
+
 ### Humidity and moisture results
 
 `vfed evaluate` prints more than energy: annual water use, RH clamp events, DEH utilization, and how much moisture the dehumidifier vs the HVAC coil removed (see the **Output Glossary** under *Interpreting Results* for what these mean). `vfed evaluate ... --export out/` also writes `summary.csv`, `timeseries.csv` (8,760 hourly rows) and `monthly.csv` for your own analysis.

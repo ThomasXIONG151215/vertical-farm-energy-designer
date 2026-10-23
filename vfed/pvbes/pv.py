@@ -32,6 +32,15 @@ class PVSystem:
     #    P_module_at_STC = 45.85*12.66 = 580.5 W
     alpha_sc: float = 0.00045  # /K  (relative, ~0.045 %/K for Jinko 78HL4-BDV)
     beta_voc: float = -0.0025  # /K  (relative, ~-0.25 %/K for Jinko 78HL4-BDV)
+    # P2-5: nameplate Pmax temperature coefficient (relative, /K).  This is
+    # the SINGLE coefficient driving the MPP power's temperature dependence;
+    # it replaces the legacy implicit stacking alpha_sc + beta_voc =
+    # -0.00205/K, which was ~32 % weaker than the TOPCon nameplate -0.30 %/K
+    # (layerD benchmark D5: hot-hour temperature loss undercounted
+    # ~1.3 %/yr).  alpha_sc / beta_voc stay as datasheet metadata only.
+    # Reproduce legacy output with gamma_pmp = -0.00205 (residual = the
+    # second-order cross term alpha_sc*beta_voc*dT^2, ~0.1 % at dT = 30 K).
+    gamma_pmp: float = -0.0030
     NOCT: float = 45.0  # C
     T_stc: float = 25.0  # C
     eta_inv: float = 0.97  # inverter efficiency
@@ -60,21 +69,29 @@ class PVSystem:
         return T_amb + (self.NOCT - 20.0) * G / 800.0
 
     def _sd_mpp(self, G: np.ndarray, T_cell: np.ndarray) -> np.ndarray:
-        """Approximate SDM maximum-power-point power per module (W)."""
+        """Approximate SDM maximum-power-point power per module (W).
+
+        P2-5: the temperature dependence of the MPP power is the single
+        nameplate coefficient ``gamma_pmp`` (relative, /K) applied to the
+        STC-normalized I_mp x V_mp product.  The legacy chain multiplied
+        I_mp by (1 + alpha_sc dT) and V_oc by (1 + beta_voc dT), stacking to
+        an implicit ~-0.205 %/K — ~32 % weaker than the TOPCon nameplate
+        -0.30 %/K (layerD D5), because the real fill-factor loss with
+        temperature was missing.  alpha_sc / beta_voc no longer drive the
+        power chain; gamma_pmp = -0.00205 reproduces the legacy output to
+        within the second-order cross term (~0.1 % at dT = 30 K).
+        """
         G = np.asarray(G, dtype=float)
         T_cell = np.asarray(T_cell, dtype=float)
-        I_ph = self.I_sc_stc * (1 + self.alpha_sc * (T_cell - self.T_stc)) * (G / 1000.0)
-        # beta_voc is a RELATIVE coefficient (/K), consistent with alpha_sc and
-        # the module datasheet (~-0.250 %/K). Absolute form (V/K) would be
-        # ~1.75x too strong for a 57.34 V module and suppress hot-hour output.
-        V_oc = self.V_oc_stc * (1.0 + self.beta_voc * (T_cell - self.T_stc))
-        I_mp = self.I_mp_stc * (1 + self.alpha_sc * (T_cell - self.T_stc)) * (G / 1000.0)
+        I_mp = self.I_mp_stc * (G / 1000.0)
         I_mp = np.clip(I_mp, 0.0, None)
         k_v_stc = self.V_mp_stc / self.V_oc_stc
         k_v = k_v_stc * (1.0 + 0.03 * np.log(np.maximum(G, 1.0) / 1000.0))
         k_v = np.clip(k_v, 0.5, 0.95)
-        V_mp = V_oc * k_v
-        return I_mp * V_mp
+        V_mp = self.V_oc_stc * k_v
+        # clip guards the deep-hot tail (gamma_pmp < 0, dT > -1/gamma_pmp)
+        p_temp = np.clip(1.0 + self.gamma_pmp * (T_cell - self.T_stc), 0.0, None)
+        return I_mp * V_mp * p_temp
 
     def calculate_pv_output(
         self, weather: Dict[str, np.ndarray], A_pv: float, year: int = 0

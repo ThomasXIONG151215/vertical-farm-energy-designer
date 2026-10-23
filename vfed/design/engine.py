@@ -1844,6 +1844,7 @@ class DesignEngine:
                     V_mp_stc=p.pv.V_mp_stc,
                     alpha_sc=p.pv.alpha_sc,
                     beta_voc=p.pv.beta_voc,
+                    gamma_pmp=p.pv.gamma_pmp,  # P2-5
                     NOCT=p.pv.NOCT,
                     eta_inv=p.pv.eta_inv,
                     C_pv=resolve_unit_price(p.pv.C_pv, USD_C_PV, p.currency, p.exchange_rate),

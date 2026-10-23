@@ -589,3 +589,69 @@ class TestPVLossStack:
             weather, 100.0
         )
         assert vpw == pytest.approx(base * 0.8256 / 0.9215, rel=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# 4.7  PV Pmax temperature coefficient gamma_pmp (P2-5)
+# ---------------------------------------------------------------------------
+class TestPVGammaPmp:
+    """Nameplate Pmax temperature coefficient replaces the implicit
+    alpha_sc + beta_voc stacking (-0.205 %/K, ~32 % weaker than the TOPCon
+    nameplate -0.30 %/K; layerD D5).  These tests pin the contract field,
+    the load-time band guard, and the output-level semantics (single
+    coefficient on the MPP power; alpha/beta demoted to metadata).
+    """
+
+    def test_default_and_contract_flow(self):
+        p = DesignProject.from_dict({})
+        assert p.pv.gamma_pmp == pytest.approx(-0.0030)
+        q = DesignProject.from_dict({"pv": {"gamma_pmp": -0.00205}})
+        assert q.pv.gamma_pmp == pytest.approx(-0.00205)
+
+    def test_band_guard_rejects_bad_values(self):
+        for bad in (-0.30, 0.0, 0.003, -0.02):
+            with pytest.raises(ValueError, match="gamma_pmp"):
+                DesignProject.from_dict({"pv": {"gamma_pmp": bad}})
+
+    def test_output_single_coefficient_semantics(self):
+        """At T_cell = 45 C (dT = 20 K) the output scales by exactly
+        (1 + gamma_pmp * 20) relative to the 25 C reference — no hidden
+        alpha/beta stacking remains."""
+        import numpy as np
+        from vfed.pvbes.pv import PVSystem
+
+        def _w(t):
+            return {
+                "direct_radiation": np.full(24, 500.0),
+                "diffuse_radiation": np.full(24, 200.0),
+                "temperature_2m": np.full(24, t),
+            }
+
+        # NOCT 45: T_cell = T_amb + 25*G/800 = T_amb + 21.875 at G = 700.
+        # T_amb = 25 -> T_cell = 46.875 (dT = 21.875); T_amb = 3.125 -> 25 C.
+        hot = PVSystem().calculate_pv_output(_w(25.0), 100.0)
+        ref = PVSystem().calculate_pv_output(_w(25.0 - 21.875), 100.0)
+        assert hot == pytest.approx(ref * (1.0 + (-0.0030) * 21.875), rel=1e-12)
+
+    def test_legacy_value_reproduces_old_chain(self):
+        """gamma_pmp = alpha_sc + beta_voc = -0.00205 reproduces the legacy
+        (1 + a dT)(1 + b dT) chain to within the second-order cross term."""
+        import numpy as np
+        from vfed.pvbes.pv import PVSystem
+
+        def _w(t):
+            return {
+                "direct_radiation": np.full(24, 500.0),
+                "diffuse_radiation": np.full(24, 200.0),
+                "temperature_2m": np.full(24, t),
+            }
+
+        d_t = 21.875
+        a, b = 0.00045, -0.0025
+        legacy_factor = (1 + a * d_t) * (1 + b * d_t)
+        new = PVSystem(gamma_pmp=-0.00205).calculate_pv_output(_w(25.0), 100.0)
+        ref = PVSystem(gamma_pmp=-0.00205).calculate_pv_output(_w(25.0 - d_t), 100.0)
+        ratio = float(np.mean(new / ref))
+        # cross term a*b*dT^2 ~ -5.4e-4 here, so legacy factor sits ~0.06 %
+        # below the pure linear sum -- rel=2e-3 covers it with margin
+        assert ratio == pytest.approx(legacy_factor, rel=2e-3)

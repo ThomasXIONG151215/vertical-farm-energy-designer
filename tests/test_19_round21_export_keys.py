@@ -37,8 +37,9 @@ from vfed.pvbes.pv import PVSystem
 def econ():
     """user13 econ sizing: preset 609 @ Shanghai 2025 + PV 100 m2 + 40 kWh
     battery.  R34/W3-D: numbers re-pinned on the re-calibrated 609 preset
-    (deh.smer 3.5 / hvac.eta_II 0.33): import 30,434.78 / discharge
-    5,714.38 / recon 17.5824 (terminal-SoC restoration, unchanged)."""
+    (deh.smer 3.5 / hvac.eta_II 0.33); P2-5 re-pin on the nameplate
+    gamma_pmp (-0.30 %/K): import 30,764.83 / discharge 5,437.28 / recon
+    17.5824 (terminal-SoC restoration, unchanged)."""
     p = preset_609()
     p.site.city = "Shanghai"
     p.site.year = 2025
@@ -124,15 +125,17 @@ def test_grid_only_battery_keys_present_and_zero(sim_609):
 
 def test_battery_keys_match_user13_audit_pins(econ):
     """The user13-sizing dispatch on the re-calibrated preset: discharge
-    5,714.38 kWh, reconciliation top-up 17.58 kWh (16.0 kWh stored / eta_ch),
-    import 30,434.78 kWh -- the three round-20 white-box numbers are now
-    exported directly (R34/W3-D re-pin)."""
+    5,437.28 kWh, reconciliation top-up 17.58 kWh (terminal-SoC
+    restoration, unchanged), import 30,764.83 kWh -- the three round-20
+    white-box keys exported directly (R34/W3-D re-pin; P2-5 re-pin: the
+    nameplate gamma_pmp (-0.30 %/K) lowers PV output, discharge moved
+    5,714.38 -> 5,437.28 and import 30,434.78 -> 30,764.83)."""
     sim, _p = econ
     s = sim.summary
     assert s["battery_charge_kwh"] > 0.0
-    assert s["battery_discharge_kwh"] == pytest.approx(5714.38, abs=0.02)
+    assert s["battery_discharge_kwh"] == pytest.approx(5437.28, abs=0.02)
     assert s["battery_recon_grid_kwh"] == pytest.approx(17.58, abs=0.01)
-    assert s["grid_import_kwh"] == pytest.approx(30434.78, abs=0.02)
+    assert s["grid_import_kwh"] == pytest.approx(30764.83, abs=0.02)
 
 
 def test_charge_free_residual_equals_recon(econ):

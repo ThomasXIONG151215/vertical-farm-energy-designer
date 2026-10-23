@@ -299,6 +299,8 @@ pv:
 
 同一轮 sweep 内该折减是所有行的公共乘子，LCOE 最优的光伏 × 电池排序不变，只影响绝对节能量与回收期。
 
+**光伏温度系数（`gamma_pmp`）。** MPP 功率的温度依赖由单一铭牌系数 `pv.gamma_pmp`（相对值，/K）驱动，默认 `-0.0030`（−0.30 %/K，TOPCon 级铭牌）。它替代了此前 `alpha_sc + beta_voc` 的隐式叠加（−0.205 %/K，高温时段温度损失少计约 32 %，layerD 基准 D5）；`alpha_sc` / `beta_voc` 保留为数据手册元数据。需复现 P2-5 之前的行为可用 `pv: {gamma_pmp: -0.00205}`（残差为二阶交叉项，ΔT = 30 K 时约 0.1 %）。
+
 ### 湿度与水分结果
 
 `vfed evaluate` 输出的不止是能耗：年用水量、RH 钳制事件、除湿机利用率，以及除湿机与 HVAC 表冷器各自除掉的水分（含义见"输出结果解读"下的 **Output Glossary**）。`vfed evaluate ... --export out/` 还会写出 `summary.csv`、`timeseries.csv`（8,760 行逐时数据）和 `monthly.csv` 供自行分析。
