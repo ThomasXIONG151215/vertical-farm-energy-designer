@@ -74,7 +74,12 @@ pytest --cov=vfed
 - Commit `.env` or API keys
 - Hardcode weather data — always use `fetch_weather` or cache
 - Import from `research/` into `vfed/` — research is archived, vfed is the active codebase
-- Modify `research/` code — it is preserved for reproducibility only
+- Modify `research/` code — it is preserved for reproducibility only.
+  Exception (2026-10-23 cleanup, user-approved): byte-identical cross-city duplicate files
+  (442 files) were removed; the original layout is recorded in
+  `research/xiong-pvbes-photoperiod-2026/MANIFEST_DEDUP.csv` (deleted_path → kept_path).
+  Regeneratable EnergyPlus outputs (html/csv/png under test_case|results|load_analysis|output)
+  were deleted locally; they are git-ignored and reproducible from the kept .idf + .epw inputs.
 
 ## File Conventions
 
