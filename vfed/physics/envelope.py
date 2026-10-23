@@ -423,6 +423,11 @@ class Envelope:
         erv_flow_m3h: float = 0.0,
         erv_sensible_eff: float = 0.7,
         erv_latent_eff: float = 0.0,
+        # P3-9: dry-bulb economizer free cooling + fan power.
+        economizer_enabled: bool = False,
+        economizer_flow_m3h: float = 0.0,
+        economizer_delta_t_k: float = 1.0,
+        erv_fan_power_w: float = 0.0,
     ):
         self.U_wall_A = U_wall_A
         self.A_window = A_window
@@ -476,10 +481,69 @@ class Envelope:
                 f"erv_enabled=true -- otherwise the mechanical fresh air "
                 f"is silently ignored."
             )
+        # P3-9: dry-bulb economizer + fan power (defence-in-depth guards;
+        # DesignProject.from_dict enforces the same rules at load time,
+        # this catches programmatic Envelope(...) constructions).
+        if not isinstance(economizer_enabled, bool):
+            raise ValueError(
+                f"economizer_enabled must be a boolean, got "
+                f"{type(economizer_enabled).__name__}: {economizer_enabled!r}"
+            )
+        if isinstance(economizer_flow_m3h, bool) or not isinstance(
+            economizer_flow_m3h, (int, float)
+        ):
+            raise ValueError(
+                f"economizer_flow_m3h must be a number (m3/h), got "
+                f"{type(economizer_flow_m3h).__name__}: {economizer_flow_m3h!r}"
+            )
+        if float(economizer_flow_m3h) < 0.0:
+            raise ValueError(
+                f"economizer_flow_m3h must be >= 0, got {economizer_flow_m3h}"
+            )
+        if isinstance(economizer_delta_t_k, bool) or not isinstance(
+            economizer_delta_t_k, (int, float)
+        ):
+            raise ValueError(
+                f"economizer_delta_t_k must be a number (K), got "
+                f"{type(economizer_delta_t_k).__name__}: {economizer_delta_t_k!r}"
+            )
+        if not (0.0 <= float(economizer_delta_t_k) <= 20.0):
+            raise ValueError(
+                f"economizer_delta_t_k must be within [0, 20] K (dead band "
+                f"before outdoor air beats return air), got "
+                f"{economizer_delta_t_k}"
+            )
+        if isinstance(erv_fan_power_w, bool) or not isinstance(
+            erv_fan_power_w, (int, float)
+        ):
+            raise ValueError(
+                f"erv_fan_power_w must be a number (W), got "
+                f"{type(erv_fan_power_w).__name__}: {erv_fan_power_w!r}"
+            )
+        if float(erv_fan_power_w) < 0.0:
+            raise ValueError(
+                f"erv_fan_power_w must be >= 0 W, got {erv_fan_power_w}"
+            )
+        if economizer_enabled and not (float(economizer_flow_m3h) > 0.0):
+            raise ValueError(
+                f"economizer_enabled=true requires economizer_flow_m3h > 0 "
+                f"m3/h (got {economizer_flow_m3h}); an enabled economizer "
+                f"with no flow is a config error, not a zero-flow damper."
+            )
+        if not economizer_enabled and float(economizer_flow_m3h) > 0.0:
+            raise ValueError(
+                f"economizer_flow_m3h > 0 ({economizer_flow_m3h}) requires "
+                f"economizer_enabled=true -- otherwise the free-cooling "
+                f"airflow is silently ignored."
+            )
         self.erv_enabled = erv_enabled
         self.erv_flow_m3h = float(erv_flow_m3h)
         self.erv_sensible_eff = float(erv_sensible_eff)
         self.erv_latent_eff = float(erv_latent_eff)
+        self.economizer_enabled = economizer_enabled
+        self.economizer_flow_m3h = float(economizer_flow_m3h)
+        self.economizer_delta_t_k = float(economizer_delta_t_k)
+        self.erv_fan_power_w = float(erv_fan_power_w)
         # R28 step 3: solar-split fraction (only consumed on RC paths; the
         # engine reads it every substep, so store unconditionally).
         if not (0.0 <= solar_mass_fraction <= 1.0):
@@ -872,3 +936,33 @@ class Envelope:
             * 1000.0
         )
         return Q_sens_net, M_lat_net, Q_lat_net, Q_rec_sens, Q_rec_lat
+
+    # -- Dry-bulb economizer free cooling (P3-9) ---------------------------
+    def economizer_ventilation(
+        self, T_ext: float, T_z: float, W_ext: float, W_z: float, flow_m3h: float
+    ) -> Tuple[float, float, float]:
+        """Full-exchange fresh-air free cooling (economizer bypass mode).
+
+        The ERV core is BYPASSED: outdoor air enters the room at its own
+        state (no recovery), so the room load is the FULL mass-flow
+        expression at ``flow_m3h`` -- identical in form and evaluation
+        order to :meth:`infiltration`, but at the economizer flow.  The
+        engine calls this only when the HVAC demands cooling and the
+        dry-bulb criterion ``T_ext <= T_z - economizer_delta_t_k`` holds,
+        so the sensible term is negative (free cooling) by construction;
+        the caller meters ``-Q_sens`` as free cooling delivered.
+
+        Returns
+        -------
+        (Q_sens_W, M_lat_kgs, Q_lat_W) : (float, float, float)
+            Same sign convention as :meth:`infiltration` (+ into room).
+            Callers MUST include Q_lat_W in the room heat balance or
+            energy conservation is violated.
+        """
+        if flow_m3h <= 0.0:
+            return 0.0, 0.0, 0.0
+        m_dot = flow_m3h * self.rho_air / 3600.0  # kg/s
+        Q_sens = m_dot * self.cp_air * (T_ext - T_z)  # W
+        M_lat = m_dot * (W_ext - W_z)  # kg/s
+        Q_lat = M_lat * latent_heat_vaporization(T_z) * 1000.0  # W
+        return Q_sens, M_lat, Q_lat

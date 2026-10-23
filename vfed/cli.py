@@ -243,12 +243,18 @@ _YAML_SECTION_COMMENTS = {
          "#   solar_mass_fraction  # [0,1] window solar fed into the RC network\n"
          "#                        # (1.0 = LBNL rule: solar lands on surfaces)\n"
          "#   ERV/HRV mechanical fresh air (default off):\n"
-         "#   erv_enabled: true + erv_flow_m3h (m3/h) + erv_sensible_eff\n"
-         "#                 # [0,0.95] (default 0.7) + erv_latent_eff\n"
-         "#                 # (0 = sensible-only HRV; >0 = enthalpy ERV);\n"
-         "#                 # un-recovered share of the fresh air enters the\n"
-         "#                 # heat/moisture balance on top of ach leakage\n"
-         "# ------------------------------------------------------------------\n"
+          "#   erv_enabled: true + erv_flow_m3h (m3/h) + erv_sensible_eff\n"
+          "#                 # [0,0.95] (default 0.7) + erv_latent_eff\n"
+          "#                 # (0 = sensible-only HRV; >0 = enthalpy ERV);\n"
+          "#                 # un-recovered share of the fresh air enters the\n"
+          "#                 # heat/moisture balance on top of ach leakage\n"
+          "#   economizer (P3-9, default off): economizer_enabled: true +\n"
+          "#                 # economizer_flow_m3h (m3/h) + economizer_delta_t_k\n"
+          "#                 # (default 1.0) = dry-bulb free cooling: bypasses\n"
+          "#                 # the core when cooling is demanded and T_out <=\n"
+          "#                 # T_zone - delta; erv_fan_power_w (W at reference\n"
+          "#                 # flow, default 0 = not modelled) meters + heats\n"
+          "# ------------------------------------------------------------------\n"
      ),
     "hvac": (
         "# ------------------------------------------------------------------\n"
@@ -1039,15 +1045,32 @@ def _cmd_evaluate(args):
     # so the default console output is unchanged).
     _erv = summary.get("erv")
     if _erv:
-        _erv_kind = "ERV" if _erv.get("latent_eff", 0.0) > 0.0 else "HRV"
-        print(
-            f"  {_erv_kind} recovery    = "
-            f"{_erv.get('annual_recovered_sensible_kwh', 0.0):.1f} kWh sens + "
-            f"{_erv.get('annual_recovered_latent_kwh', 0.0):.1f} kWh latent "
-            f"(flow {_erv.get('flow_m3h', 0.0):.0f} m3/h, eps_s "
-            f"{_erv.get('sensible_eff', 0.0):.2f}, eps_l "
-            f"{_erv.get('latent_eff', 0.0):.2f})"
-        )
+        # P3-9: recovery keys only exist on the ERV/HRV path; a standalone
+        # economizer dict carries only the free-cooling keys.
+        if "annual_recovered_sensible_kwh" in _erv:
+            _erv_kind = "ERV" if _erv.get("latent_eff", 0.0) > 0.0 else "HRV"
+            print(
+                f"  {_erv_kind} recovery    = "
+                f"{_erv.get('annual_recovered_sensible_kwh', 0.0):.1f} kWh sens + "
+                f"{_erv.get('annual_recovered_latent_kwh', 0.0):.1f} kWh latent "
+                f"(flow {_erv.get('flow_m3h', 0.0):.0f} m3/h, eps_s "
+                f"{_erv.get('sensible_eff', 0.0):.2f}, eps_l "
+                f"{_erv.get('latent_eff', 0.0):.2f})"
+            )
+        if "annual_free_cooling_kwh" in _erv:
+            print(
+                f"  Economizer        = "
+                f"{_erv.get('annual_free_cooling_kwh', 0.0):.1f} kWh free cooling "
+                f"({_erv.get('economizer_hours', 0.0):.0f} h, flow "
+                f"{_erv.get('economizer_flow_m3h', 0.0):.0f} m3/h, dT "
+                f"{_erv.get('economizer_delta_t_k', 0.0):.1f} K)"
+            )
+        if _erv.get("annual_fan_kwh", 0.0) > 0.0:
+            print(
+                f"  Vent fan          = "
+                f"{_erv.get('annual_fan_kwh', 0.0):.1f} kWh "
+                f"({_erv.get('fan_power_w', 0.0):.0f} W at reference flow)"
+            )
     # P0-4: full-load diagnostics — a device pinned at rated output hour
     # after hour usually means a setpoint the room cannot physically reach
     # (same reporting style as the capital = 0 warning below).

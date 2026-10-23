@@ -377,8 +377,19 @@ envelope:
 - 与 `ach` 独立：渗风通道照常运行，两股质量流叠加。选型挂钩：`hvac.auto_size` 将未回收新风折算为等效 ach，`deh.auto_size` 将其未回收水分计入设计湿负荷
 - `erv` summary 块（仅启用时出现）报告风量、两个效率与回收能量 `annual_recovered_sensible_kwh` / `annual_recovered_latent_kwh`（绝对 kWh，逐子步计量）；`vfed evaluate` 激活时打印一行自证
 - 加载即 fail-fast：启用而 `flow <= 0`、`flow > 0` 而开关未开（防静默无效）、效率越界 [0, 0.95]、非布尔/非数值
-- ERV 机组自身的风机/寄生功率尚未计量（预留接口）；启用该通道仅体现回收的热力学效果
+- ERV/HRV 风机功率经 `erv_fan_power_w` 计量（见下）；0 W（默认）保持仅热力学效果的既有行为
 - 609 preset 不启用 ERV（奉贤为 `ach 0.001` 密闭房）；所有 609 基线在字段缺省时逐位一致
+- 干球 economizer 免费制冷（`economizer_enabled` + `economizer_flow_m3h` + `economizer_delta_t_k`）：HVAC 处于制冷模式且 `T_ext <= T_z - delta` 时旁通回收芯体，`economizer_flow_m3h` 全量新风无回收进入平衡（与渗风同形的质量流物理）；典型风量 2-4 房间体积每小时，默认 1 K 死区防风阀频繁启闭；与 `erv_enabled` 独立（ERV 关 + economizer 开 = 独立夜间洗风阀）
+- `erv_fan_power_w`（W，默认 0 = 不建模）为参考流量（ERV 运行取 `erv_flow_m3h`，否则 `economizer_flow_m3h`）下的送+排风机总功率；随运行流量线性缩放（EC 电机一阶），计入建筑电费（电量分解的 misc 桶）并全部作为热量散入房间（保守：供/排风机均在围护内）
+- 特性开启时 `erv` summary 块追加 `economizer_flow_m3h` / `economizer_delta_t_k` / `economizer_hours` / `annual_free_cooling_kwh` 与 `fan_power_w` / `annual_fan_kwh` 键，`vfed evaluate` 打印免费制冷与风机行
+
+```yaml
+envelope:
+  economizer_enabled: true      # 制冷模式免费制冷
+  economizer_flow_m3h: 800.0    # 2-4 房间体积每小时
+  economizer_delta_t_k: 1.0     # 干球死区
+  erv_fan_power_w: 150.0        # 参考流量下风机功率
+```
 
 ## 架构
 

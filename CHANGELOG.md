@@ -8,6 +8,29 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Added
 
+- **Dry-bulb economizer free cooling + ERV fan power (P3-9).** New
+  envelope fields `economizer_enabled` / `economizer_flow_m3h` /
+  `economizer_delta_t_k` / `erv_fan_power_w` (all default off/0, so the
+  default path is bit-for-bit unchanged — the preset_609 48 h sha256
+  oracle holds). While the HVAC is in cooling mode and
+  `T_ext <= T_z - delta`, the recovery core is bypassed and full outdoor
+  air at the economizer flow enters the balances with no recovery
+  (same mass-flow physics as infiltration; typical 2-4 room volumes/h,
+  1 K dead band, independent of `erv_enabled`). `erv_fan_power_w` is
+  the supply+extract fan power at the reference flow, linearly scaled
+  with the running flow, billed into building electricity (misc bucket
+  of the energy breakdown and monthly totals, so the shares still
+  close) and fully dissipated into the zone as heat. The `erv` summary
+  block gains `economizer_hours` / `annual_free_cooling_kwh` /
+  `fan_power_w` / `annual_fan_kwh`-family keys only when the matching
+  feature is on (an ERV-only run still reports exactly the legacy 6
+  keys); `vfed evaluate` prints free-cooling and fan lines, and the
+  design template lists the new fields. Fail-fast guards mirror the
+  ERV rules at both `project.from_dict` and the `Envelope` constructor.
+  Tests: 18 new in test_29 (bypass arithmetic, infiltration identity,
+  eps independence, contract/guard matrix, cool-probe integration with
+  exact key sets, fan kWh metering + waste-heat displacement, monthly
+  closure, explicit-off bitwise identity).
 - **GHI absolute-scale console caveat (P1-2).** When a PV-carrying run
   concludes on unscaled ERA5 GHI (`site.weather_provider: open-meteo` with
   `site.ghi_scale: 1.0`), the `evaluate` console now prints the annual GHI

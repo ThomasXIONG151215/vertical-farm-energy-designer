@@ -419,3 +419,313 @@ class TestContractFailFast:
             erv_sensible_eff=0.95, erv_latent_eff=0.95,
         )
         assert env.erv_enabled and env.erv_flow_m3h == 500.0
+
+
+# ── 5. P3-9: dry-bulb economizer free cooling + ERV fan power ──────────────
+
+
+def cool_probe_project(**env_over):
+    """Overheated room in cool weather: a 2 kW LED against U_wall_A=30
+    pushes the zone far above the outdoor balance point (~68 K free-float),
+    so the heat pump runs in cool mode and the economizer criterion
+    (cool mode AND T_ext <= T_z - delta) is exercised end-to-end."""
+    p = probe_project(U_wall_A=30.0, **env_over)
+    p.led.power_w = 2000.0
+    return p
+
+
+class TestEconomizerFormula:
+    """Envelope.economizer_ventilation: full-exchange bypass physics."""
+
+    def test_full_exchange_arithmetic(self):
+        """flow 800 m3/h, dT=-12 K: m_v=0.8*1.2/3? no -- 800*1.2/3600 kg/s,
+        Q_sens = m_v*cp*(-12) = -3216 W (coolth into a warm room), M_lat
+        dilutes the humid zone, Q_lat = M_lat*L_v(T_z)*1000."""
+        env = Envelope()
+        q_sens, m_lat, q_lat = env.economizer_ventilation(
+            10.0, 22.0, 0.008, 0.012, 800.0
+        )
+        m_v = 800.0 * 1.2 / 3600.0
+        assert q_sens == pytest.approx(m_v * 1005.0 * (10.0 - 22.0), rel=1e-12)
+        assert q_sens == pytest.approx(-3216.0, abs=0.01)
+        assert m_lat == pytest.approx(m_v * (0.008 - 0.012), rel=1e-12)  # dries
+        assert q_lat == pytest.approx(
+            m_lat * latent_heat_vaporization(22.0) * 1000.0, rel=1e-12
+        )
+
+    def test_equals_infiltration_at_equal_flow(self):
+        """Bypass = the same mass-flow physics as infiltration, with NO
+        core recovery: exact float identity at ach*V_room == flow (the
+        eps=0 cross-model identity, one step further)."""
+        econ = Envelope()
+        infil = Envelope(ach=1.0, V_room=800.0)  # 1.0*800/3600 == 800/3600
+        T_e, T_z, W_e, W_z = 35.0, 22.0, 0.020, 0.012
+        q1, m1, ql1 = econ.economizer_ventilation(T_e, T_z, W_e, W_z, 800.0)
+        q2, m2, ql2 = infil.infiltration(T_e, T_z, W_e, W_z)
+        assert (q1, m1, ql1) == (q2, m2, ql2)  # exact float identity
+
+    def test_independent_of_erv_effectiveness(self):
+        """Bypassing the core means core effectiveness cannot touch the
+        economizer stream (exact identity across eps settings)."""
+        a = erv_env(erv_sensible_eff=0.9, erv_latent_eff=0.9)
+        b = erv_env()
+        r_a = a.economizer_ventilation(5.0, 24.0, 0.006, 0.010, 500.0)
+        r_b = b.economizer_ventilation(5.0, 24.0, 0.006, 0.010, 500.0)
+        assert r_a == r_b
+
+    def test_zero_flow_returns_zeros(self):
+        env = Envelope()
+        assert env.economizer_ventilation(5.0, 24.0, 0.006, 0.010, 0.0) == (
+            0.0,
+            0.0,
+            0.0,
+        )
+
+
+class TestEconomizerContract:
+    _site = {"lat": 31.23, "lon": 121.47}
+
+    def test_defaults_off_and_valid_values_accepted(self):
+        p = DesignProject.from_dict({"name": "p", "site": self._site})
+        assert p.envelope.economizer_enabled is False
+        assert p.envelope.economizer_flow_m3h == 0.0
+        assert p.envelope.economizer_delta_t_k == 1.0
+        assert p.envelope.erv_fan_power_w == 0.0
+        q = DesignProject.from_dict(
+            {
+                "name": "q",
+                "site": self._site,
+                "envelope": {
+                    "economizer_enabled": True,
+                    "economizer_flow_m3h": 800.0,
+                    "economizer_delta_t_k": 2.0,
+                    "erv_fan_power_w": 120.0,
+                },
+            }
+        )
+        assert q.envelope.economizer_enabled is True
+        assert q.envelope.economizer_flow_m3h == 800.0
+        assert q.envelope.economizer_delta_t_k == 2.0
+        assert q.envelope.erv_fan_power_w == 120.0
+
+    def test_enabled_without_flow_rejected(self):
+        with pytest.raises(
+            ValueError, match="envelope.economizer_enabled=true requires"
+        ):
+            DesignProject.from_dict(
+                {"name": "bad", "site": self._site,
+                 "envelope": {"economizer_enabled": True}}
+            )
+
+    def test_flow_without_enabled_rejected(self):
+        with pytest.raises(
+            ValueError, match="requires envelope.economizer_enabled=true"
+        ):
+            DesignProject.from_dict(
+                {"name": "bad", "site": self._site,
+                 "envelope": {"economizer_flow_m3h": 800.0}}
+            )
+
+    @pytest.mark.parametrize("bad", [25.0, -0.1])
+    def test_delta_out_of_band_rejected(self, bad):
+        with pytest.raises(
+            ValueError, match=r"economizer_delta_t_k must be within \[0, 20\]"
+        ):
+            DesignProject.from_dict(
+                {"name": "bad", "site": self._site,
+                 "envelope": {"economizer_delta_t_k": bad}}
+            )
+
+    def test_negative_fan_power_rejected(self):
+        with pytest.raises(
+            ValueError, match="envelope.erv_fan_power_w must be >= 0"
+        ):
+            DesignProject.from_dict(
+                {"name": "bad", "site": self._site,
+                 "envelope": {"erv_fan_power_w": -5.0}}
+            )
+
+    @pytest.mark.parametrize("bad", ["true", 1])
+    def test_non_bool_enabled_rejected(self, bad):
+        with pytest.raises(
+            ValueError, match="envelope.economizer_enabled must be a boolean"
+        ):
+            DesignProject.from_dict(
+                {"name": "bad", "site": self._site,
+                 "envelope": {"economizer_enabled": bad}}
+            )
+
+    def test_device_level_guards_mirror_project(self):
+        with pytest.raises(ValueError, match="economizer_enabled=true requires"):
+            Envelope(economizer_enabled=True, economizer_flow_m3h=0.0)
+        with pytest.raises(ValueError, match=r"\[0, 20\]"):
+            Envelope(economizer_delta_t_k=25.0)
+        with pytest.raises(ValueError, match=">= 0"):
+            Envelope(erv_fan_power_w=-1.0)
+        # boundaries and a healthy programmatic build are accepted
+        env = Envelope(
+            economizer_enabled=True,
+            economizer_flow_m3h=800.0,
+            economizer_delta_t_k=0.0,
+            erv_fan_power_w=120.0,
+        )
+        assert env.economizer_enabled and env.economizer_flow_m3h == 800.0
+        assert Envelope(economizer_delta_t_k=20.0).economizer_delta_t_k == 20.0
+
+
+class TestEconomizerEngine:
+    def test_free_cooling_active_with_exact_summary_keys(self):
+        """Cool-mode probe, economizer on (flow 500, dT 1 K), ERV off, fan
+        0: the summary carries ONLY the 4 economizer keys (no ERV keys, no
+        fan keys) with positive hours and kWh."""
+        engine = DesignEngine(cache_dir=None)
+        wx = cold_weather(n=48, t_ext=2.0)
+        r = engine.run(
+            cool_probe_project(
+                economizer_enabled=True, economizer_flow_m3h=500.0
+            ),
+            weather=wx,
+        )
+        s = r.summary["erv"]
+        assert set(s) == {
+            "economizer_flow_m3h",
+            "economizer_delta_t_k",
+            "economizer_hours",
+            "annual_free_cooling_kwh",
+        }
+        assert s["economizer_flow_m3h"] == 500.0
+        assert s["economizer_delta_t_k"] == 1.0
+        assert s["economizer_hours"] > 0.0
+        assert s["annual_free_cooling_kwh"] > 0.0
+        tz = np.asarray(r.timeseries["T_z"], dtype=float)
+        assert np.isfinite(tz).all()
+
+    def test_free_cooling_cuts_hvac_electricity(self):
+        """Same probe with vs without the economizer: the bypass stream
+        displaces compressor cooling, so HVAC Wh strictly falls."""
+        engine = DesignEngine(cache_dir=None)
+        wx = cold_weather(n=48, t_ext=2.0)
+        r_off = engine.run(cool_probe_project(), weather=wx)
+        r_on = engine.run(
+            cool_probe_project(
+                economizer_enabled=True, economizer_flow_m3h=500.0
+            ),
+            weather=wx,
+        )
+        e_off = float(np.sum(r_off.timeseries["E_hvac_Wh"]))
+        e_on = float(np.sum(r_on.timeseries["E_hvac_Wh"]))
+        assert e_on < e_off
+        assert "erv" not in r_off.summary  # default off adds no key
+
+    def test_erv_fan_power_metered_and_dissipated(self):
+        """Winter heating probe with ERV on + fan 150 W: the fan adds
+        exactly 150 W * 48 h = 7.2 kWh to the electricity meter (misc
+        bucket delta), and its waste heat warms the zone so the heat
+        pump strictly saves electricity (heat accounted in-room)."""
+        engine = DesignEngine(cache_dir=None)
+        wx = cold_weather(n=48, t_ext=2.0)
+        kw = dict(erv_enabled=True, erv_flow_m3h=500.0)
+        r0 = engine.run(probe_project(**kw), weather=wx)
+        r1 = engine.run(
+            probe_project(**dict(kw, erv_fan_power_w=150.0)), weather=wx
+        )
+        s0, s1 = r0.summary["erv"], r1.summary["erv"]
+        assert set(s0) == {
+            "flow_m3h",
+            "sensible_eff",
+            "latent_eff",
+            "annual_recovered_sensible_kwh",
+            "annual_recovered_latent_kwh",
+        }
+        assert set(s1) == set(s0) | {"fan_power_w", "annual_fan_kwh"}
+        assert s1["fan_power_w"] == 150.0
+        assert s1["annual_fan_kwh"] == pytest.approx(7.2, abs=0.02)
+        # billed into the building total: closed-form identity
+        # d_total = fan + d_hvac + d_deh (LED/equipment constant here)
+        d_tot = r1.summary["annual_energy_kwh"] - r0.summary["annual_energy_kwh"]
+        d_hvac = (
+            float(np.sum(r1.timeseries["E_hvac_Wh"]))
+            - float(np.sum(r0.timeseries["E_hvac_Wh"]))
+        ) / 1000.0
+        d_deh = (
+            float(np.sum(r1.timeseries["E_deh_Wh"]))
+            - float(np.sum(r0.timeseries["E_deh_Wh"]))
+        ) / 1000.0
+        assert d_tot == pytest.approx(7.2 + d_hvac + d_deh, abs=0.05)
+        assert d_tot > 0.0
+        assert d_hvac < 0  # 150 W waste heat displaces heat-pump heat
+        # shares still close with the fan folded into the misc bucket
+        for r in (r0, r1):
+            sm = r.summary
+            assert (
+                sm["hvac_pct"]
+                + sm["deh_pct"]
+                + sm["led_pct"]
+                + sm["misc_pct"]
+            ) == pytest.approx(1.0, abs=2e-4)
+
+    def test_dual_mode_economizer_bypasses_core(self):
+        """ERV + economizer + fan all on (cool probe): the summary merges
+        all key families (6 ERV + 4 econ + 2 fan); while the economizer
+        is active the core is bypassed, so recovered sensible energy
+        strictly drops vs the same config with the economizer off."""
+        engine = DesignEngine(cache_dir=None)
+        wx = cold_weather(n=48, t_ext=2.0)
+        econ = dict(
+            economizer_enabled=True, economizer_flow_m3h=800.0
+        )
+        r_erv = engine.run(
+            cool_probe_project(
+                erv_enabled=True, erv_flow_m3h=500.0,
+                erv_sensible_eff=0.7, erv_fan_power_w=150.0,
+            ),
+            weather=wx,
+        )
+        r_both = engine.run(
+            cool_probe_project(
+                erv_enabled=True, erv_flow_m3h=500.0,
+                erv_sensible_eff=0.7, erv_fan_power_w=150.0, **econ,
+            ),
+            weather=wx,
+        )
+        s = r_both.summary["erv"]
+        assert set(s) == {
+            "flow_m3h",
+            "sensible_eff",
+            "latent_eff",
+            "annual_recovered_sensible_kwh",
+            "annual_recovered_latent_kwh",
+            "economizer_flow_m3h",
+            "economizer_delta_t_k",
+            "economizer_hours",
+            "annual_free_cooling_kwh",
+            "fan_power_w",
+            "annual_fan_kwh",
+        }
+        assert s["economizer_hours"] > 0.0
+        assert s["annual_free_cooling_kwh"] > 0.0
+        assert s["annual_fan_kwh"] > 0.0
+        assert (
+            s["annual_recovered_sensible_kwh"]
+            < r_erv.summary["erv"]["annual_recovered_sensible_kwh"]
+        )
+
+    def test_explicit_off_bitwise_matches_implicit_default(self):
+        """Explicit econ-off / fan-0 fields are bitwise-identical to the
+        implicit default on a run that actually cools (no hidden
+        coupling; the W3-E/P3-9 default path stays bit-for-bit)."""
+        engine = DesignEngine(cache_dir=None)
+        wx = cold_weather(n=48, t_ext=2.0)
+        r_default = engine.run(cool_probe_project(), weather=wx)
+        r_off = engine.run(
+            cool_probe_project(
+                economizer_enabled=False,
+                economizer_flow_m3h=0.0,
+                economizer_delta_t_k=1.0,
+                erv_fan_power_w=0.0,
+            ),
+            weather=wx,
+        )
+        assert r_default.summary == r_off.summary
+        for key in ("load_kw", "E_hvac_Wh", "E_deh_Wh", "T_z", "RH_z"):
+            assert r_default.timeseries[key] == r_off.timeseries[key]

@@ -383,8 +383,19 @@ envelope:
 - Independent of `ach`: the infiltration channel keeps running unchanged; the two mass flows superpose. Sizing hooks: `hvac.auto_size` adds the un-recovered fresh air as an equivalent ach, `deh.auto_size` adds its un-recovered moisture to the design load
 - The `erv` summary block (enabled runs only) reports the flow, both effectiveness values and the recovered energy as `annual_recovered_sensible_kwh` / `annual_recovered_latent_kwh` (absolute kWh, metered per substep); `vfed evaluate` prints a one-line self-evidence
 - Fail-fast at load time: enabled with `flow <= 0`, `flow > 0` with the switch off (silent no-op guard), effectiveness outside [0, 0.95], non-boolean/non-numeric values
-- Fan/parasitic power of the ERV unit itself is NOT yet metered (future interface); enabling the channel shows the thermodynamic effect of recovery only
+- ERV/HRV fan power is metered via `erv_fan_power_w` (see below); 0 W (default) keeps the legacy thermodynamics-only behavior
 - The 609 preset does not enable ERV (Fengxian is a sealed room at `ach 0.001`); all 609 baselines are bit-identical with the fields absent
+- Dry-bulb economizer free cooling (`economizer_enabled` + `economizer_flow_m3h` + `economizer_delta_t_k`): while the HVAC is in cooling mode AND `T_ext <= T_z - delta`, the recovery core is bypassed and full outdoor air at `economizer_flow_m3h` enters the balances with no recovery (the same mass-flow physics as infiltration). Typical flows are 2-4 room volumes per hour; the 1 K default dead band prevents damper chatter. Independent of `erv_enabled` (ERV off + economizer on = a standalone night-purge damper)
+- `erv_fan_power_w` (W, default 0 = not modeled) is the supply+extract fan power at the reference flow (`erv_flow_m3h` when the ERV runs, else `economizer_flow_m3h`); it is scaled linearly with the running flow (EC motor, first order), billed into the building electricity (misc bucket of the energy breakdown) and fully dissipated into the zone as heat (conservative: both fans sit inside the envelope)
+- With those features on, the `erv` summary block gains `economizer_flow_m3h` / `economizer_delta_t_k` / `economizer_hours` / `annual_free_cooling_kwh` and `fan_power_w` / `annual_fan_kwh` keys, and `vfed evaluate` prints the free-cooling and fan lines
+
+```yaml
+envelope:
+  economizer_enabled: true      # free cooling in cool mode
+  economizer_flow_m3h: 800.0    # 2-4 room volumes per hour
+  economizer_delta_t_k: 1.0     # dry-bulb dead band
+  erv_fan_power_w: 150.0        # fans at the reference flow
+```
 
 ## Architecture
 

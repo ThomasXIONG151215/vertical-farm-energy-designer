@@ -490,6 +490,12 @@ def _build_devices(p, P_atm: float = 101.325):
         erv_flow_m3h=p.envelope.erv_flow_m3h,
         erv_sensible_eff=p.envelope.erv_sensible_eff,
         erv_latent_eff=p.envelope.erv_latent_eff,
+        # P3-9: dry-bulb economizer + fan power (defaults off/0 keep the
+        # legacy path bit-for-bit).
+        economizer_enabled=p.envelope.economizer_enabled,
+        economizer_flow_m3h=p.envelope.economizer_flow_m3h,
+        economizer_delta_t_k=p.envelope.economizer_delta_t_k,
+        erv_fan_power_w=p.envelope.erv_fan_power_w,
     )
     # R28: closed-form Euler stability guard (only active when RC is on).
     _wall_rc_stability_guard(p)
@@ -1059,6 +1065,18 @@ class DesignEngine:
         erv_rec_sens_j = 0.0
         erv_rec_lat_j = 0.0
         erv_on = env.erv_enabled
+        # P3-9: dry-bulb economizer + ERV fan power meters.  Zero on both
+        # default-off paths (guarded adds below touch no float otherwise).
+        econ_on = env.economizer_enabled
+        econ_flow = env.economizer_flow_m3h
+        econ_dt_k = env.economizer_delta_t_k
+        erv_fan_w = env.erv_fan_power_w
+        # Reference flow for the fan-power linear scaling (EC motor,
+        # first order): the flow the nameplate W refers to.
+        erv_fan_ref_flow = env.erv_flow_m3h if erv_on else econ_flow
+        econ_free_cool_j = 0.0
+        econ_active_s = 0.0
+        erv_fan_j = 0.0
         for h in range(n):
             energy_wh = 0.0
             hvac_wh = 0.0
@@ -1070,6 +1088,7 @@ class DesignEngine:
             co2_inj_sum = 0.0
             co2_wh = 0.0
             P_co2_s = 0.0
+            erv_fan_wh = 0.0  # P3-9: hourly ventilation-fan Wh (misc bucket)
             t_sum, rh_sum = 0.0, 0.0
             tm_sum = 0.0  # R28: mass-node substep accumulator (RC on only)
             ts_sum = 0.0  # R28 step 3: surface-node substep accumulator (rc3 only)
@@ -1240,8 +1259,29 @@ class DesignEngine:
                 # core -- an INDEPENDENT channel superposed on the ach
                 # infiltration above (guarded branch: disabled path touches
                 # no float, bit-for-bit identical to pre-W3-E builds).
+                # P3-9: when the dry-bulb economizer criterion holds during
+                # cooling demand (T_ext <= T_z - delta), the core is
+                # BYPASSED and full fresh air at economizer_flow_m3h
+                # provides free cooling instead (bypassing a core while
+                # recovering makes no sense).  Fan power runs with the
+                # active airflow and is metered for the electric total.
                 Q_erv = M_erv = Q_lat_erv = 0.0
-                if erv_on:
+                P_erv_fan_s = 0.0
+                econ_active = (
+                    econ_on
+                    and hv["mode"] == "cool"
+                    and T_ext[h] <= T_z - econ_dt_k
+                )
+                if econ_active:
+                    Q_erv, M_erv, Q_lat_erv = env.economizer_ventilation(
+                        T_ext[h], T_z, W_ext, W_z, econ_flow
+                    )
+                    if Q_erv < 0.0:
+                        econ_free_cool_j += -Q_erv * dt
+                    econ_active_s += dt
+                    if erv_fan_w > 0.0 and erv_fan_ref_flow > 0.0:
+                        P_erv_fan_s = erv_fan_w * (econ_flow / erv_fan_ref_flow)
+                elif erv_on:
                     (
                         Q_erv,
                         M_erv,
@@ -1251,6 +1291,8 @@ class DesignEngine:
                     ) = env.mechanical_ventilation(T_ext[h], T_z, W_ext, W_z)
                     erv_rec_sens_j += abs(_q_rec_s) * dt
                     erv_rec_lat_j += abs(_q_rec_l) * dt
+                    if erv_fan_w > 0.0 and env.erv_flow_m3h > 0.0:
+                        P_erv_fan_s = erv_fan_w
                 # Transpiration evaporative cooling: water absorbs L_v from
                 # the air as it transitions to vapour.  This energy is later
                 # released when the DEH condenses the moisture (dh["Q_DH_W"]
@@ -1302,10 +1344,15 @@ class DesignEngine:
                 M_total = E_trans - M_deh_act - M_hvac_act + M_inf + M_perm
                 # R34/W3-E: superpose the ERV net fresh-air loads on both
                 # balances (guarded add -- the disabled path leaves the two
-                # sums above bit-for-bit untouched).
-                if erv_on:
+                # sums above bit-for-bit untouched).  P3-9 extends the
+                # branch to the economizer path and dissolves the fan
+                # power as heat inside the envelope (supply + exhaust fans
+                # both sit in the room boundary; conservative).
+                if erv_on or econ_active:
                     Q_total += Q_erv + Q_lat_erv
                     M_total += M_erv
+                    if P_erv_fan_s > 0.0:
+                        Q_total += P_erv_fan_s
                 # ── humidity step with conservation accounting ─────────────
                 # step_humidity clamps W_z to [0, W_sat].  The clamped water is
                 # reported back so the room heat balance stays consistent:
@@ -1355,6 +1402,13 @@ class DesignEngine:
                 # (guarded add -- the disabled path's P_tot is untouched).
                 if co2_on:
                     P_tot += P_co2_s
+                # P3-9: ventilation fan electricity joins the building
+                # total (guarded add -- 0 W default leaves P_tot untouched;
+                # the heat side is already in Q_total above).
+                if P_erv_fan_s > 0.0:
+                    P_tot += P_erv_fan_s
+                    erv_fan_j += P_erv_fan_s * dt
+                    erv_fan_wh += P_erv_fan_s * dt / 3600.0
                 energy_wh += P_tot * dt / 3600.0
                 hvac_wh += hv["P_elec_W"] * dt / 3600.0
                 deh_wh += dh["P_elec_W"] * dt / 3600.0
@@ -1415,6 +1469,11 @@ class DesignEngine:
             # monthly total.
             if co2_on:
                 monthly_energy[month_idx, 4] += co2_wh / 1000.0
+            # P3-9: ventilation-fan electricity folded into the "misc"
+            # bucket the same way, so the monthly components close
+            # against the monthly total (fan off -> += 0.0, bit-identical).
+            if erv_fan_w > 0.0:
+                monthly_energy[month_idx, 4] += erv_fan_wh / 1000.0
             monthly_t_sum[month_idx] += T_z_out[h]
             monthly_rh_sum[month_idx] += RH_z_out[h]
             monthly_hours[month_idx] += 1
@@ -1511,6 +1570,11 @@ class DesignEngine:
         # in the CO2 summary block: the device-level column is E_co2_Wh).
         if co2_on:
             misc_kwh += float(np.sum(E_co2_Wh)) / 1000.0
+        # P3-9: ventilation-fan electricity joins the misc bucket so the
+        # energy_breakdown shares still close against annual_energy_kwh
+        # (erv_fan_j is joules; fan off -> += 0.0, bit-identical).
+        if erv_fan_w > 0.0:
+            misc_kwh += float(erv_fan_j) / 3.6e6
         denom = max(total_kwh, 1e-6)
         energy_breakdown = {
             "hvac_pct": round(hvac_kwh / denom, 4),
@@ -1585,15 +1649,35 @@ class DesignEngine:
         # R34/W3-E (H7): ERV/HRV heat-recovery self-evidence (enabled runs
         # only -- the default off path adds no key, keeping the test_11
         # exact-set pin intact).  Recovered energy is metered as absolute
-        # kWh, sensible and latent split.
-        if env.erv_enabled:
-            summary["erv"] = {
-                "flow_m3h": p.envelope.erv_flow_m3h,
-                "sensible_eff": p.envelope.erv_sensible_eff,
-                "latent_eff": p.envelope.erv_latent_eff,
-                "annual_recovered_sensible_kwh": round(float(erv_rec_sens_j) / 3.6e6, 2),
-                "annual_recovered_latent_kwh": round(float(erv_rec_lat_j) / 3.6e6, 2),
-            }
+        # kWh, sensible and latent split.  P3-9 widens the gate to the
+        # economizer and adds fan/free-cooling keys ONLY when the
+        # corresponding feature is on, so the legacy erv-on six-key set
+        # (test_29 pin) stays exact.
+        if env.erv_enabled or env.economizer_enabled:
+            _erv_summary = {}
+            if env.erv_enabled:
+                _erv_summary = {
+                    "flow_m3h": p.envelope.erv_flow_m3h,
+                    "sensible_eff": p.envelope.erv_sensible_eff,
+                    "latent_eff": p.envelope.erv_latent_eff,
+                    "annual_recovered_sensible_kwh": round(
+                        float(erv_rec_sens_j) / 3.6e6, 2
+                    ),
+                    "annual_recovered_latent_kwh": round(
+                        float(erv_rec_lat_j) / 3.6e6, 2
+                    ),
+                }
+            if env.economizer_enabled:
+                _erv_summary["economizer_flow_m3h"] = p.envelope.economizer_flow_m3h
+                _erv_summary["economizer_delta_t_k"] = p.envelope.economizer_delta_t_k
+                _erv_summary["economizer_hours"] = round(econ_active_s / 3600.0, 1)
+                _erv_summary["annual_free_cooling_kwh"] = round(
+                    float(econ_free_cool_j) / 3.6e6, 2
+                )
+            if p.envelope.erv_fan_power_w > 0.0:
+                _erv_summary["fan_power_w"] = p.envelope.erv_fan_power_w
+                _erv_summary["annual_fan_kwh"] = round(float(erv_fan_j) / 3.6e6, 2)
+            summary["erv"] = _erv_summary
 
         # P1-1: DEH effective-SMER report — the control strategy's efficiency
         # footprint made visible.  Two ratios on the same COMPRESSOR-input

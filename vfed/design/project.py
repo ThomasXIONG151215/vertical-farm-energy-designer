@@ -506,6 +506,33 @@ class EnvelopeConfig:
     #   sensible-only HRV (plate exchanger); > 0 = enthalpy ERV (membrane /
     #   enthalpy wheel, typically 0.45-0.75) that also recovers moisture:
     #   net fresh-air latent load = (1 - eps_l)*m_v*(W_ext - W_z)*h_fg.
+    # ── P3-9: dry-bulb economizer free cooling + ERV fan power ──
+    economizer_enabled: bool = False
+    #   true = when the HVAC demands cooling and outdoor air is colder than
+    #   the zone by more than economizer_delta_t_k, the recovery core is
+    #   bypassed and full fresh air at economizer_flow_m3h provides free
+    #   cooling (dry-bulb economizer).  Independent of erv_enabled: an ERV
+    #   run switches to bypass in those hours; without an ERV this is a
+    #   standalone fresh-air / night-purge damper.  false (default) = no
+    #   economizer channel, bit-for-bit legacy.
+    economizer_flow_m3h: float = 0.0
+    #   Economizer airflow (m3/h); required > 0 when economizer_enabled
+    #   (fail-fast otherwise).  Typically >= erv_flow_m3h (a free-cooling
+    #   damper is sized for the full cooling airflow, e.g. 2-4 room
+    #   volumes/h).
+    economizer_delta_t_k: float = 1.0
+    #   Dry-bulb activation dead band (K, [0, 20]).  The economizer opens
+    #   when T_ext <= T_z - economizer_delta_t_k during cooling mode;
+    #   1.0 K is a typical margin so marginal outdoor air does not
+    #   oscillate the damper around the zone temperature.
+    erv_fan_power_w: float = 0.0
+    #   Total supply+exhaust fan electric power (W) at the REFERENCE flow
+    #   (= erv_flow_m3h when erv_enabled, else economizer_flow_m3h);
+    #   linearly scaled with the running flow (EC motor, first order).
+    #   Counted on the building electric meter AND fully dissipated as
+    #   heat into the room (conservative: both fans sit inside the
+    #   envelope).  0 (default) = fan not modelled (legacy behaviour,
+    #   zero drift).
     outdoor_co2_ppm: float = 420.0
     #   Outdoor / make-up air CO2 concentration (ppm).  NOAA GML 2024
     #   global annual mean ~424 ppm; default 420 (hard limit 350-800;
@@ -2306,6 +2333,60 @@ class DesignProject:
                 f"envelope.erv_enabled=true -- otherwise the mechanical "
                 f"fresh air is silently ignored. See also envelope.ach for "
                 f"uncontrolled infiltration (no heat recovery)."
+            )
+
+        # ── P3-9: economizer + fan power fail-fast guards (envelope) ──
+        _econ_enabled = _env_cfg.economizer_enabled
+        if not isinstance(_econ_enabled, bool):
+            raise ValueError(
+                f"envelope.economizer_enabled must be a boolean "
+                f"(true/false), got {type(_econ_enabled).__name__}: "
+                f"{_econ_enabled!r}. true enables dry-bulb free cooling "
+                f"(economizer_flow_m3h + economizer_delta_t_k)."
+            )
+        _econ_flow = _env_cfg.economizer_flow_m3h
+        if isinstance(_econ_flow, bool) or not isinstance(_econ_flow, (int, float)):
+            raise ValueError(
+                f"envelope.economizer_flow_m3h must be a number (m3/h), "
+                f"got {type(_econ_flow).__name__}: {_econ_flow!r}"
+            )
+        if float(_econ_flow) < 0.0:
+            raise ValueError(
+                f"envelope.economizer_flow_m3h must be >= 0 m3/h, got {_econ_flow}"
+            )
+        _econ_dt = _env_cfg.economizer_delta_t_k
+        if isinstance(_econ_dt, bool) or not isinstance(_econ_dt, (int, float)):
+            raise ValueError(
+                f"envelope.economizer_delta_t_k must be a number (K), got "
+                f"{type(_econ_dt).__name__}: {_econ_dt!r}"
+            )
+        if not (0.0 <= float(_econ_dt) <= 20.0):
+            raise ValueError(
+                f"envelope.economizer_delta_t_k must be within [0, 20] K "
+                f"(dry-bulb dead band), got {_econ_dt}"
+            )
+        _fan_w = _env_cfg.erv_fan_power_w
+        if isinstance(_fan_w, bool) or not isinstance(_fan_w, (int, float)):
+            raise ValueError(
+                f"envelope.erv_fan_power_w must be a number (W), got "
+                f"{type(_fan_w).__name__}: {_fan_w!r}"
+            )
+        if float(_fan_w) < 0.0:
+            raise ValueError(
+                f"envelope.erv_fan_power_w must be >= 0 W, got {_fan_w}"
+            )
+        if _econ_enabled and not (float(_econ_flow) > 0.0):
+            raise ValueError(
+                f"envelope.economizer_enabled=true requires "
+                f"economizer_flow_m3h > 0 m3/h (got {_econ_flow}); an "
+                f"enabled economizer with no flow is a config error, not "
+                f"a zero-flow damper."
+            )
+        if not _econ_enabled and float(_econ_flow) > 0.0:
+            raise ValueError(
+                f"envelope.economizer_flow_m3h > 0 ({_econ_flow}) requires "
+                f"envelope.economizer_enabled=true -- otherwise the "
+                f"free-cooling airflow is silently ignored."
             )
 
         # ── CO2 supplement (M1): fail-fast config guards ──
