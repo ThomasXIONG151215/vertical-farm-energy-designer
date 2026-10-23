@@ -64,6 +64,27 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Changed
 
+- **Battery usable capacity now fades linearly with cycling (`soh_eol`, P2-4).**
+  The dispatch loop tracks usable capacity `E_now = battery_kwh ×
+  max(1 − k·cycles_now, 1e-3)` with `k = (1 − soh_eol)/cycle_life`;
+  `cycles_now` accumulates storage-side throughput against nameplate
+  capacity (the same definition as the returned `battery_cycles`), so the
+  P4-15 replacement-year economics are unchanged. Default
+  `battery.soh_eol: 0.80` (industry-standard 80 % end-of-life) closes
+  layerD benchmark B4, where the previous no-fade model implied 11.0 yr
+  of life at 1 cycle/day vs Sandia-style 6.7-10 yr with fade;
+  `battery: {soh_eol: 1.0}` disables the fade and reproduces the legacy
+  dispatch bitwise. A load-time band guard (0, 1] rejects percent-form
+  (e.g. 80) and out-of-range values. **Behaviour change:** with the
+  default on, sweep battery/grid columns shift slightly (user13 econ:
+  discharge 5,437.28 -> 5,433.37 kWh, import 30,764.83 -> 30,768.61,
+  recon 17.58 -> 17.45; savings 3,100.57 -> 3,100.43, payback 32.7022 ->
+  32.7036) — regenerate reference CSVs (e.g. the r5 sweep) when
+  comparing. Projects without a battery (the stock 609 preset) are
+  unaffected. Tests: contract + band in test_04 §4.8; throughput
+  reduction, SOC bounds and a two-step algebra pin (charge headroom on
+  the fading denominator, `soc_end` vs the recon-overwritten last SOC
+  element) in test_08 §8.6; econ pins re-pinned in test_08/test_19.
 - **PV MPP temperature coefficient is now the nameplate `gamma_pmp` (P2-5).**
   `pv.gamma_pmp` (relative, /K; default `-0.0030` = −0.30 %/K,
   TOPCon-class nameplate) is the single coefficient driving the MPP

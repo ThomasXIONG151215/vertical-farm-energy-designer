@@ -307,6 +307,8 @@ Within a single sweep the derate is a common multiplier on every row, so the LCO
 
 **PV temperature coefficient (`gamma_pmp`).** The MPP power's temperature dependence is the single nameplate coefficient `pv.gamma_pmp` (relative, /K), default `-0.0030` (−0.30 %/K, TOPCon-class nameplate). It replaces the earlier implicit stacking of `alpha_sc + beta_voc` (−0.205 %/K), which undercounted hot-hour temperature loss by ~32 % (layerD benchmark D5). `alpha_sc` / `beta_voc` remain datasheet metadata only. To reproduce the pre-P2-5 behaviour use `pv: {gamma_pmp: -0.00205}` (residual: the second-order cross term, ~0.1 % at ΔT = 30 K).
 
+**Battery capacity fade (`soh_eol`).** The dispatch loop fades usable battery capacity linearly with accumulated equivalent full cycles: usable = `battery_kwh × (1 − k·cycles)`, `k = (1 − soh_eol)/cycle_life`. Default `battery.soh_eol: 0.80` (industry-standard 80 % end-of-life); `battery: {soh_eol: 1.0}` disables the fade and reproduces the pre-P2-4 dispatch bitwise. The fade keeps the nameplate-denominator `battery_cycles` definition, so replacement-year economics (P4-15) are untouched. This closes layerD benchmark B4 (the previous no-SOH model implied 11.0 yr at 1 cycle/day vs Sandia-style 6.7–10 yr with fade).
+
 ### Humidity and moisture results
 
 `vfed evaluate` prints more than energy: annual water use, RH clamp events, DEH utilization, and how much moisture the dehumidifier vs the HVAC coil removed (see the **Output Glossary** under *Interpreting Results* for what these mean). `vfed evaluate ... --export out/` also writes `summary.csv`, `timeseries.csv` (8,760 hourly rows) and `monthly.csv` for your own analysis.

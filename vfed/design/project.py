@@ -1109,6 +1109,11 @@ class BatteryConfig:
     soc_min: float = 0.10  # 最小荷电状态 SOC (−, 0~1)
     soc_max: float = 0.90  # 最大荷电状态 SOC (−, 0~1)
     cycle_life: int = 4000  # 循环寿命 (全充放电循环次数至寿命终了, −); 寿命年折算见 P4-15
+    soh_eol: float = 0.80  # 寿命终了可用容量份额 (P2-4, −, (0, 1])
+    #   电池容量线性衰减: dispatch 循环内可用容量 = battery_kwh × (1 − k·cycles_now),
+    #   k = (1 − soh_eol)/cycle_life; cycles_now 按铭牌 EFC 累计 (含电网充电,
+    #   分母恒为铭牌容量, battery_cycles 定义与 P4-15 替换年份语义不变)。
+    #   0.80 = 业界通用 EOL (沙阴 80%); 1.0 = 禁用衰减 (逐位回到旧行为)。
     allow_grid_charging: bool = False  # 允许电网充电 (P1-2, −)
     #   true  = 谷价时段 (电价==表内最小值) 从电网买电充电池, 用于峰时放电
     #           置换高价电 (TOU 套利; 仅当峰价 > 谷价/(η_ch·η_dis) 往返盈亏
@@ -2009,6 +2014,15 @@ class DesignProject:
             raise ValueError(
                 f"battery.allow_grid_charging must be a boolean (true/false), "
                 f"got {type(_agc).__name__}: {_agc!r}"
+            )
+        # P2-4: soh_eol is a usable-capacity fraction in (0, 1]. Reject the two
+        # classic entry mistakes: percent-scale values (e.g. 80) and signed
+        # errors (0.0 or negative). 1.0 is the explicit "fade disabled" value.
+        _soh = battery_cfg.get("soh_eol")
+        if _soh is not None and not (isinstance(_soh, (int, float)) and 0.0 < _soh <= 1.0):
+            raise ValueError(
+                f"battery.soh_eol must be in (0, 1] (usable-capacity fraction at "
+                f"end of life; 1.0 disables fade), got {_soh!r}"
             )
         _equipment_cap = CapitalCostConfig(
             **sub(CapitalCostConfig, d.get("equipment_capital", {}), yaml_path="equipment_capital")

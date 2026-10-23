@@ -301,6 +301,8 @@ pv:
 
 **光伏温度系数（`gamma_pmp`）。** MPP 功率的温度依赖由单一铭牌系数 `pv.gamma_pmp`（相对值，/K）驱动，默认 `-0.0030`（−0.30 %/K，TOPCon 级铭牌）。它替代了此前 `alpha_sc + beta_voc` 的隐式叠加（−0.205 %/K，高温时段温度损失少计约 32 %，layerD 基准 D5）；`alpha_sc` / `beta_voc` 保留为数据手册元数据。需复现 P2-5 之前的行为可用 `pv: {gamma_pmp: -0.00205}`（残差为二阶交叉项，ΔT = 30 K 时约 0.1 %）。
 
+**电池容量衰减（`soh_eol`）。** 调度循环内电池可用容量随累计等效满循环数线性衰减：可用 = `battery_kwh × (1 − k·cycles)`，`k = (1 − soh_eol)/cycle_life`。默认 `battery.soh_eol: 0.80`（业界通用的 80 % 寿命终了标准）；`battery: {soh_eol: 1.0}` 关闭衰减并逐位复现 P2-4 之前的调度。衰减不改变 `battery_cycles` 的铭牌分母定义，因此 P4-15 替换年份经济性不受影响。此项收口 layerD 基准 B4（原无 SOH 模型在 1 循环/日下隐含 11.0 年寿命，而带衰减的 Sandia 类模型为 6.7–10 年）。
+
 ### 湿度与水分结果
 
 `vfed evaluate` 输出的不止是能耗：年用水量、RH 钳制事件、除湿机利用率，以及除湿机与 HVAC 表冷器各自除掉的水分（含义见"输出结果解读"下的 **Output Glossary**）。`vfed evaluate ... --export out/` 还会写出 `summary.csv`、`timeseries.csv`（8,760 行逐时数据）和 `monthly.csv` 供自行分析。

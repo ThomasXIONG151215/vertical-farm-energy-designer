@@ -125,17 +125,20 @@ def test_grid_only_battery_keys_present_and_zero(sim_609):
 
 def test_battery_keys_match_user13_audit_pins(econ):
     """The user13-sizing dispatch on the re-calibrated preset: discharge
-    5,437.28 kWh, reconciliation top-up 17.58 kWh (terminal-SoC
-    restoration, unchanged), import 30,764.83 kWh -- the three round-20
+    5,433.37 kWh, reconciliation top-up 17.45 kWh (terminal-SoC
+    restoration, unchanged), import 30,768.61 kWh -- the three round-20
     white-box keys exported directly (R34/W3-D re-pin; P2-5 re-pin: the
     nameplate gamma_pmp (-0.30 %/K) lowers PV output, discharge moved
-    5,714.38 -> 5,437.28 and import 30,434.78 -> 30,764.83)."""
+    5,714.38 -> 5,437.28 and import 30,434.78 -> 30,764.83; P2-4 re-pin:
+    default battery fade soh_eol=0.80 shrinks usable capacity across the
+    year, discharge 5,437.28 -> 5,433.37, import 30,764.83 -> 30,768.61,
+    recon 17.58 -> 17.45)."""
     sim, _p = econ
     s = sim.summary
     assert s["battery_charge_kwh"] > 0.0
-    assert s["battery_discharge_kwh"] == pytest.approx(5437.28, abs=0.02)
-    assert s["battery_recon_grid_kwh"] == pytest.approx(17.58, abs=0.01)
-    assert s["grid_import_kwh"] == pytest.approx(30764.83, abs=0.02)
+    assert s["battery_discharge_kwh"] == pytest.approx(5433.37, abs=0.02)
+    assert s["battery_recon_grid_kwh"] == pytest.approx(17.45, abs=0.01)
+    assert s["grid_import_kwh"] == pytest.approx(30768.61, abs=0.02)
 
 
 def test_charge_free_residual_equals_recon(econ):

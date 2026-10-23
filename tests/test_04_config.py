@@ -655,3 +655,29 @@ class TestPVGammaPmp:
         # cross term a*b*dT^2 ~ -5.4e-4 here, so legacy factor sits ~0.06 %
         # below the pure linear sum -- rel=2e-3 covers it with margin
         assert ratio == pytest.approx(legacy_factor, rel=2e-3)
+
+
+# ---------------------------------------------------------------------------
+# 4.8  battery.soh_eol — capacity-fade contract (P2-4)
+# ---------------------------------------------------------------------------
+class TestBatterySohEol:
+    def test_default_and_roundtrip(self):
+        """Default 0.80 (industry-standard 80 % EOL) and the field survives
+        a to_dict/from_dict round trip unchanged."""
+        p = DesignProject.from_dict({})
+        assert p.battery.soh_eol == 0.80
+        q = DesignProject.from_dict({"battery": {"soh_eol": 0.85}})
+        assert q.battery.soh_eol == 0.85
+        assert DesignProject.from_dict(q.to_dict()).battery.soh_eol == 0.85
+
+    @pytest.mark.parametrize("bad", [0.0, -0.1, 1.0001, 80.0])
+    def test_band_guard_rejects(self, bad):
+        """(0, 1] only: 0/-0.1 fail the lower bound, 1.0001 the upper,
+        80.0 is the classic percent-scale mistake."""
+        with pytest.raises(ValueError, match=r"battery\.soh_eol"):
+            DesignProject.from_dict({"battery": {"soh_eol": bad}})
+
+    def test_one_disables_fade(self):
+        """soh_eol=1.0 is the explicit fade-off value (k=0 -> usable
+        capacity == nameplate for the whole run, bitwise legacy)."""
+        assert DesignProject.from_dict({"battery": {"soh_eol": 1.0}}).battery.soh_eol == 1.0

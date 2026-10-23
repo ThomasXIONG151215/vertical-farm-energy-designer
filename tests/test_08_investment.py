@@ -265,10 +265,13 @@ def test_single_point_payback_user13_econ_scenario(project_609):
     the legacy hidden unit prices C_pv=500/kWp + c_energy=220/kWh
     (capital 20,427.907) and matched no documented formula.  Under the F1
     definition it becomes delta_capital / annual_savings = 101,395.349 /
-    3,100.569 = 32.7022 yr -- recomputable from the row's own columns.
+    3,100.429 = 32.7036 yr -- recomputable from the row's own columns.
     P2-5 re-pin: nameplate gamma_pmp (-0.30 %/K) lowered PV output, so
     annual_savings moved 3,139.94 -> 3,100.57 and payback 32.2921 ->
-    32.7022 (sanctioned baseline migration, same regime as round 35)."""
+    32.7022 (sanctioned baseline migration, same regime as round 35).
+    P2-4 re-pin: default battery fade soh_eol=0.80 trims discharge across
+    the year, annual_savings 3,100.57 -> 3,100.43, payback 32.7022 ->
+    32.7036."""
     from vfed.design.presets import preset_609
     from vfed.design.sweep import sweep_design
 
@@ -285,15 +288,15 @@ def test_single_point_payback_user13_econ_scenario(project_609):
 
     # user13's delta_capital: 3500 x (100/4.3) + 500 x 40 = 101,395.3488...
     assert best["delta_capital"] == pytest.approx(3500.0 * 100.0 / 4.3 + 500.0 * 40.0, rel=1e-9)
-    # same savings regime as the audit (P2-5 re-pin: 3,100.57 currency/yr)
-    assert best["annual_savings"] == pytest.approx(3100.57, abs=0.02)
+    # same savings regime as the audit (P2-4 re-pin: 3,100.43 currency/yr)
+    assert best["annual_savings"] == pytest.approx(3100.43, abs=0.02)
     # F1 identity: payback x annual_savings == delta capital
     assert best["payback_period"] == pytest.approx(
         best["delta_capital"] / best["annual_savings"], rel=1e-12
     )
     # the corrected definition on the re-calibrated preset (hand-check:
-    # 101,395.3488 / 3,100.5693 = 32.7022), NOT the legacy 6.4914
-    assert best["payback_period"] == pytest.approx(32.7022, abs=5e-3)
+    # 101,395.3488 / 3,100.4293 = 32.7036), NOT the legacy 6.4914
+    assert best["payback_period"] == pytest.approx(32.7036, abs=5e-3)
     assert not math.isclose(best["payback_period"], 6.4914, abs_tol=0.5)
 
 
@@ -449,3 +452,70 @@ def test_engine_passes_allow_grid_charging(project_609, monkeypatch):
     p2 = DesignProject.from_dict(d)
     DesignEngine(cache_dir="weather_cache").run(p2)
     assert captured.get("allow_grid_charging") is True
+
+
+# ---------------------------------------------------------------------------
+# 8.6  battery.soh_eol — linear capacity fade in dispatch (P2-4)
+# ---------------------------------------------------------------------------
+def _fade_battery(soh_eol):
+    return BatterySystem(
+        c_rate=1.0,
+        eta_ch=0.91,
+        eta_dis=0.91,
+        soc_min=0.10,
+        soc_max=0.90,
+        cycle_life=4000,
+        soh_eol=soh_eol,
+    )
+
+
+def test_soh_fade_reduces_throughput_and_keeps_bounds():
+    """With fade on (0.80) a year-long charge/discharge profile moves less
+    energy than with fade off (1.0), and SOC never leaves [soc_min, soc_max]
+    even though the capacity denominator shrinks every step."""
+    rng = np.random.default_rng(42)
+    n = 8760
+    pv = np.clip(rng.normal(1.5, 0.8, n), 0.0, None)
+    load = np.full(n, 1.0)
+    balance = pv - load  # midday surplus, night deficit
+
+    off = _fade_battery(1.0).calculate_battery_flows(balance, load, 2.0, dt=1.0, soc0=0.5)
+    on = _fade_battery(0.80).calculate_battery_flows(balance, load, 2.0, dt=1.0, soc0=0.5)
+
+    assert on["battery_discharge"].sum() < off["battery_discharge"].sum()
+    assert on["battery_charge"].sum() < off["battery_charge"].sum()
+    # bounds hold against the FADING denominator, not the nameplate
+    assert on["battery_soc"].min() >= 0.10 - 1e-9
+    assert on["battery_soc"].max() <= 0.90 + 1e-9
+
+
+def test_soh_fade_algebra_pinned():
+    """Two-step hand-check of the fade path.  E_bat=10, soc0=0.5, surplus
+    5 kW both steps, k=(1-0.80)/4000=5e-5.
+
+    Step 1 (E_now=10): headroom 10*(0.9-0.5)=4 kWh into the battery, SOC
+    0.5+4*0.91/10=0.864; cycles=4*0.91/20=0.182 ->
+    E_now=10*(1-5e-5*0.182)=10*(1-9.1e-6).
+
+    Step 2: headroom = E_now*(0.9-0.864)=0.036*E_now (SOC tops out at
+    0.864+0.036*0.91=0.89676 -- the eta_ch loss keeps it below 0.90; the
+    no-fade run reaches the same terminal SOC, only the kWh differ).  The
+    last ``battery_soc`` element is overwritten by the P4-18 periodic
+    reconciliation (battery_soc[-1] = soc_target), so the pre-recon
+    terminal SOC is read from the ``soc_end`` return key."""
+    on = _fade_battery(0.80).calculate_battery_flows(
+        np.array([5.0, 5.0]), np.zeros(2), 10.0, dt=1.0, soc0=0.5
+    )
+    e_now1 = 10.0 * (1.0 - 5e-5 * 0.182)
+    assert on["battery_charge"][0] == pytest.approx(4.0, abs=1e-12)
+    assert on["battery_soc"][0] == pytest.approx(0.864, abs=1e-12)
+    assert on["battery_charge"][1] == pytest.approx(0.036 * e_now1, abs=1e-9)
+    assert on["soc_end"] == pytest.approx(0.864 + 0.036 * 0.91, abs=1e-12)
+    assert on["battery_soc"][-1] == pytest.approx(0.5, abs=1e-12)  # recon boundary
+
+    # fade off: identical SOC trajectory, but step-2 kWh use the nameplate
+    off = _fade_battery(1.0).calculate_battery_flows(
+        np.array([5.0, 5.0]), np.zeros(2), 10.0, dt=1.0, soc0=0.5
+    )
+    assert off["battery_charge"][1] == pytest.approx(0.36, abs=1e-12)
+    assert off["soc_end"] == pytest.approx(on["soc_end"], abs=1e-12)

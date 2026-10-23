@@ -441,6 +441,7 @@ def _build_energy_system(project: DesignProject) -> EnergySystem:
         soc_min=project.battery.soc_min,
         soc_max=project.battery.soc_max,
         cycle_life=project.battery.cycle_life,
+        soh_eol=project.battery.soh_eol,  # P2-4 capacity fade
         allow_grid_charging=project.battery.allow_grid_charging,  # P1-2
     )
     tariff = Tariff(

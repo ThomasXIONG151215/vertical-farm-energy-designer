@@ -1861,6 +1861,7 @@ class DesignEngine:
                     soc_min=p.battery.soc_min,
                     soc_max=p.battery.soc_max,
                     cycle_life=p.battery.cycle_life,
+                    soh_eol=p.battery.soh_eol,  # P2-4 capacity fade
                     allow_grid_charging=p.battery.allow_grid_charging,  # P1-2 passthrough
                 )
                 tariff = Tariff(
