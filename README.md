@@ -100,7 +100,21 @@ No surveyed framework combines more than two of the six axes below; VFED combine
 Two honest limits. First, VFED deliberately does **not** model sunlit greenhouses — no solar-driven canopy, natural ventilation or thermal screens; for those, GreenLight or a TRNSYS/EnergyPlus workflow is the better tool. Second, the envelope and crop sides each carry published verification, but an end-to-end validation against a full operating PFAL season is still the top roadmap item.
 
 <details>
-<summary><strong>Comparison sources</strong> (checked 2026-10)</summary>
+<summary><strong>References</strong> (checked 2026-10)</summary>
+
+**Primary — landmark plant-factory (PFAL) literature**
+
+1. **Xiong et al. 2026** — the VFED companion paper, *Energy and Buildings* 361, 117462, [DOI 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
+2. Kozai 2013 — resource-use efficiency of closed plant production systems with artificial light, *Proc. Japan Academy, Series B* 89:447–461, [DOI 10.2183/pjab.89.447](https://doi.org/10.2183/pjab.89.447)
+3. Barbosa et al. 2015 — land, water and energy requirements of hydroponic vs. conventional lettuce, *Int. J. Environ. Res. Public Health* 12(6):6879–6891, [DOI 10.3390/ijerph120606879](https://doi.org/10.3390/ijerph120606879)
+4. Touliatos, Dodd & McAinsh 2016 — vertical farming increases lettuce yield per unit area, *Food and Energy Security* 5(3):184–191, [DOI 10.1002/fes3.83](https://doi.org/10.1002/fes3.83)
+5. Harbick et al. 2016 — energy consumption compared: greenhouses and plant factories, *Acta Horticulturae* 1134:285–292, [DOI 10.17660/ActaHortic.2016.1134.38](https://doi.org/10.17660/ActaHortic.2016.1134.38)
+6. Benke & Tomkins 2017 — future food-production systems: vertical farming and controlled-environment agriculture, *Sustainability* 9(3):328, [DOI 10.3390/su9030328](https://doi.org/10.3390/su9030328)
+7. Graamans et al. 2018 — plant factories versus greenhouses: comparison of resource use efficiency, *Agricultural Systems* 160:31–39, [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003)
+8. Kozai, Niu & Takagaki (Eds.) 2019 — *Plant Factory: An Indoor Vertical Farming System for Efficient Quality Food Production*, 2nd ed., Academic Press (book)
+9. Yorifuji et al. 2022 — economic design of artificial-light plant factories based on the energy conversion efficiency of biomass, *Applied Energy* 305:117850
+
+**Secondary — comparison subjects: engines, open-source tools, and published PFAL models without public code**
 
 - EnergyPlus v26.1 Input Output Reference, object index (no greenhouse/crop object): <https://bigladdersoftware.com/epx/docs/26-1/input-output-reference/>; releases: <https://github.com/NatLabRockies/EnergyPlus/releases>
 - E+ crop coupling practice: Larochelle Martin & Monfet 2025, Energy Nexus 100592, [DOI 10.1016/j.nexus.2025.100592](https://doi.org/10.1016/j.nexus.2025.100592)
@@ -108,12 +122,9 @@ Two honest limits. First, VFED deliberately does **not** model sunlit greenhouse
 - Modelica Buildings Library: <https://github.com/lbl-srg/modelica-buildings>; Greenhouses-Library: <https://github.com/queraltab/Greenhouses-Library> (Altes-Buch et al., Modelica 2019)
 - ESP-r: <https://en.wikipedia.org/wiki/ESP-r> (BESTEST participation, GPL)
 - GreenLight: Katzin et al. 2020, Biosystems Engineering 194:61–81, [DOI 10.1016/j.biosystemseng.2020.03.010](https://doi.org/10.1016/j.biosystemseng.2020.03.010); repos as linked in the table (GitHub API, 2026-10-22)
-- EnergyCEA: [DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
-- Graamans et al.: 2017 [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003); 2018 [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003); 2020 [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
-- Liebman-Pelaez et al.: [DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192)
-- Weidner et al.: [DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336)
-- Choi et al. (KIMM): [DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8)
-- Keyvan & Roshandel: [DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
+- EnergyCEA (Xia et al. 2026): [DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
+- Graamans et al.: 2017 [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003); 2020 [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
+- Liebman-Pelaez et al.: [DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192); Weidner et al.: [DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336); Choi et al. (KIMM): [DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8); Keyvan & Roshandel: [DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
 
 </details>
 
