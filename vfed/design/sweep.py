@@ -349,13 +349,19 @@ def _incremental_irr(
     battery_capital: float,
     battery_life_years: Optional[float],
 ) -> float:
-    """Internal rate of return of the incremental cash flows (bisection).
+    """Internal rate of return of the incremental cash flows.
 
-    Solves NPV(r) = 0 for r in (-0.99, 1e9).  With a mid-life replacement
-    the stream is not strictly conventional; bisection returns the root
-    bracketed between -0.99 and the first sign change from above.  Returns
-    NaN when no root exists (ΔSavings <= 0 — the stream never pays back —
-    ΔCapital <= 0, or bracket failure).  Hand-rolled: no numpy_financial.
+    Positive-root-first (P1-1).  With a mid-life battery replacement the
+    stream is non-conventional and can have multiple roots; the legacy
+    leftmost-root bracket could return a deeply negative IRR for rows
+    whose NPV at the hurdle rate is clearly positive (layerE benchmark
+    E2b).  This version scans NPV(r) on a log grid over [0, 1e9] and
+    bisects the first sign change, so a positive root is preferred when
+    one exists.  When no positive root exists it falls back to the
+    legacy bracket over (-0.99, 0.1], so loss-making rows still report a
+    negative IRR.  Returns NaN when ΔSavings <= 0 (the stream never pays
+    back), ΔCapital <= 0, or no root can be bracketed.  Hand-rolled: no
+    numpy_financial.
     """
     if delta_capital <= 0.0 or not np.isfinite(delta_savings) or delta_savings <= 0.0:
         return float("nan")
@@ -367,6 +373,26 @@ def _incremental_irr(
             - _battery_replacement_pv(battery_capital, battery_life_years, years, r)
         )
 
+    def _bisect(lo: float, hi: float, f_lo: float) -> float:
+        for _ in range(200):
+            mid = 0.5 * (lo + hi)
+            if (npv_at(mid) > 0.0) == (f_lo > 0.0):
+                lo = mid
+            else:
+                hi = mid
+        return 0.5 * (lo + hi)
+
+    # Positive roots first: sign changes on a quarter-decade grid 1e-4..1e9.
+    grid = [0.0] + [10.0 ** (j / 4.0) for j in range(-16, 37)]
+    values = [npv_at(r) for r in grid]
+    for k in range(len(grid) - 1):
+        if (values[k] > 0.0) != (values[k + 1] > 0.0):
+            root = _bisect(grid[k], grid[k + 1], values[k])
+            if root <= 1e-9:
+                return 0.0  # NPV(0) = 0 boundary
+            return root
+
+    # No positive root: legacy bracket, preserves negative-IRR semantics.
     lo, hi = -0.99, 0.1
     if npv_at(lo) <= 0.0:
         return float("nan")
@@ -374,13 +400,7 @@ def _incremental_irr(
         hi *= 10.0
         if hi > 1e9:
             return float("nan")  # unbracketable (NPV -> -ΔCapital < 0 eventually)
-    for _ in range(200):
-        mid = 0.5 * (lo + hi)
-        if npv_at(mid) > 0.0:
-            lo = mid
-        else:
-            hi = mid
-    return 0.5 * (lo + hi)
+    return _bisect(lo, hi, npv_at(lo))
 
 
 # ---------------------------------------------------------------------------

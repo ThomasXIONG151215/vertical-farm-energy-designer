@@ -32,6 +32,20 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Changed
 
+- **Incremental IRR now prefers the positive root (P1-1).** With a
+  mid-life battery replacement the incremental stream is
+  non-conventional and can carry three IRR roots; the legacy bracket
+  (bisection from −0.99 upward) returned the leftmost root, producing
+  deeply negative IRRs on rows whose NPV at the 6 % hurdle is clearly
+  positive (layerE benchmark E2b: r5 row i=82 returned −68.13 % while
+  +8.36 % exists and NPV(6 %) = +2,279). `_incremental_irr` now scans
+  a quarter-decade grid over [0, 1e9] and bisects the first sign
+  change; rows that already resolved to the positive root are
+  bit-identical (i=66 stays +3.13 %). When no positive root exists the
+  legacy negative bracket applies unchanged, so loss-making rows still
+  report a negative IRR and no-payback rows still return NaN. The
+  sweep `irr_pct` column schema is unchanged.
+
 - **609 preset baseline migration (R34/W3-D, counterpart alignment).**
   `preset_609` now explicitly pins `deh.smer: 3.5` and `hvac.eta_II: 0.33`
   (wave 1-A sensitivity scan, user-gym/benchmarks/route3_sensitivity_scan.md,

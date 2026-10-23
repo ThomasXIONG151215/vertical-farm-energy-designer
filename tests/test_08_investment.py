@@ -122,6 +122,32 @@ def test_irr_negative_when_below_hurdle():
     assert irr < 0.0
 
 
+def test_irr_prefers_positive_root_multiroot():
+    """P1-1 (layerE E2b, r5 row i=82: ppfd150/pv50/bat25): with a mid-life
+    replacement the stream has three roots (-68.13 / -31.5 / +8.36 %) and
+    NPV at 6 % is +2,279 -- the legacy leftmost-root bracket returned the
+    deeply negative root; the positive root must be preferred."""
+    from vfed.design.sweep import _incremental_irr
+
+    irr = _incremental_irr(
+        11313.953488372093, 1169.7234804854324, 25.0, 5500.0, 23.98184247124748
+    )
+    assert math.isfinite(irr)
+    assert irr == pytest.approx(0.0835527701589569, abs=1e-9)
+
+
+def test_irr_positive_root_unchanged_multiroot():
+    """P1-1 invariance guard (layerE E2b, r5 row i=66: ppfd150/pv100/bat75):
+    rows that already resolved to the positive root (+3.13 %) must not move."""
+    from vfed.design.sweep import _incremental_irr
+
+    irr = _incremental_irr(
+        28127.906976744187, 2117.4939285399278, 25.0, 16500.0, 22.657686928835485
+    )
+    assert math.isfinite(irr)
+    assert irr == pytest.approx(0.031337761218711804, abs=1e-9)
+
+
 # ---------------------------------------------------------------------------
 # 8.3  sweep results.csv investment columns
 # ---------------------------------------------------------------------------
