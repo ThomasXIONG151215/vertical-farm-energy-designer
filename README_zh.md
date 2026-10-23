@@ -175,18 +175,6 @@ vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
 
 `--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `example_lcoe_full.yaml`。没有单独的 `optimize` 命令；容量优化通过 `sweep` 完成。
 
-### 5. 在浏览器中可视化
-
-`vfed-web/` 是通过 Pyodide 运行同一引擎的浏览器前端。本地试运行：
-
-```bash
-cd vfed-web
-npm run build   # 可选：从 vfed/ 源码重新打包 worker.js（需 python）
-npm start       # 在 http://localhost:8000/ 启动本地服务
-```
-
-打开 http://localhost:8000/ 即可在浏览器中配置设计，或把生成的 YAML 粘贴进编辑器。部署到 Cloudflare Pages 使用 `npm run deploy`。
-
 ### 天气数据 — 联网、缓存与离线
 
 天气按 lat/lon/year 在首次使用时从 Open-Meteo 逐时拉取，并缓存为 CSV 到 `weather_cache/`（可用 `--cache <dir>` 指定其他目录）。数据来源按优先级：
@@ -443,11 +431,10 @@ vertical-farm-energy-designer/
 ├── research/               # 论文归档代码与数据（见下）
 ├── reference/              # 参考文献
 ├── data/weather/           # 预下载城市天气 CSV（51 城 × 2025）
-├── scripts/                # 工具脚本（download_weather_db.py 刷新 data/weather/；test_web_yaml.py 校验 web YAML 契约）
+├── scripts/                # 工具脚本（download_weather_db.py 刷新 data/weather/）
 ├── tests/                  # Pytest 测试套件（含 test_project.yaml 最小夹具）
 ├── weather_cache/          # 缓存的天气 CSV（自动生成）
 ├── pyproject.toml          # 项目元数据与依赖
-├── vfed-web/               # 浏览器可视化（Pyodide Web Worker）
 └── README.md
 ```
 
@@ -710,27 +697,6 @@ summary 中最常被问到的输出/警告键的白话解释：
 - **X_d** — timeseries.csv 的 `X_d` 列：在田干物质密度（kg 干重/m²）。它是**锯齿形状态变量**：随茬期增长，每次收割重置为 `growth.initial_dry_weight` — 不是累积产量计数器。年产量看 `annual_harvest_kg`。
 
 - **LCOE** — `lcoe` 是设施全成本每 kWh 负荷：`(annual_capital + annual_om + annual_grid_cost_net) ÷ annual_load_kwh`。玩具算例（货币任意）：`capital_total` 12,000 按 10 年、6 % 折现 → CRF ≈ 0.136 → `annual_capital` ≈ 1,630；`annual_om` = 600；`annual_grid_cost_net` = 1,770 → 年全成本 4,000；年负荷 10,000 kWh → **lcoe = 0.40 currency/kWh**。
-
-## Web 可视化（vfed-web）
-
-`vfed-web/` 是无需后端的浏览器版 VFED：真正的 VFED Python 代码在 **Pyodide Web Worker**（`worker.js`）内运行，前端用 Chart.js 绘图，天气数据在构建时内嵌，浏览器内**不会调用 Open-Meteo**。
-
-### 本地运行
-
-```bash
-cd vfed-web
-npm start        # 在 http://localhost:8000/ 启动本地服务（= python -m http.server 8000）
-# 浏览器打开 http://localhost:8000
-```
-
-不建议直接双击 `index.html`（`file://` 协议下 Web Worker 无法加载）。首次加载需联网（从 CDN 拉取 Pyodide + numpy/pandas）。
-
-### 内置预设与仿真链路
-
-- **内置预设** `BUILTIN_PRESETS`：`609`（Fengxian Lettuce PFAL，奉贤生菜）、`lettuce_standard`（Lettuce — Standard PFAL）。
-- **仿真链路**：表单 → `generateYaml()` 生成 YAML → `postMessage({type:'simulate', projectYaml})` → Worker 内 Pyodide 运行 vfed 仿真 → 结果回传 → 图表渲染。
-- **重新打包**：修改 `vfed/` Python 代码或更新 `weather_cache/` 后，需在 `vfed-web/` 目录重跑 `python bundle.py`，把源码与天气缓存重新内嵌进 `worker.js`。
-- **天气来源溯源**：单点结果页展示 `Weather source: <来源> (<详情>)`（来自 `weather_attrs`；缺省时隐藏）。
 
 ## 故障排除
 

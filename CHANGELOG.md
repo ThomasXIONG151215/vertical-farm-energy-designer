@@ -209,6 +209,18 @@ semantic — behaviour changes are called out explicitly under **Changed**.
   `exchange_rate != 1` (project currency is the reporting currency; the
   extra line keeps cross-site comparisons honest).
 
+### Removed
+
+- **`vfed-web/` browser frontend removed from the public repository.** The
+  Pyodide web frontend (worker.js bundle, index.html, Cloudflare config and
+  the `scripts/test_web_yaml.py` helper) moved out of the tracked tree on
+  2026-10-23 and is now git-ignored; `vfed-web/` and `backups/` are both in
+  `.gitignore`. All documentation references (README quick-start step 5,
+  directory map, the Web Visualisation section, CONTRIBUTING rebundle
+  checklist item, AGENTS architecture row) were cleaned up. History prior
+  to this change still contains the files (chosen option A: clean the
+  future, keep history intact).
+
 ## [2.1.1] - 2026-09-25
 
 Accuracy-audit release (user13 + whitebox/GHI deep checks, round 21).

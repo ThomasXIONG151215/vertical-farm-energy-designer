@@ -21,11 +21,9 @@ Requirements: **Python >= 3.8**, `numpy`, `pandas`, `pyyaml`, `requests`. There 
 
 - Run `pytest` before committing; CI runs black + flake8 + pytest.
 - New physics/devices/plants/pvbes behaviour needs a test. Consult `REVIEW.md` (heat & mass transfer + energy dispatch checklist) when touching those modules.
-- Keep the web UI (`vfed-web/`) consistent: after changing `vfed/`, run `npm run build` inside `vfed-web/` to rebundle `worker.js`.
 
 - 提交前运行 `pytest`；CI 会跑 black + flake8 + pytest。
 - 新增 physics/devices/plants/pvbes 行为需要配套测试；改动这些模块时请对照 `REVIEW.md`（传热传质 + 能源调度清单）。
-- 保持 Web 端一致：改完 `vfed/` 后，在 `vfed-web/` 内执行 `npm run build` 重新打包 `worker.js`。
 
 ## Config contract / YAML 配置契约
 
@@ -66,5 +64,4 @@ Requirements: **Python >= 3.8**, `numpy`, `pandas`, `pyyaml`, `requests`. There 
 1. `pytest` passes / 测试通过
 2. Config fields registered in `project.py` + `presets.py` / 配置字段已登记
 3. Both READMEs updated / 两个 README 已同步
-4. `vfed-web/worker.js` rebundled if `vfed/` changed / 改过引擎则已重打包
-5. No secrets or generated caches committed / 未提交密钥或生成缓存（`weather_cache/` 已 git-ignore）
+4. No secrets or generated caches committed / 未提交密钥或生成缓存（`weather_cache/` 已 git-ignore）

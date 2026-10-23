@@ -41,7 +41,6 @@ pytest --cov=vfed
 | `vfed/weather/` | Open-Meteo fetch, geocoding | `engine.py` calls `fetch_weather` |
 | `vfed/plants/` | Transpiration (5 methods: van_henten model-coupled; daily/per_plant/daily_per_period/per_plant_per_period direct-set), Van Henten growth | `engine.py` steps each hour |
 | `vfed/agent/` | Evaluator (agent-cli contract) | Entry point for CLI |
-| `vfed-web/` | Browser frontend (Pyodide Web Worker, backend-free) | `bundle.py` re-embeds `vfed/` sources into `worker.js` |
 | `scripts/` | Utility scripts | `download_weather_db.py` refreshes `data/weather/` city CSVs |
 | `tests/` | Pytest suite | run with `pytest` |
 

@@ -1,8 +1,8 @@
 """
 SimulationResult — typed container for engine.run() output.
 
-Provides a standard JSON-serializable structure consumed by both CLI
-(``vfed evaluate``) and the browser-based web app (``vfed-web/``).
+Provides a standard JSON-serializable structure consumed by the CLI
+(``vfed evaluate``).
 """
 from __future__ import annotations
 

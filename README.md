@@ -175,18 +175,6 @@ vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
 
 `--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `example_lcoe_full.yaml`. There is no separate `optimize` command; sizing is done via `sweep`.
 
-### 5. Visualise in the Browser
-
-`vfed-web/` is a browser frontend that runs the same engine via Pyodide. To try it locally:
-
-```bash
-cd vfed-web
-npm run build   # optional: rebundle worker.js from the vfed/ sources (needs python)
-npm start       # serves http://localhost:8000/
-```
-
-Open http://localhost:8000/ and configure a design in the browser, or paste a generated YAML into the editor. Deploy to Cloudflare Pages with `npm run deploy`.
-
 ### Weather Data — network, cache, offline
 
 Weather is fetched hourly from Open-Meteo by lat/lon/year on first use and cached as CSV under `weather_cache/` (point `evaluate` / `sweep` at a different directory with `--cache <dir>`). Sources, in priority order:
@@ -449,11 +437,10 @@ vertical-farm-energy-designer/
 ├── research/               # Archived research paper code & data (see below)
 ├── reference/              # Reference literature
 ├── data/weather/           # Pre-downloaded city weather CSVs (51 cities × 2025)
-├── scripts/                # Utility scripts (download_weather_db.py refreshes data/weather/; test_web_yaml.py checks the web YAML contract)
+├── scripts/                # Utility scripts (download_weather_db.py refreshes data/weather/)
 ├── tests/                  # Pytest suite (incl. test_project.yaml minimal fixture)
 ├── weather_cache/          # Cached weather CSVs (auto-generated)
 ├── pyproject.toml          # Project metadata & dependencies
-├── vfed-web/               # Browser visualisation (Pyodide Web Worker)
 └── README.md
 ```
 
@@ -747,27 +734,6 @@ Plain-language semantics for the summary keys users most often ask about:
 - **X_d** — the timeseries.csv `X_d` column: standing in-canopy dry-biomass density (kg DM/m²). It is a **sawtooth state variable**: it grows over each crop cycle and resets to `growth.initial_dry_weight` at every harvest — it is NOT a cumulative production counter. Annual production is `annual_harvest_kg`.
 
 - **LCOE** — `lcoe` is the facility full cost per kWh of load: `(annual_capital + annual_om + annual_grid_cost_net) ÷ annual_load_kwh`. Toy example (any currency): `capital_total` 12,000 depreciated over 10 yr at 6 % interest → CRF ≈ 0.136 → `annual_capital` ≈ 1,630; `annual_om` = 600; `annual_grid_cost_net` = 1,770 → total 4,000/yr; annual load 10,000 kWh → **lcoe = 0.40 currency/kWh**.
-
-## Web Visualisation (vfed-web)
-
-`vfed-web/` is a backend-free browser version of VFED: the real VFED Python code runs inside a **Pyodide Web Worker** (`worker.js`), charts are drawn with Chart.js, and weather data is embedded at build time — the browser **never calls Open-Meteo**.
-
-### Run locally
-
-```bash
-cd vfed-web
-npm start        # serves http://localhost:8000/ (= python -m http.server 8000)
-# open http://localhost:8000
-```
-
-Do not double-click `index.html` directly (Web Workers cannot load under `file://`). The first load needs internet (Pyodide + numpy/pandas are fetched from a CDN).
-
-### Built-in presets and the simulation path
-
-- **Built-in presets** `BUILTIN_PRESETS`: `609` (Fengxian Lettuce PFAL), `lettuce_standard` (Lettuce — Standard PFAL).
-- **Simulation path**: form → `generateYaml()` → `postMessage({type:'simulate', projectYaml})` → Pyodide in the Worker runs the vfed simulation → results post back → charts render.
-- **Weather provenance**: each single-point result displays `Weather source: <source> (<detail>)` from `weather_attrs` (天气来源溯源), hidden when absent.
-- **Rebundling**: after changing `vfed/` Python code or updating `weather_cache/`, re-run `python bundle.py` in `vfed-web/` to embed the sources and weather cache into `worker.js`.
 
 ## Troubleshooting
 
