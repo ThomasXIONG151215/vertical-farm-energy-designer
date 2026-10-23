@@ -22,6 +22,20 @@ Integrating rooftop photovoltaics (PV) with battery energy storage (BES) can dra
 
 The `research/xiong-pvbes-photoperiod-2026/` directory contains the archived code and experimental data from the published paper. The current active codebase (`vfed/`) replaces the EnergyPlus-based load generator with a pure-Python first-principles ODE solver and adds a parametric design sweep — see [research/xiong-pvbes-photoperiod-2026/](research/xiong-pvbes-photoperiod-2026/) for details.
 
+## What's New (2026-10)
+
+Since the paper, the engine has grown from a load generator into a validated, calibration-ready PFAL simulator. Every item below is additive and default-off unless stated — published baselines stay bit-identical.
+
+- **3-state Van Henten growth model** (`growth.model: van_henten_3state`) — adds canopy structure states on top of the standing dry weight `X_d`: an assimilate buffer `C_buf` and leaf area index, ported from the published BJAAF MATLAB reference (config block `growth.three_state`). On paired LAI/X_d observations the structural diagnosis cut biomass RMSE from 15.75 g to 6.27 g. The 1-state default (`growth.model: van_henten`) keeps every 609 baseline unchanged.
+- **Minimal CO₂ balance (M1)** — a `co2:` config block (`co2.enabled`, default off) adds an indoor CO₂ state with a capacity-limited injector device. Sources and sinks are injection, crop photosynthesis uptake, crop respiration and infiltration; injector electricity joins the building totals; `co2_mean_ppm` / `annual_co2_injected_kg` and clamp diagnostics are reported.
+- **Calibration engine** (`vfed/calibration/`) — dataset adapters (adapter A anchors on BJAAF paired LAI/X_d ratios), parameter identifiability rules, and golden-section fitting. Reference case: it reproduces the BJAAF Exp_c calibration (`c_pl_d` = 32.7, `c_rad_phot` = 5.17e-9).
+- **Validation & benchmarks**
+  - `scripts/benchmarks/bestest/` — an EnergyPlus BESTEST harness (ASHRAE 140 Cases 600/600FF/900/900FF, Denver TMY3). The 2R2C-wall wet path passes 4/4 Case 600 metrics against the EnergyPlus reference.
+  - Growth benchmarks on public data: UC Davis lettuce (biomass RMSE 21.49 g → 14.26 g with the 3-state model) and BJAAF staged holdouts (3-state −1.6 %/+11.5 % vs 1-state +27 % extrapolation failure).
+  - 866 pytest tests, all passing.
+- **Localized public datasets** under `data/datasets/` — AGC 2018/2019 greenhouse (WUR, CC0), UC Davis lettuce (30-min environment + daily biomass + canopy RGB), BJAAF Beijing lettuce (paired LAI/X_d), CERTH vertical-farm energy (CC BY 4.0), UniBo VF LCA, and the Frontiers energy-intensity benchmark table.
+- **DEH commissioning mode** — the `609_identified` preset ships the Fengxian-identified setpoint-modulation map (holdout DEH power MAE 389 W vs 507 W for the prior calibrated model). The stock `609` preset is unchanged.
+
 ## How VFED Works
 
 | Challenge | VFED Approach |
@@ -31,6 +45,77 @@ The `research/xiong-pvbes-photoperiod-2026/` directory contains the archived cod
 | Battery sizing is a trade-off between cost and self-sufficiency | Parametric sweep over (PV area × battery capacity) → LCOE-optimal design |
 | Electricity tariff structure affects economics | Time-of-use tariff model (24-hour price schedule + export price) |
 | Plant transpiration adds latent load | 5 transpiration methods — 1 model-coupled (Van Henten) and 4 direct-set (daily / per_plant / daily_per_period / per_plant_per_period) |
+
+## How VFED Compares to Other Simulators
+
+PFAL energy modelling lives in three fragmented worlds: general building engines (EnergyPlus, TRNSYS, Modelica), greenhouse-crop frameworks (the GreenLight lineage), and paper-only PFAL models whose code is never released. The three tables below position VFED against each group. Repository status and star counts were checked in October 2026.
+
+### Open-source simulation frameworks
+
+| Framework | Focus | Building physics | HVAC & dehumidification | Crop model | PV·battery·economics | Validation | License |
+|---|---|---|---|---|---|---|---|
+| **VFED** (this repo) | PFAL-first: opaque, LED-dominant rooms | Pure-Python ODE heat+moisture envelope, optional 2R2C wall mass | COP modes (Carnot / constant / linear / table) + soft cap, crankcase heater, defrost; dedicated dehumidifier with DOE/E+ SMER curves and maps | Van Henten 1- or 3-state, 5 transpiration methods | PV + battery + TOU grid, LCOE/NPV/IRR sizing sweep | 866 tests; ASHRAE 140 (BESTEST) harness; UC Davis + BJAAF growth benchmarks | MIT |
+| [GreenLight](https://github.com/davkat1/GreenLight) (WUR) | Sunlit tomato greenhouse | Validated ODE states (air / canopy / cover / soil) | Boiler + pipe-rail heating, vents, thermal screens; no variable-COP heat pump; dehumidification via ventilation only | Mechanistic tomato (DM partitioning, LAI) | None | Heat demand validated (Katzin et al. 2020) | BSD-3 |
+| [GreenLight-Gym2](https://github.com/BartvLaatum/GreenLight-Gym2) (WUR) | Greenhouse RL control benchmark | GreenLight ODE via CasADi | Same as GreenLight, plus a mechanical-dehumidification rule flag | Inherited tomato | Profit reward with energy/CO₂ prices; no PV/battery/LCOE | Published IFAC AgriControl 2025 benchmark | AGPL-3 |
+| [Greenhouses-Library](https://github.com/queraltab/Greenhouses-Library) | Sunlit greenhouse + thermal systems | Physical Modelica components | CHP + heat-pump performance maps, boilers, storage, district heating | TOMGRO-type yield | Thermal integration only | Peer-reviewed (Altes-Buch et al. 2019) | BSD-3 (dormant since 2023) |
+| [GreenLightPlus](https://github.com/greenpeer/GreenLightPlus) | Greenhouse | GreenLight ODE + EnergyPlus co-simulation | Boiler-centric (inherited from GreenLight) | Inherited tomato | MJ/m² and MJ/kg accounting only | Wrapper itself unvalidated | GPL-3 |
+| [OPV greenhouse model](https://github.com/kensaku-okada/Greenhouse-with-OPV-film-Model) | Greenhouse + semi-transparent PV | Steady-state energy balance | No COP model | Empirical lettuce | PV generation + profit, MINLP optimisation | Thesis-level | MIT (inactive since 2020) |
+| [vfmc](https://github.com/dungnotnull/vertical-farming-mobile-container-agent-skill) | Container-farm sizing | Static load calculation, no dynamics | Constant-efficiency HVAC sizing | Growth-stage lookup tables | Opex only | Unvalidated | MIT |
+| [GaiaKnowledge/VerticalFarming](https://github.com/GaiaKnowledge/VerticalFarming) | VF economics/risk only | None (spreadsheet + probability boxes) | — | Yield lookups | CapEx/OpEx/payback + survival risk | n/a (no physics) | MIT |
+
+### General building engines
+
+| Engine | Crop / CEA support | HVAC & dehumidification | Validation | Energy-system economics | Practical PFAL barriers |
+|---|---|---|---|---|---|
+| **EnergyPlus** (US DOE, open source, v26.2) | No native greenhouse or crop object in the v26.1 object index — published CEA studies couple external crop models through the Python API | Deep: performance-curve DX coils, `ZoneHVAC:Dehumidifier:DX`, ERV, defrost and crankcase behaviours | ASHRAE 140 (BESTEST) pedigree | Native PV generators and battery storage objects; no LCOE-oriented PV×battery sizing sweep | IDF authoring effort; per-project crop-coupling code; compiled runtime |
+| **TRNSYS** (commercial, quote-based) | No native greenhouse object; crops enter as user Types around Type 56 | ~150 library components, including performance maps with COP depending on ambient temperature and humidity | Meets the ASHRAE 140-2023 acceptance criteria (v18.06) | PV/wind components and economics routines; no LCOE sizing loop | Licence cost; per-project glue code |
+| **Modelica Buildings** (LBNL) | No greenhouse or crop scope | Deep HVAC, Spawn E+ coupling, DC/AC electrical systems | Own regression suite | Electrical systems only | Requires a Modelica toolchain |
+| **ESP-r** (Univ. of Strathclyde) | No documented CEA application | Full building physics | Original IEA BESTEST participant | Limited | Linux-first, steep learning curve |
+| **OpenStudio / Ladybug Tools** | None native (SDKs over EnergyPlus) | Inherits EnergyPlus | Inherits EnergyPlus | — | Inherits the EnergyPlus crop gap |
+
+### Published PFAL models (code not released)
+
+| Model | Scope | Method | Key validated result | Code |
+|---|---|---|---|---|
+| EnergyCEA — Xia et al. 2026, Applied Energy 415:127824 | Triple-zone strawberry PFAL, commercial farm in Hangzhou | Coupled climate/HVAC framework | HVAC 65.3 % of energy; 60.9–70 kWh/kg | Not released |
+| StrawberryGRO-E — Fu et al. 2027, Computers and Electronics in Agriculture 256:112405 | Strawberry PFAL technoeconomics | Builds on EnergyCEA | Profit-optimal inflorescence management; 83.7 kWh/kg | Not released |
+| Graamans et al. 2017–2020 (WUR / TU Delft) | PFAL energy & crop transpiration | MATLAB energy balance; EnergyPlus coupling in the 2020 paper | Transpiration validated against the NASA Biomass Production Chamber and EDEN-ISS; 247 kWh/kg DW in a PFAL vs 70–211 in greenhouses | Not released |
+| MIT container farm — Liebman-Pelaez et al. 2021, Energy and Buildings 250:111192 | Hydroponic container farm | EnergyPlus + measured equipment curves (DX dehumidifier, mini-split heat pump) | Validated against measured container data (ASHRAE Guideline 14 framework) | Not released |
+| Weidner et al. 2021, Energy Conversion and Management 243:114336 | PFALs and greenhouses, 10 locations | Flexible yield-energy model with detailed AC dynamics | Open greenhouses beat PFALs on specific energy by 45–94 % | Not released |
+| KIMM container model — Choi et al. 2023, Horticulture, Environment, and Biotechnology | Lettuce container PFAL, Korea & Indonesia | Coupled crop-energy balance | Dehumidification exceeds 50 % of total energy demand | Not stated |
+| Keyvan & Roshandel 2024, Computers and Electronics in Agriculture 219:108809 | Vertical farm + clean-energy sizing | EnergyPlus + Van Henten crop + solar/storage economics | Tehran case study | Not released |
+| CERTH vertical farm — Ketikidis et al. | Single-zone VF, Greece | TRNSYS 18 + PV/battery/lighting flexibility | Measured facility; dataset released CC BY 4.0 | Model not public (dataset is) |
+
+### Where VFED stands — and where it does not
+
+No surveyed framework combines more than two of the six axes below; VFED combines all six:
+
+1. PFAL-first envelope physics — opaque, insulated, LED-dominant rooms, not a solar greenhouse.
+2. Temperature-dependent variable COP (Carnot modes, soft cap, crankcase, defrost) plus a dedicated dehumidifier (SMER curves / EnergyPlus-style performance maps).
+3. Dynamic crop growth coupled to the room balance (1- or 3-state Van Henten, 5 transpiration methods).
+4. PV-battery-grid dispatch with TOU tariffs and an LCOE/NPV/IRR sizing sweep.
+5. Public validation artifacts: an ASHRAE 140 (BESTEST) envelope harness and public-dataset growth benchmarks.
+6. MIT-licensed pure Python that also runs in the browser (Pyodide).
+
+Two honest limits. First, VFED deliberately does **not** model sunlit greenhouses — no solar-driven canopy, natural ventilation or thermal screens; for those, GreenLight or a TRNSYS/EnergyPlus workflow is the better tool. Second, the envelope and crop sides each carry published verification, but an end-to-end validation against a full operating PFAL season is still the top roadmap item.
+
+<details>
+<summary><strong>Comparison sources</strong> (checked 2026-10)</summary>
+
+- EnergyPlus v26.1 Input Output Reference, object index (no greenhouse/crop object): <https://bigladdersoftware.com/epx/docs/26-1/input-output-reference/>; releases: <https://github.com/NatLabRockies/EnergyPlus/releases>
+- E+ crop coupling practice: Larochelle Martin & Monfet 2025, Energy Nexus 100592, [DOI 10.1016/j.nexus.2025.100592](https://doi.org/10.1016/j.nexus.2025.100592)
+- TRNSYS validation (ASHRAE 140-2023): <https://trnsys.org/validation/>
+- Modelica Buildings Library: <https://github.com/lbl-srg/modelica-buildings>; Greenhouses-Library: <https://github.com/queraltab/Greenhouses-Library> (Altes-Buch et al., Modelica 2019)
+- ESP-r: <https://en.wikipedia.org/wiki/ESP-r> (BESTEST participation, GPL)
+- GreenLight: Katzin et al. 2020, Biosystems Engineering 194:61–81, [DOI 10.1016/j.biosystemseng.2020.03.010](https://doi.org/10.1016/j.biosystemseng.2020.03.010); repos as linked in the table (GitHub API, 2026-10-22)
+- EnergyCEA: [DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
+- Graamans et al.: 2017 [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003); 2018 [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003); 2020 [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
+- Liebman-Pelaez et al.: [DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192)
+- Weidner et al.: [DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336)
+- Choi et al. (KIMM): [DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8)
+- Keyvan & Roshandel: [DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
+
+</details>
 
 ## Quick Start
 

@@ -22,6 +22,20 @@
 
 `research/xiong-pvbes-photoperiod-2026/` 目录包含该论文的归档代码和实验数据。当前活跃代码库 (`vfed/`) 用纯 Python 第一性原理 ODE 求解器替代了基于 EnergyPlus 的负荷生成器，并增加了参数化设计扫描 — 详见 [research/xiong-pvbes-photoperiod-2026/](research/xiong-pvbes-photoperiod-2026/)。
 
+## 最新进展（2026-10）
+
+论文发表之后，引擎已从一个负荷生成器成长为一个带验证、可标定的 PFAL 仿真器。以下各项均为增量特性，除特别说明外默认关闭 — 已发布的基线结果逐位不变。
+
+- **Van Henten 3 状态生长模型**（`growth.model: van_henten_3state`）— 在站立干重 `X_d` 之上增加冠层结构状态：同化物缓冲 `C_buf` 与叶面积指数，移植自已发表的 BJAAF MATLAB 参考实现（配置块 `growth.three_state`）。在配对 LAI/X_d 观测上，结构诊断将生物量 RMSE 从 15.75 g 降到 6.27 g。默认 1 状态（`growth.model: van_henten`）保持全部 609 基线不变。
+- **最小 CO₂ 平衡（M1）** — `co2:` 配置块（`co2.enabled`，默认关）新增室内 CO₂ 状态与带容量限制的注入器设备。源汇包括注入、作物光合吸收、作物呼吸与渗风；注入器电耗计入建筑总电耗；输出 `co2_mean_ppm` / `annual_co2_injected_kg` 及钳制诊断。
+- **标定引擎**（`vfed/calibration/`）— 数据集适配器（适配器 A 以 BJAAF 配对 LAI/X_d 比值为锚）、参数可辨识性规则、黄金分割拟合。参考用例：复现 BJAAF Exp_c 标定（`c_pl_d` = 32.7，`c_rad_phot` = 5.17e-9）。
+- **验证与基准**
+  - `scripts/benchmarks/bestest/` — EnergyPlus BESTEST 验证台（ASHRAE 140 Cases 600/600FF/900/900FF，Denver TMY3）。2R2C 墙体湿路径在 Case 600 上 4/4 项指标通过 EnergyPlus 参考对照。
+  - 公开数据生长基准：UC Davis 生菜（3 状态模型生物量 RMSE 21.49 g → 14.26 g）；BJAAF 分阶段留出集（3 状态 −1.6 %/+11.5 %，1 状态外推失败 +27 %）。
+  - 866 个 pytest 用例全部通过。
+- **本地化的公开数据集**（`data/datasets/`）— AGC 2018/2019 温室（WUR，CC0）、UC Davis 生菜（30 分钟环境 + 逐日生物量 + 冠层 RGB）、BJAAF 北京生菜（配对 LAI/X_d）、CERTH 垂直农场能源（CC BY 4.0）、UniBo VF LCA、Frontiers 能耗强度基准表。
+- **DEH 调试模式** — `609_identified` 预设内置奉贤辨识的设定值调制 map（留出集 DEH 功率 MAE 389 W，优于此前标定模型的 507 W）。`609` 预设保持原厂 DEH 不变。
+
 ## VFED 工作原理
 
 | 挑战 | VFED 方法 |
@@ -31,6 +45,77 @@
 | 电池容量是成本与自给率之间的权衡 | 对 (光伏面积 × 电池容量) 进行参数化扫描 → LCOE 最优设计 |
 | 电价结构影响经济性 | 分时电价模型（24 小时价格表 + 售电价格） |
 | 植物蒸腾增加潜热负荷 | 5 种蒸腾方法 — 1 种模型耦合（Van Henten）与 4 种直接设定（daily / per_plant / daily_per_period / per_plant_per_period） |
+
+## 与其他仿真引擎的对比
+
+PFAL 能耗建模分散在三个割裂的世界里：通用建筑引擎（EnergyPlus、TRNSYS、Modelica）、温室-作物框架（GreenLight 一系）、以及从不公开代码的论文型 PFAL 模型。下面三张表把 VFED 与各组逐一对照。仓库状态与 star 数为 2026 年 10 月核查值。
+
+### 开源仿真框架
+
+| 框架 | 定位 | 建筑物理 | HVAC 与除湿 | 作物模型 | 光伏·电池·经济性 | 验证 | 许可证 |
+|---|---|---|---|---|---|---|---|
+| **VFED**（本仓库） | PFAL 优先：不透明、LED 主导的房间 | 纯 Python ODE 热湿围护模型，可选 2R2C 墙体热质量 | COP 四模式（carnot / constant / linear / table）+ 软顶、曲轴箱加热、除霜；专用除湿机带 DOE/E+ SMER 曲线与 map | Van Henten 1 或 3 状态，5 种蒸腾方法 | 光伏 + 电池 + 分时电网，LCOE/NPV/IRR 容量扫描 | 866 个测试；ASHRAE 140（BESTEST）验证台；UC Davis + BJAAF 生长基准 | MIT |
+| [GreenLight](https://github.com/davkat1/GreenLight)（瓦赫宁根大学） | 自然光番茄温室 | 已验证的 ODE 状态（空气/冠层/覆盖层/土壤） | 锅炉 + 管道加热、通风窗、保温幕；无变 COP 热泵；除湿仅靠通风 | 机理番茄模型（干物质分配、LAI） | 无 | 热需求已验证（Katzin et al. 2020） | BSD-3 |
+| [GreenLight-Gym2](https://github.com/BartvLaatum/GreenLight-Gym2)（瓦赫宁根大学） | 温室强化学习控制基准 | 经 CasADi 的 GreenLight ODE | 同 GreenLight，外加机械除湿规则开关 | 继承番茄模型 | 含能源/CO₂ 价格的利润奖励；无光伏/电池/LCOE | 已发表 IFAC AgriControl 2025 基准 | AGPL-3 |
+| [Greenhouses-Library](https://github.com/queraltab/Greenhouses-Library) | 自然光温室 + 热力系统 | Modelica 物理组件 | CHP + 热泵性能 map、锅炉、储热、区域供热 | TOMGRO 类产量模型 | 仅热力集成 | 同行评审（Altes-Buch et al. 2019） | BSD-3（2023 年起停更） |
+| [GreenLightPlus](https://github.com/greenpeer/GreenLightPlus) | 温室 | GreenLight ODE + EnergyPlus 联合仿真 | 以锅炉为中心（继承自 GreenLight） | 继承番茄模型 | 仅 MJ/m² 与 MJ/kg 记账 | 封装层本身未验证 | GPL-3 |
+| [OPV 温室模型](https://github.com/kensaku-okada/Greenhouse-with-OPV-film-Model) | 温室 + 半透明光伏 | 稳态能量平衡 | 无 COP 模型 | 经验生菜模型 | 光伏发电 + 利润，MINLP 优化 | 硕论文级 | MIT（2020 年起不活跃） |
+| [vfmc](https://github.com/dungnotnull/vertical-farming-mobile-container-agent-skill) | 集装箱农场选型 | 静态负荷计算，无动态 | 恒定效率 HVAC 选型 | 生育期查表 | 仅运行成本 | 未验证 | MIT |
+| [GaiaKnowledge/VerticalFarming](https://github.com/GaiaKnowledge/VerticalFarming) | 仅垂直农场经济/风险 | 无（电子表格 + 概率盒） | — | 产量查表 | CapEx/OpEx/回本期 + 生存风险 | 无物理可验 | MIT |
+
+### 通用建筑引擎
+
+| 引擎 | 作物 / CEA 支持 | HVAC 与除湿 | 验证 | 能源系统经济性 | PFAL 应用的现实门槛 |
+|---|---|---|---|---|---|
+| **EnergyPlus**（美国能源部，开源，v26.2） | v26.1 对象索引中无原生温室/作物对象 — 已发表的 CEA 研究经 Python API 耦合外部作物模型 | 深厚：性能曲线 DX 盘管、`ZoneHVAC:Dehumidifier:DX`、ERV、除霜与曲轴箱行为 | ASHRAE 140（BESTEST）血统 | 有原生光伏发电机与电池储能对象；无面向 LCOE 的光伏×电池容量扫描 | IDF 编写负担；作物耦合需逐项目写码；编译运行时 |
+| **TRNSYS**（商业，报价制） | 无原生温室对象；作物靠 Type 56 加自定义 Type | 约 150 个组件，含随环境温湿度变化的 COP 性能 map | 满足 ASHRAE 140-2023 验收准则（v18.06） | 光伏/风组件与经济性例程；无 LCOE 选型环 | 许可证费用；逐项目胶水代码 |
+| **Modelica Buildings**（LBNL） | 无温室/作物范围 | 深厚 HVAC、Spawn E+ 耦合、DC/AC 电力系统 | 自带回归测试 | 仅电力系统 | 需要 Modelica 工具链 |
+| **ESP-r**（斯特拉斯克莱德大学） | 无公开 CEA 应用 | 完整建筑物理 | IEA BESTEST 原始参与方 | 有限 | Linux 优先、学习曲线陡 |
+| **OpenStudio / Ladybug Tools** | 无原生支持（EnergyPlus 之上的 SDK） | 继承 EnergyPlus | 继承 EnergyPlus | — | 继承 EnergyPlus 的作物空白 |
+
+### 已发表的 PFAL 模型（代码未公开）
+
+| 模型 | 范围 | 方法 | 关键验证结果 | 代码 |
+|---|---|---|---|---|
+| EnergyCEA — Xia et al. 2026, Applied Energy 415:127824 | 三区草莓 PFAL，杭州商业农场 | 耦合气候/HVAC 框架 | HVAC 占能耗 65.3 %；60.9–70 kWh/kg | 未公开 |
+| StrawberryGRO-E — Fu et al. 2027, Computers and Electronics in Agriculture 256:112405 | 草莓 PFAL 技术经济 | 基于 EnergyCEA 扩展 | 利润最优花序管理；83.7 kWh/kg | 未公开 |
+| Graamans et al. 2017–2020（瓦赫宁根/代尔夫特理工） | PFAL 能耗与作物蒸腾 | MATLAB 能量平衡；2020 年论文耦合 EnergyPlus | 蒸腾模型对照 NASA Biomass Production Chamber 与 EDEN-ISS 验证；PFAL 247 kWh/kg 干重 vs 温室 70–211 | 未公开 |
+| MIT 集装箱农场 — Liebman-Pelaez et al. 2021, Energy and Buildings 250:111192 | 水培集装箱农场 | EnergyPlus + 实测设备曲线（DX 除湿机、小型热泵） | 对照集装箱实测数据验证（ASHRAE Guideline 14 框架） | 未公开 |
+| Weidner et al. 2021, Energy Conversion and Management 243:114336 | PFAL 与温室，10 个地点 | 含空调动态的产量-能源柔性模型 | 开放温室比 PFAL 比能耗低 45–94 % | 未公开 |
+| KIMM 集装箱模型 — Choi et al. 2023, Horticulture, Environment, and Biotechnology | 生菜集装箱 PFAL，韩国与印尼 | 耦合作物-能量平衡 | 除湿超过总能耗的 50 % | 未说明 |
+| Keyvan & Roshandel 2024, Computers and Electronics in Agriculture 219:108809 | 垂直农场 + 清洁能源选型 | EnergyPlus + Van Henten 作物 + 光伏/储能经济 | 德黑兰案例 | 未公开 |
+| CERTH 垂直农场 — Ketikidis et al. | 单区垂直农场，希腊 | TRNSYS 18 + 光伏/电池/照明柔度 | 实测设施；数据集以 CC BY 4.0 公开 | 模型不公开（数据集公开） |
+
+### VFED 的位置 — 以及它不做什么
+
+下述六条轴线中，被调研的框架最多同时占两条；VFED 六条全占：
+
+1. PFAL 优先的围护物理 — 不透明、保温、LED 主导的房间，不是太阳温室。
+2. 随温度变化的变 COP（卡诺模式、软顶、曲轴箱、除霜）加专用除湿机（SMER 曲线 / EnergyPlus 式性能 map）。
+3. 与房间平衡耦合的动态作物生长（1 或 3 状态 Van Henten，5 种蒸腾方法）。
+4. 含分时电价的光伏-电池-电网调度与 LCOE/NPV/IRR 容量扫描。
+5. 公开的验证工件：ASHRAE 140（BESTEST）围护验证台与公开数据集生长基准。
+6. MIT 许可的纯 Python，可同时跑在浏览器（Pyodide）里。
+
+两条如实的边界。第一，VFED 刻意**不**建模太阳温室 — 没有太阳驱动的冠层、自然通风或保温幕；做那些场景请用 GreenLight 或 TRNSYS/EnergyPlus 工作流。第二，围护侧与作物侧各自有公开验证，但对照一个完整运行 PFAL 季度的端到端验证仍是路线图的首位事项。
+
+<details>
+<summary><strong>对比资料来源</strong>（2026-10 核查）</summary>
+
+- EnergyPlus v26.1 Input Output Reference 对象索引（无温室/作物对象）：<https://bigladdersoftware.com/epx/docs/26-1/input-output-reference/>；发布页：<https://github.com/NatLabRockies/EnergyPlus/releases>
+- E+ 作物耦合实践：Larochelle Martin & Monfet 2025, Energy Nexus 100592, [DOI 10.1016/j.nexus.2025.100592](https://doi.org/10.1016/j.nexus.2025.100592)
+- TRNSYS 验证（ASHRAE 140-2023）：<https://trnsys.org/validation/>
+- Modelica Buildings Library：<https://github.com/lbl-srg/modelica-buildings>；Greenhouses-Library：<https://github.com/queraltab/Greenhouses-Library>（Altes-Buch et al., Modelica 2019）
+- ESP-r：<https://en.wikipedia.org/wiki/ESP-r>（BESTEST 参与、GPL）
+- GreenLight：Katzin et al. 2020, Biosystems Engineering 194:61–81, [DOI 10.1016/j.biosystemseng.2020.03.010](https://doi.org/10.1016/j.biosystemseng.2020.03.010)；表中仓库经 GitHub API 核查（2026-10-22）
+- EnergyCEA：[DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
+- Graamans et al.：2017 [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003)；2018 [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003)；2020 [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
+- Liebman-Pelaez et al.：[DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192)
+- Weidner et al.：[DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336)
+- Choi et al.（KIMM）：[DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8)
+- Keyvan & Roshandel：[DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
+
+</details>
 
 ## 快速开始
 
