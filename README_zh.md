@@ -289,6 +289,16 @@ vfed sweep my_farm.yaml --cache weather_cache --out results.csv
 
 `results.csv` 按目标值排序（默认 LCOE），首行即最优光伏 × 电池组合。扫描范围同样支持别名（接受 `pv_area_m2` / `battery_kwh`）。换一个地点还想离线？从 51 座内置城市中选一个并设置 `site.city`——2025 年天气已全部内置。
 
+**光伏损失栈（`eta_inv` × `eta_system`）。** 交流功率在组件最大功率点输出之后乘两个系数：`pv.eta_inv`（逆变器效率）与 `pv.eta_system`（积灰、直流线损、组件失配的综合折减；植物工厂屋顶阵列平铺，忽略自遮挡）。默认 `0.97 × 0.95 = 0.9215` 对应近新装、定期清洁、无遮挡的阵列。与 PVWatts 对标**绝对**发电量时，注意其默认为 96 % 逆变 × 86 %（14 % 系统损失）= **0.8256**，比我们的默认低约 11.6 %（layerD 基准 D6），需显式对齐：
+
+```yaml
+pv:
+  eta_inv: 0.96      # PVWatts 默认逆变效率
+  eta_system: 0.86   # PVWatts 默认：14 % 系统损失
+```
+
+同一轮 sweep 内该折减是所有行的公共乘子，LCOE 最优的光伏 × 电池排序不变，只影响绝对节能量与回收期。
+
 ### 湿度与水分结果
 
 `vfed evaluate` 输出的不止是能耗：年用水量、RH 钳制事件、除湿机利用率，以及除湿机与 HVAC 表冷器各自除掉的水分（含义见"输出结果解读"下的 **Output Glossary**）。`vfed evaluate ... --export out/` 还会写出 `summary.csv`、`timeseries.csv`（8,760 行逐时数据）和 `monthly.csv` 供自行分析。

@@ -544,3 +544,48 @@ class TestCapitalUnitArithmetic:
         assert cfg["pv"]["capital"]["rate_per_kwp"] == pytest.approx(3500.0)
         assert cfg["battery"]["capital"]["mode"] == "per_kwh"
         assert cfg["battery"]["capital"]["rate_per_kwh"] == pytest.approx(500.0)
+
+
+# ---------------------------------------------------------------------------
+# 4.6  PV loss stack — defaults pinned + PVWatts recipe (P1-3)
+# ---------------------------------------------------------------------------
+class TestPVLossStack:
+    """eta_inv x eta_system AC chain.
+
+    Defaults 0.97 x 0.95 = 0.9215 assume a near-new, clean, unshaded flat
+    array.  PVWatts v5 defaults (96 % inverter x 86 % system) give 0.8256,
+    i.e. -11.6 % energy (layerD benchmark D6).  The README documents the
+    override recipe; these tests pin the contract so the recipe keeps
+    flowing DesignProject.from_dict -> PVConfig -> PVSystem.
+    """
+
+    def test_default_loss_stack_pinned(self):
+        """Shipped defaults stay 0.97 x 0.95 = 0.9215 (baseline stability)."""
+        from vfed.pvbes.pv import PVSystem
+
+        pv = PVSystem()
+        assert pv.eta_inv == pytest.approx(0.97)
+        assert pv.eta_system == pytest.approx(0.95)
+        assert pv.eta_inv * pv.eta_system == pytest.approx(0.9215)
+
+    def test_pvwatts_recipe_flows_through_config(self):
+        """README recipe values are accepted contract fields."""
+        p = DesignProject.from_dict({"pv": {"eta_inv": 0.96, "eta_system": 0.86}})
+        assert p.pv.eta_inv == pytest.approx(0.96)
+        assert p.pv.eta_system == pytest.approx(0.86)
+
+    def test_pvwatts_recipe_output_ratio(self):
+        """PVWatts-derate output equals default output x 0.8256/0.9215."""
+        import numpy as np
+        from vfed.pvbes.pv import PVSystem
+
+        weather = {
+            "direct_radiation": np.full(24, 500.0),
+            "diffuse_radiation": np.full(24, 200.0),
+            "temperature_2m": np.full(24, 20.0),
+        }
+        base = PVSystem().calculate_pv_output(weather, 100.0)
+        vpw = PVSystem(eta_inv=0.96, eta_system=0.86).calculate_pv_output(
+            weather, 100.0
+        )
+        assert vpw == pytest.approx(base * 0.8256 / 0.9215, rel=1e-12)

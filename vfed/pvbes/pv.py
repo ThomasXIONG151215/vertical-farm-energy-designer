@@ -38,6 +38,14 @@ class PVSystem:
     # P6-7: aggregate derate for soiling (~2-5 %), DC wiring (~1-2 %) and
     # module mismatch (~1-2 %).  Self-shading neglected (PFAL roof arrays are
     # laid flat).  Applied AFTER eta_inv: total derate = 0.97*0.95 = 0.9215.
+    # P1-3: 0.9215 describes a near-new, regularly cleaned, unshaded array.
+    # For absolute-energy benchmarking against PVWatts v5 defaults
+    # (96 % inverter x 14 % system losses = 0.8256, i.e. -11.6 % vs ours;
+    # layerD benchmark D6) override in YAML:
+    #   pv: {eta_inv: 0.96, eta_system: 0.86}
+    # The derate is a common multiplier across a sweep, so LCOE ranking is
+    # unaffected; only absolute savings / payback shift.  See README
+    # "Size PV + battery for your site".
     eta_system: float = 0.95
     # P0-1: market-anchored default (was 110, 4-8x below market).  China C&I
     # distributed PV 2025 (module + install) ~= 3-3.5 RMB/W ~= 3000-3500

@@ -295,6 +295,16 @@ vfed sweep my_farm.yaml --cache weather_cache --out results.csv
 
 `results.csv` is sorted by the objective (LCOE by default); the first row is the best PV × battery combination. The same aliases work in sweep ranges (`pv_area_m2` / `battery_kwh` are accepted). Offline at a different site? Pick one of the 51 built-in cities (`vfed design cities`) and set `site.city` — 2025 weather is bundled for all of them.
 
+**PV loss stack (`eta_inv` × `eta_system`).** AC power applies two factors after the module maximum-power-point output: `pv.eta_inv` (inverter) and `pv.eta_system` (aggregate derate for soiling, DC wiring and module mismatch; self-shading is neglected because PFAL roof arrays are laid flat). The defaults `0.97 × 0.95 = 0.9215` describe a near-new, regularly cleaned, unshaded array. When you benchmark **absolute** PV energy against PVWatts, note that its defaults are 96 % inverter × 86 % (14 % system losses) = **0.8256** — about 11.6 % below ours (layerD benchmark D6) — so align them explicitly:
+
+```yaml
+pv:
+  eta_inv: 0.96      # PVWatts default inverter
+  eta_system: 0.86   # PVWatts default: 14 % system losses
+```
+
+Within a single sweep the derate is a common multiplier on every row, so the LCOE-optimal PV × battery ranking does not change; only absolute savings and payback shift.
+
 ### Humidity and moisture results
 
 `vfed evaluate` prints more than energy: annual water use, RH clamp events, DEH utilization, and how much moisture the dehumidifier vs the HVAC coil removed (see the **Output Glossary** under *Interpreting Results* for what these mean). `vfed evaluate ... --export out/` also writes `summary.csv`, `timeseries.csv` (8,760 hourly rows) and `monthly.csv` for your own analysis.

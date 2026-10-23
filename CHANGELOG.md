@@ -8,6 +8,23 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Added
 
+- **PV loss-stack documentation + PVWatts-matched recipe (P1-3).** The
+  AC chain applies `pv.eta_inv` × `pv.eta_system` after module MPP
+  power; defaults 0.97 × 0.95 = 0.9215 describe a near-new, regularly
+  cleaned, unshaded flat array, while PVWatts v5 defaults (96 %
+  inverter × 14 % system losses = 0.8256) sit ~11.6 % below that
+  (layerD benchmark D6), so absolute PV energy under VFED defaults runs
+  correspondingly higher than a PVWatts-default run of the same
+  nameplate. The README DIY section "Size PV + battery for your site"
+  (both languages) now documents the loss stack, its applicability and
+  the YAML recipe `pv: {eta_inv: 0.96, eta_system: 0.86}` for
+  absolute-energy benchmarking; `pv.py`/`PVConfig` comments
+  cross-reference it. Within one sweep the derate is a common
+  multiplier on every row, so LCOE ranking is unaffected — only
+  absolute savings and payback shift. Defaults are unchanged and now
+  pinned by tests (test_04 §4.6: default 0.9215, recipe flows from_dict
+  → PVConfig → PVSystem, output ratio 0.8256/0.9215 exact).
+
 - **DEH identified setpoint-modulation map (commissioning mode).**
   `DEHDevice` accepts `setpoint_modulation` (a measured `lookup` on the
   humidity setpoint, optional `lookup_dark` for the dark photoperiod, and
