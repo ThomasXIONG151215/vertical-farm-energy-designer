@@ -102,29 +102,27 @@ Two honest limits. First, VFED deliberately does **not** model sunlit greenhouse
 <details>
 <summary><strong>References</strong> (checked 2026-10)</summary>
 
-**Primary — landmark plant-factory (PFAL) literature**
+Our group's papers first, then related work ordered by similarity to VFED.
 
-1. **Xiong et al. 2026** — the VFED companion paper, *Energy and Buildings* 361, 117462, [DOI 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
-2. Kozai 2013 — resource-use efficiency of closed plant production systems with artificial light, *Proc. Japan Academy, Series B* 89:447–461, [DOI 10.2183/pjab.89.447](https://doi.org/10.2183/pjab.89.447)
-3. Barbosa et al. 2015 — land, water and energy requirements of hydroponic vs. conventional lettuce, *Int. J. Environ. Res. Public Health* 12(6):6879–6891, [DOI 10.3390/ijerph120606879](https://doi.org/10.3390/ijerph120606879)
-4. Touliatos, Dodd & McAinsh 2016 — vertical farming increases lettuce yield per unit area, *Food and Energy Security* 5(3):184–191, [DOI 10.1002/fes3.83](https://doi.org/10.1002/fes3.83)
-5. Harbick et al. 2016 — energy consumption compared: greenhouses and plant factories, *Acta Horticulturae* 1134:285–292, [DOI 10.17660/ActaHortic.2016.1134.38](https://doi.org/10.17660/ActaHortic.2016.1134.38)
-6. Benke & Tomkins 2017 — future food-production systems: vertical farming and controlled-environment agriculture, *Sustainability* 9(3):328, [DOI 10.3390/su9030328](https://doi.org/10.3390/su9030328)
-7. Graamans et al. 2018 — plant factories versus greenhouses: comparison of resource use efficiency, *Agricultural Systems* 160:31–39, [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003)
-8. Kozai, Niu & Takagaki (Eds.) 2019 — *Plant Factory: An Indoor Vertical Farming System for Efficient Quality Food Production*, 2nd ed., Academic Press (book)
-9. Yorifuji et al. 2022 — economic design of artificial-light plant factories based on the energy conversion efficiency of biomass, *Applied Energy* 305:117850
+1. **Xiong et al. 2026** — the VFED companion paper: photovoltaic-battery integration strategy in plant factories with artificial lighting, *Energy and Buildings* 361, 117462, [DOI 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
+2. Yu et al. 2024 — energy examination and optimization workflow for container farms, Shanghai case study, *Applied Energy* 374, 124038, [DOI 10.1016/j.apenergy.2024.124038](https://doi.org/10.1016/j.apenergy.2024.124038)
+3. Cai et al. 2025 — energy consumption of plant factories with artificial light: challenges and opportunities (review), *Renewable and Sustainable Energy Reviews* 210, 115235, [DOI 10.1016/j.rser.2024.115235](https://doi.org/10.1016/j.rser.2024.115235)
+4. Cai et al. 2025 — significantly enhanced energy efficiency through reflective materials in plant factories with artificial light, *Applied Energy* 377, 124587, [DOI 10.1016/j.apenergy.2024.124587](https://doi.org/10.1016/j.apenergy.2024.124587)
+5. Bu et al. 2024 — data-driven random forest assessment of energy-saving factors in container plant factories, *Cleaner Energy Systems* 8, 100122, [DOI 10.1016/j.cles.2024.100122](https://doi.org/10.1016/j.cles.2024.100122)
+6. Yu et al. 2026 — CFD-driven Bayesian optimization of localized ventilation for plant-factory microclimate control, *Computers and Electronics in Agriculture* 240, 111225, [DOI 10.1016/j.compag.2025.111225](https://doi.org/10.1016/j.compag.2025.111225)
+7. Zeng et al. 2026 — thermal assessment and management of battery energy storage systems via thermal resistance network (with CATL co-author), *Applied Thermal Engineering* 298, 131182, [DOI 10.1016/j.applthermaleng.2026.131182](https://doi.org/10.1016/j.applthermaleng.2026.131182)
+8. Keyvan & Roshandel 2024 — integrated energy-yield-cost model for clean-energy vertical farms (EnergyPlus + Van Henten crop + solar/storage economics), *Computers and Electronics in Agriculture* 219, 108809, [DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
+9. Xia et al. 2026 (EnergyCEA) — coupled triple-zone strawberry-PFAL energy framework validated on a commercial farm, *Applied Energy* 415, 127824, [DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
+10. Graamans et al. 2017 — PFAL crop transpiration and energy balance, validated against NASA BPC and EDEN-ISS, *Agricultural Systems* 153, 138–147, [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003)
+11. Graamans et al. 2018 — plant factories versus greenhouses: comparison of resource use efficiency, *Agricultural Systems* 160, 31–39, [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003)
+12. Graamans et al. 2020 — PFAL energy demand and façade design, coupled in EnergyPlus, *Applied Energy* 262, 114544, [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
+13. Liebman-Pelaez et al. 2021 — validated EnergyPlus model of a hydroponic container farm with real equipment curves, *Energy and Buildings* 250, 111192, [DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192)
+14. Weidner et al. 2021 — energy optimisation of plant factories and greenhouses with detailed air-conditioning dynamics, *Energy Conversion and Management* 243, 114336, [DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336)
+15. Choi et al. 2023 (KIMM) — lettuce container-farm energy demand in Korean and Indonesian climates; dehumidification exceeds 50% of demand, *Horticulture, Environment, and Biotechnology*, [DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8)
+16. Larochelle Martin & Monfet 2025 — integrated crop-building simulation in EnergyPlus for controlled-environment agriculture, *Energy Nexus*, 100592, [DOI 10.1016/j.nexus.2025.100592](https://doi.org/10.1016/j.nexus.2025.100592)
+17. Katzin et al. 2020 — GreenLight: open-source validated greenhouse + tomato crop model, *Biosystems Engineering* 194, 61–81, [DOI 10.1016/j.biosystemseng.2020.03.010](https://doi.org/10.1016/j.biosystemseng.2020.03.010)
 
-**Secondary — comparison subjects: engines, open-source tools, and published PFAL models without public code**
-
-- EnergyPlus v26.1 Input Output Reference, object index (no greenhouse/crop object): <https://bigladdersoftware.com/epx/docs/26-1/input-output-reference/>; releases: <https://github.com/NatLabRockies/EnergyPlus/releases>
-- E+ crop coupling practice: Larochelle Martin & Monfet 2025, Energy Nexus 100592, [DOI 10.1016/j.nexus.2025.100592](https://doi.org/10.1016/j.nexus.2025.100592)
-- TRNSYS validation (ASHRAE 140-2023): <https://trnsys.org/validation/>
-- Modelica Buildings Library: <https://github.com/lbl-srg/modelica-buildings>; Greenhouses-Library: <https://github.com/queraltab/Greenhouses-Library> (Altes-Buch et al., Modelica 2019)
-- ESP-r: <https://en.wikipedia.org/wiki/ESP-r> (BESTEST participation, GPL)
-- GreenLight: Katzin et al. 2020, Biosystems Engineering 194:61–81, [DOI 10.1016/j.biosystemseng.2020.03.010](https://doi.org/10.1016/j.biosystemseng.2020.03.010); repos as linked in the table (GitHub API, 2026-10-22)
-- EnergyCEA (Xia et al. 2026): [DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
-- Graamans et al.: 2017 [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003); 2020 [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
-- Liebman-Pelaez et al.: [DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192); Weidner et al.: [DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336); Choi et al. (KIMM): [DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8); Keyvan & Roshandel: [DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
+Engine and tool sources (verified 2026-10): EnergyPlus v26.1 Input Output Reference, object index (no greenhouse/crop object), <https://bigladdersoftware.com/epx/docs/26-1/input-output-reference/>, releases <https://github.com/NatLabRockies/EnergyPlus/releases>; TRNSYS validation (ASHRAE 140-2023) <https://trnsys.org/validation/>; Modelica Buildings Library <https://github.com/lbl-srg/modelica-buildings>; Greenhouses-Library <https://github.com/queraltab/Greenhouses-Library> (Altes-Buch et al., Modelica 2019); ESP-r <https://en.wikipedia.org/wiki/ESP-r> (BESTEST participation, GPL); open-source repos as linked in the tables (GitHub API, 2026-10-22).
 
 </details>
 
@@ -798,7 +796,7 @@ If you use VFED in your research, please cite:
 ```bibtex
 @article{xiong2026photovoltaic,
   title={Photovoltaic-battery integration strategy in plant factories with artificial lighting},
-  author={Xiong, Tianzheng and Cai, Wenxin and Hu, Yue and Song, Mingxuan and Qian, Tao and Bao, Huashan},
+  author={Xiong, Tianzheng and Cai, Wenyi and Hu, Yue and Song, Mingxuan and Qian, Tao and Bao, Hua},
   journal={Energy and Buildings},
   volume={361},
   pages={117462},

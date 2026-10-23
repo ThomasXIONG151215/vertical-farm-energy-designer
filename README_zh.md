@@ -102,29 +102,27 @@ PFAL 能耗建模分散在三个割裂的世界里：通用建筑引擎（Energy
 <details>
 <summary><strong>参考文献</strong>（2026-10 核查）</summary>
 
-**主要参考文献 — 植物工厂（PFAL）领域里程碑**
+课题组论文置顶，其余按与 VFED 的相关性排序。
 
-1. **Xiong et al. 2026**（VFED 配套论文）：*Energy and Buildings* 361, 117462, [DOI 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
-2. Kozai 2013 — 人工光密闭植物生产系统的资源利用效率，*Proc. Japan Academy, Series B* 89:447–461, [DOI 10.2183/pjab.89.447](https://doi.org/10.2183/pjab.89.447)
-3. Barbosa et al. 2015 — 水培与常规种植生菜的土地、水、能源需求对比，*Int. J. Environ. Res. Public Health* 12(6):6879–6891, [DOI 10.3390/ijerph120606879](https://doi.org/10.3390/ijerph120606879)
-4. Touliatos, Dodd & McAinsh 2016 — 垂直种植提升单位面积生菜产量，*Food and Energy Security* 5(3):184–191, [DOI 10.1002/fes3.83](https://doi.org/10.1002/fes3.83)
-5. Harbick et al. 2016 — 温室与植物工厂的能耗对比，*Acta Horticulturae* 1134:285–292, [DOI 10.17660/ActaHortic.2016.1134.38](https://doi.org/10.17660/ActaHortic.2016.1134.38)
-6. Benke & Tomkins 2017 — 垂直农业与受控环境农业的未来食物生产系统综述，*Sustainability* 9(3):328, [DOI 10.3390/su9030328](https://doi.org/10.3390/su9030328)
-7. Graamans et al. 2018 — 植物工厂与温室的资源利用效率对比，*Agricultural Systems* 160:31–39, [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003)
-8. Kozai, Niu & Takagaki（编）2019 —《Plant Factory: An Indoor Vertical Farming System for Efficient Quality Food Production》第 2 版，Academic Press（专著）
-9. Yorifuji et al. 2022 — 基于生物质能转换效率的人工光植物工厂经济设计，*Applied Energy* 305:117850
+1. **Xiong et al. 2026**（VFED 配套论文）— 人工光植物工厂的光伏-电池集成策略，*Energy and Buildings* 361, 117462, [DOI 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
+2. Yu et al. 2024 — 集装箱农场的能量审查与优化工作流（上海案例），*Applied Energy* 374, 124038, [DOI 10.1016/j.apenergy.2024.124038](https://doi.org/10.1016/j.apenergy.2024.124038)
+3. Cai et al. 2025 — 人工光植物工厂的能耗：挑战与机遇（综述），*Renewable and Sustainable Energy Reviews* 210, 115235, [DOI 10.1016/j.rser.2024.115235](https://doi.org/10.1016/j.rser.2024.115235)
+4. Cai et al. 2025 — 反光材料集成显著提升人工光植物工厂能效，*Applied Energy* 377, 124587, [DOI 10.1016/j.apenergy.2024.124587](https://doi.org/10.1016/j.apenergy.2024.124587)
+5. Bu et al. 2024 — 集装箱植物工厂多因素节能效果的数据驱动（随机森林）评估，*Cleaner Energy Systems* 8, 100122, [DOI 10.1016/j.cles.2024.100122](https://doi.org/10.1016/j.cles.2024.100122)
+6. Yu et al. 2026 — CFD 驱动的贝叶斯优化：植物工厂局部通风实现目标微气候，*Computers and Electronics in Agriculture* 240, 111225, [DOI 10.1016/j.compag.2025.111225](https://doi.org/10.1016/j.compag.2025.111225)
+7. Zeng et al. 2026 — 基于热阻网络的电池储能系统热评估与热管理（与 CATL 合作），*Applied Thermal Engineering* 298, 131182, [DOI 10.1016/j.applthermaleng.2026.131182](https://doi.org/10.1016/j.applthermaleng.2026.131182)
+8. Keyvan & Roshandel 2024 — 垂直农场清洁能源的能源-产量-成本集成模型（EnergyPlus + Van Henten 作物 + 光伏/储能经济性），*Computers and Electronics in Agriculture* 219, 108809, [DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
+9. Xia et al. 2026（EnergyCEA）— 经商业农场验证的三区草莓植物工厂耦合能量框架，*Applied Energy* 415, 127824, [DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
+10. Graamans et al. 2017 — 植物工厂作物蒸腾与能量平衡（经 NASA BPC 与 EDEN-ISS 验证），*Agricultural Systems* 153, 138–147, [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003)
+11. Graamans et al. 2018 — 植物工厂与温室的资源利用效率对比，*Agricultural Systems* 160, 31–39, [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003)
+12. Graamans et al. 2020 — EnergyPlus 耦合的植物工厂能耗与立面设计，*Applied Energy* 262, 114544, [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
+13. Liebman-Pelaez et al. 2021 — 基于实测设备曲线并经验证的水培集装箱农场 EnergyPlus 模型，*Energy and Buildings* 250, 111192, [DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192)
+14. Weidner et al. 2021 — 含详细空调动态的植物工厂与温室能量优化，*Energy Conversion and Management* 243, 114336, [DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336)
+15. Choi et al. 2023（KIMM）— 韩国与印尼气候下生菜集装箱农场能量需求；除湿占比超 50%，*Horticulture, Environment, and Biotechnology*, [DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8)
+16. Larochelle Martin & Monfet 2025 — EnergyPlus 中受控环境农业的作物-建筑集成仿真，*Energy Nexus*, 100592, [DOI 10.1016/j.nexus.2025.100592](https://doi.org/10.1016/j.nexus.2025.100592)
+17. Katzin et al. 2020 — GreenLight：开源且经验证的温室 + 番茄作物模型，*Biosystems Engineering* 194, 61–81, [DOI 10.1016/j.biosystemseng.2020.03.010](https://doi.org/10.1016/j.biosystemseng.2020.03.010)
 
-**次要参考文献 — 对比对象：引擎、开源工具与代码未公开的已发表 PFAL 模型**
-
-- EnergyPlus v26.1 Input Output Reference 对象索引（无温室/作物对象）：<https://bigladdersoftware.com/epx/docs/26-1/input-output-reference/>；发布页：<https://github.com/NatLabRockies/EnergyPlus/releases>
-- E+ 作物耦合实践：Larochelle Martin & Monfet 2025, Energy Nexus 100592, [DOI 10.1016/j.nexus.2025.100592](https://doi.org/10.1016/j.nexus.2025.100592)
-- TRNSYS 验证（ASHRAE 140-2023）：<https://trnsys.org/validation/>
-- Modelica Buildings Library：<https://github.com/lbl-srg/modelica-buildings>；Greenhouses-Library：<https://github.com/queraltab/Greenhouses-Library>（Altes-Buch et al., Modelica 2019）
-- ESP-r：<https://en.wikipedia.org/wiki/ESP-r>（BESTEST 参与、GPL）
-- GreenLight：Katzin et al. 2020, Biosystems Engineering 194:61–81, [DOI 10.1016/j.biosystemseng.2020.03.010](https://doi.org/10.1016/j.biosystemseng.2020.03.010)；表中仓库经 GitHub API 核查（2026-10-22）
-- EnergyCEA（Xia et al. 2026）：[DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
-- Graamans et al.：2017 [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003)；2020 [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
-- Liebman-Pelaez et al.：[DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192)；Weidner et al.：[DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336)；Choi et al.（KIMM）：[DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8)；Keyvan & Roshandel：[DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
+引擎与工具来源（2026-10 核查）：EnergyPlus v26.1 Input Output Reference 对象索引（无温室/作物对象）<https://bigladdersoftware.com/epx/docs/26-1/input-output-reference/>，发布页 <https://github.com/NatLabRockies/EnergyPlus/releases>；TRNSYS 验证（ASHRAE 140-2023）<https://trnsys.org/validation/>；Modelica Buildings Library <https://github.com/lbl-srg/modelica-buildings>；Greenhouses-Library <https://github.com/queraltab/Greenhouses-Library>（Altes-Buch et al., Modelica 2019）；ESP-r <https://en.wikipedia.org/wiki/ESP-r>（BESTEST 参与、GPL）；表中开源仓库经 GitHub API 核查（2026-10-22）。
 
 </details>
 
@@ -761,7 +759,7 @@ summary 中最常被问到的输出/警告键的白话解释：
 ```bibtex
 @article{xiong2026photovoltaic,
   title={Photovoltaic-battery integration strategy in plant factories with artificial lighting},
-  author={Xiong, Tianzheng and Cai, Wenxin and Hu, Yue and Song, Mingxuan and Qian, Tao and Bao, Huashan},
+  author={Xiong, Tianzheng and Cai, Wenyi and Hu, Yue and Song, Mingxuan and Qian, Tao and Bao, Hua},
   journal={Energy and Buildings},
   volume={361},
   pages={117462},
