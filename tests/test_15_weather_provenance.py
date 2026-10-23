@@ -330,3 +330,32 @@ def test_sweep_console_never_prints_source(cli_project_yaml, monkeypatch, capsys
     rc = cli_mod.main(["sweep", str(cli_project_yaml), "--cache", str(_REPO_CACHE)])
     assert rc == 0
     assert "Weather source" not in capsys.readouterr().out
+
+
+# ── P1-2 GHI absolute-scale caveat (backlog #2 / layerD D8) ────────────────
+
+
+def test_print_ghi_caveat_wording_and_gates(capsys):
+    """The [NOTE] prints only for unscaled ERA5 (both gates), carries the
+    two remedies + the rankings-unaffected scope, and is pure ASCII."""
+    from vfed.cli import _print_ghi_caveat  # noqa: E402
+
+    # gate open: default provider, no correction
+    _print_ghi_caveat("open-meteo", 1.0, "  ")
+    out = capsys.readouterr().out
+    assert out.startswith("  [NOTE] unscaled ERA5 GHI runs +15-25% high")
+    assert "--ghi-scale 0.80-0.87" in out
+    assert "--provider nasa-power" in out
+    assert "(relative sweep rankings unaffected)" in out
+    assert out.endswith(").\n")
+    for line in out.splitlines():
+        assert line.isascii()
+    # deeper indent (sweep best row) is honoured
+    _print_ghi_caveat("open-meteo", 1.0, "    ")
+    assert capsys.readouterr().out.startswith("    [NOTE]")
+    # gate 1 closed: source already switched
+    _print_ghi_caveat("nasa-power", 1.0)
+    assert capsys.readouterr().out == ""
+    # gate 2 closed: bias correction already applied
+    _print_ghi_caveat("open-meteo", 0.873)
+    assert capsys.readouterr().out == ""

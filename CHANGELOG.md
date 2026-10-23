@@ -8,6 +8,21 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Added
 
+- **GHI absolute-scale console caveat (P1-2).** When a PV-carrying run
+  concludes on unscaled ERA5 GHI (`site.weather_provider: open-meteo` with
+  `site.ghi_scale: 1.0`), the `evaluate` console now prints the annual GHI
+  (kWh/m²/yr, with the effective provider and scale) followed by a one-line
+  `[NOTE]` flagging the documented +15-25% eastern-China ERA5 bias
+  (layerD D8) and pointing at the two remedies: `--ghi-scale 0.80-0.87` or
+  `--provider nasa-power`. The `sweep` console prints the same `[NOTE]`
+  next to the best row (and on single-point runs) whenever the design
+  actually carries PV; `--provider`/`--ghi-scale` CLI overrides are folded
+  into the gate. Runs without PV print nothing (no output change for the
+  609 baseline); no numerical behaviour changes. The README "known bias"
+  section now states both remedies are built in instead of "planned".
+  Tests: helper wording/gates pinned in test_15; CLI end-to-end (note
+  printed with PV, silenced by `--ghi-scale 0.873`, absent without PV) in
+  test_07.
 - **PV loss-stack documentation + PVWatts-matched recipe (P1-3).** The
   AC chain applies `pv.eta_inv` × `pv.eta_system` after module MPP
   power; defaults 0.97 × 0.95 = 0.9215 describe a near-new, regularly

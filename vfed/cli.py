@@ -760,6 +760,33 @@ def _print_weather_source(result) -> None:
         print(f"  Weather source  : {label}")
 
 
+def _print_ghi_caveat(provider: str, ghi_scale: float, indent: str = "  ") -> None:
+    """P1-2 (backlog #2 / layerD D8): one ``[NOTE]`` line flagging that
+    absolute-energy conclusions (PV yield / savings / payback) ride on
+    unscaled ERA5 GHI, which runs +15-25% high in eastern China.
+
+    Printed only when BOTH gates hold:
+
+    * *provider* == "open-meteo" (the ERA5 archive -- the biased source);
+    * *ghi_scale* == 1.0 (no bias correction applied).
+
+    A NASA POWER run or any non-1.0 scale means the user already took the
+    remedy, so nothing prints.  Callers gate on PV presence themselves --
+    without PV the results barely depend on GHI and the line would be noise.
+    Same style precedent as the sweep's incremental-economics [NOTE]
+    (report-only, never alters results).  Wording is shared by evaluate and
+    sweep; keep the two call sites in sync like _CAPITAL_ZERO_WARNING.
+    """
+    if provider != "open-meteo" or abs(float(ghi_scale) - 1.0) > 1e-12:
+        return
+    print(
+        f"{indent}[NOTE] unscaled ERA5 GHI runs +15-25% high in E-China "
+        "(README 'Weather data'): absolute PV yield/savings/payback may be "
+        "optimistic; re-run with --ghi-scale 0.80-0.87 or --provider "
+        "nasa-power for absolute claims (relative sweep rankings unaffected)."
+    )
+
+
 def _resolve_tariff_arg(value, project_currency=None):
     """T7 (P2-3): resolve ``--tariff {NAME|PATH}`` to a TariffConfig.
 
@@ -1077,6 +1104,21 @@ def _cmd_evaluate(args):
         print(f"  PV generation    = {pv_gen:.0f} kWh/yr")
         print(f"  Grid import      = {summary.get('grid_import_kwh', 0):.0f} kWh/yr")
         print(f"  Grid export      = {summary.get('grid_export_kwh', 0):.0f} kWh/yr")
+        # P1-2 (backlog #2 / layerD D8): annual GHI is the absolute-scale
+        # anchor behind the PV numbers above -- print it with the effective
+        # provider/scale (CLI overrides already folded into project.site at
+        # this point), then the bias caveat when both gates hold.  Report-
+        # only; no behaviour change.
+        _ghi = summary.get("annual_ghi_kwh_m2")
+        if _ghi is not None:
+            print(
+                f"  Annual GHI        = {_ghi:.1f} kWh/m2/yr "
+                f"(provider {project.site.weather_provider}, "
+                f"ghi_scale {project.site.ghi_scale:g})"
+            )
+            _print_ghi_caveat(
+                project.site.weather_provider, project.site.ghi_scale, "  "
+            )
     if args.export:
         export_dir = Path(args.export)
         export_dir.mkdir(parents=True, exist_ok=True)
@@ -1183,6 +1225,15 @@ def _cmd_sweep(args):
         _print_unit_price(
             "  ", "Battery unit", _sp_cap["Battery"], float(_sp.battery_kwh), "kWh", currency
         )
+        # P1-2: same GHI absolute-scale caveat as the evaluate path -- a
+        # single-point run with PV enabled sells the same absolute-energy
+        # conclusions a full sweep's best row does.
+        if float(_sp.pv_area_m2) > 0:
+            _sp_prov = provider_override or _sp.site.weather_provider
+            _sp_scale = (
+                ghi_scale_override if ghi_scale_override is not None else _sp.site.ghi_scale
+            )
+            _print_ghi_caveat(_sp_prov, _sp_scale, "  ")
         if args.out:
             import pandas as pd
 
@@ -1344,6 +1395,19 @@ def _cmd_sweep(args):
         print(f"    annual_pv_generation    = {best.get('annual_pv_generation', 0):.0f} kWh/yr")
     if "annual_grid_import" in best:
         print(f"    annual_grid_import      = {best.get('annual_grid_import', 0):.0f} kWh/yr")
+    # P1-2 (backlog #2 / layerD D8): when the best design actually carries
+    # PV, its absolute yield/savings/payback ride on the GHI scale -- flag
+    # unscaled ERA5 with the same [NOTE] the evaluate path prints (wording
+    # shared via _print_ghi_caveat).  The CLI --provider/--ghi-scale
+    # overrides were consumed by agent_evaluate as kwargs, so they are
+    # re-applied on top of the YAML here for the gate check.
+    if float(best.get("pv_area", 0.0)) > 0:
+        _gp = DesignProject.load(args.project)
+        _gp_prov = provider_override or _gp.site.weather_provider
+        _gp_scale = (
+            ghi_scale_override if ghi_scale_override is not None else _gp.site.ghi_scale
+        )
+        _print_ghi_caveat(_gp_prov, _gp_scale, "    ")
 
     if args.out:
         return _write_results_csv(results, args.out)

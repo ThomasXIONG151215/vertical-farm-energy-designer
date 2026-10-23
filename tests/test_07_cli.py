@@ -133,6 +133,9 @@ def test_evaluate_ok(cli_project_yaml, capsys):
     assert "Annual load" in out.out
     # P0-4: the fixed preset must NOT trigger the full-load warning.
     assert "at rated capacity" not in out.out
+    # P1-2: preset 609 carries no PV -> no GHI line, no ERA5 caveat.
+    assert "Annual GHI" not in out.out
+    assert "[NOTE]" not in out.out
 
 
 def test_evaluate_full_load_warning_printed(cli_project_yaml, tmp_path, capsys):
@@ -151,6 +154,34 @@ def test_evaluate_full_load_warning_printed(cli_project_yaml, tmp_path, capsys):
     assert "[WARNING]" in out.out
     assert "HVAC cooling at rated capacity" in out.out
     assert "setpoint may be unreachable" in out.out
+
+
+def test_evaluate_ghi_caveat_with_pv(cli_project_yaml, tmp_path, capsys):
+    """P1-2 (backlog #2 / layerD D8): with PV enabled the evaluate console
+    prints the annual GHI (provider + effective scale) and the ERA5
+    absolute-scale [NOTE]; a --ghi-scale correction silences the note but
+    keeps the GHI line, now tagged with the applied scale."""
+    from vfed.design.project import DesignProject
+
+    p = DesignProject.load(cli_project_yaml)
+    p.pv_area_m2 = 50.0
+    pv_yaml = tmp_path / "farm_pv.yaml"
+    p.save(pv_yaml)
+    rc = main(["evaluate", str(pv_yaml), "--cache", "weather_cache"])
+    out = capsys.readouterr()
+    assert rc == 0
+    assert "PV generation" in out.out
+    assert "Annual GHI" in out.out
+    assert "provider open-meteo" in out.out
+    assert "ghi_scale 1" in out.out
+    assert "[NOTE] unscaled ERA5 GHI runs +15-25% high" in out.out
+
+    rc = main(["evaluate", str(pv_yaml), "--cache", "weather_cache", "--ghi-scale", "0.873"])
+    out = capsys.readouterr()
+    assert rc == 0
+    assert "Annual GHI" in out.out
+    assert "ghi_scale 0.873" in out.out
+    assert "[NOTE]" not in out.out
 
 
 # ---------------------------------------------------------------------------

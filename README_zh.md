@@ -512,7 +512,7 @@ Van Henten 生物量只响应光照与温度 — 没有水分胁迫耦合：灌�
 
 ### 天气数据（ERA5）已知偏差
 
-天气来自 Open-Meteo archive API，其 ERA5 再分析在**华东地表辐照上系统性偏高约 +15~25%**（Atmosphere 2026：相对 CMA 160 站日尺度 PBIAS 57.4%、ME +124 W/m²；云与气溶胶消光未被充分表征）。上海 2025 随库数据 GHI ≈ 1570 kWh/m²/yr，对照 NASA POWER 1367、CMA 地面观测带 1250-1300。光伏发电量与比产按同比例继承该偏差（隐含 PR 仍正常，0.78-0.87），因此基于 ERA5 的绝对光伏/电费节省数字应视为偏乐观。可通过 `summary.annual_ghi_kwh_m2` 自查年辐照；数据源替换或偏差修正选项已在计划中。
+天气来自 Open-Meteo archive API，其 ERA5 再分析在**华东地表辐照上系统性偏高约 +15~25%**（Atmosphere 2026：相对 CMA 160 站日尺度 PBIAS 57.4%、ME +124 W/m²；云与气溶胶消光未被充分表征）。上海 2025 随库数据 GHI ≈ 1570 kWh/m²/yr，对照 NASA POWER 1367、CMA 地面观测带 1250-1300。光伏发电量与比产按同比例继承该偏差（隐含 PR 仍正常，0.78-0.87），因此基于 ERA5 的绝对光伏/电费节省数字应视为偏乐观。两类修正均已内置：`--provider nasa-power` / `site.weather_provider` 换源，`--ghi-scale` / `site.ghi_scale` 施加订正（见「天气数据」节）；当带光伏的运行依赖未订正 ERA5 GHI 得出结论时，`evaluate`/`sweep` 控制台会打印年度 GHI（含来源与订正系数）及本条提示。可通过 `summary.annual_ghi_kwh_m2` 自查年辐照。
 
 ### HVAC COP 冬季上限
 
