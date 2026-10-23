@@ -100,7 +100,21 @@ PFAL 能耗建模分散在三个割裂的世界里：通用建筑引擎（Energy
 两条如实的边界。第一，VFED 刻意**不**建模太阳温室 — 没有太阳驱动的冠层、自然通风或保温幕；做那些场景请用 GreenLight 或 TRNSYS/EnergyPlus 工作流。第二，围护侧与作物侧各自有公开验证，但对照一个完整运行 PFAL 季度的端到端验证仍是路线图的首位事项。
 
 <details>
-<summary><strong>对比资料来源</strong>（2026-10 核查）</summary>
+<summary><strong>参考文献</strong>（2026-10 核查）</summary>
+
+**主要参考文献 — 植物工厂（PFAL）领域里程碑**
+
+1. **Xiong et al. 2026**（VFED 配套论文）：*Energy and Buildings* 361, 117462, [DOI 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
+2. Kozai 2013 — 人工光密闭植物生产系统的资源利用效率，*Proc. Japan Academy, Series B* 89:447–461, [DOI 10.2183/pjab.89.447](https://doi.org/10.2183/pjab.89.447)
+3. Barbosa et al. 2015 — 水培与常规种植生菜的土地、水、能源需求对比，*Int. J. Environ. Res. Public Health* 12(6):6879–6891, [DOI 10.3390/ijerph120606879](https://doi.org/10.3390/ijerph120606879)
+4. Touliatos, Dodd & McAinsh 2016 — 垂直种植提升单位面积生菜产量，*Food and Energy Security* 5(3):184–191, [DOI 10.1002/fes3.83](https://doi.org/10.1002/fes3.83)
+5. Harbick et al. 2016 — 温室与植物工厂的能耗对比，*Acta Horticulturae* 1134:285–292, [DOI 10.17660/ActaHortic.2016.1134.38](https://doi.org/10.17660/ActaHortic.2016.1134.38)
+6. Benke & Tomkins 2017 — 垂直农业与受控环境农业的未来食物生产系统综述，*Sustainability* 9(3):328, [DOI 10.3390/su9030328](https://doi.org/10.3390/su9030328)
+7. Graamans et al. 2018 — 植物工厂与温室的资源利用效率对比，*Agricultural Systems* 160:31–39, [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003)
+8. Kozai, Niu & Takagaki（编）2019 —《Plant Factory: An Indoor Vertical Farming System for Efficient Quality Food Production》第 2 版，Academic Press（专著）
+9. Yorifuji et al. 2022 — 基于生物质能转换效率的人工光植物工厂经济设计，*Applied Energy* 305:117850
+
+**次要参考文献 — 对比对象：引擎、开源工具与代码未公开的已发表 PFAL 模型**
 
 - EnergyPlus v26.1 Input Output Reference 对象索引（无温室/作物对象）：<https://bigladdersoftware.com/epx/docs/26-1/input-output-reference/>；发布页：<https://github.com/NatLabRockies/EnergyPlus/releases>
 - E+ 作物耦合实践：Larochelle Martin & Monfet 2025, Energy Nexus 100592, [DOI 10.1016/j.nexus.2025.100592](https://doi.org/10.1016/j.nexus.2025.100592)
@@ -108,12 +122,9 @@ PFAL 能耗建模分散在三个割裂的世界里：通用建筑引擎（Energy
 - Modelica Buildings Library：<https://github.com/lbl-srg/modelica-buildings>；Greenhouses-Library：<https://github.com/queraltab/Greenhouses-Library>（Altes-Buch et al., Modelica 2019）
 - ESP-r：<https://en.wikipedia.org/wiki/ESP-r>（BESTEST 参与、GPL）
 - GreenLight：Katzin et al. 2020, Biosystems Engineering 194:61–81, [DOI 10.1016/j.biosystemseng.2020.03.010](https://doi.org/10.1016/j.biosystemseng.2020.03.010)；表中仓库经 GitHub API 核查（2026-10-22）
-- EnergyCEA：[DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
-- Graamans et al.：2017 [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003)；2018 [DOI 10.1016/j.agsy.2017.11.003](https://doi.org/10.1016/j.agsy.2017.11.003)；2020 [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
-- Liebman-Pelaez et al.：[DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192)
-- Weidner et al.：[DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336)
-- Choi et al.（KIMM）：[DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8)
-- Keyvan & Roshandel：[DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
+- EnergyCEA（Xia et al. 2026）：[DOI 10.1016/j.apenergy.2026.127824](https://doi.org/10.1016/j.apenergy.2026.127824)
+- Graamans et al.：2017 [DOI 10.1016/j.agsy.2017.01.003](https://doi.org/10.1016/j.agsy.2017.01.003)；2020 [DOI 10.1016/j.apenergy.2020.114544](https://doi.org/10.1016/j.apenergy.2020.114544)
+- Liebman-Pelaez et al.：[DOI 10.1016/j.enbuild.2021.111192](https://doi.org/10.1016/j.enbuild.2021.111192)；Weidner et al.：[DOI 10.1016/j.enconman.2021.114336](https://doi.org/10.1016/j.enconman.2021.114336)；Choi et al.（KIMM）：[DOI 10.1007/s13580-023-00529-8](https://doi.org/10.1007/s13580-023-00529-8)；Keyvan & Roshandel：[DOI 10.1016/j.compag.2024.108809](https://doi.org/10.1016/j.compag.2024.108809)
 
 </details>
 
