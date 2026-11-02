@@ -582,6 +582,14 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
     (dict or sim result for single-point).  Objective is taken from
     ``project.space.objective`` (default ``"lcoe"``).
     """
+    # G1 (Wave 2): multi-array sizing is evaluate-only for now -- the scan
+    # grid (G7) does not yet know per-array decision variables.  Fail fast
+    # instead of silently sweeping the pv_area scalar the arrays replaced.
+    if getattr(project, "pv_arrays", ()):
+        raise NotImplementedError(
+            "pv_arrays is evaluate-only until G7 adds per-array sweep "
+            "dimensions; use vfed evaluate for multi-array projects."
+        )
     # user12 T5: one up-front legacy-cache notice instead of one per row.
     _precheck_legacy_cache_notice(project, cache_dir)
     ranges = dict(project.space.parameter_ranges)

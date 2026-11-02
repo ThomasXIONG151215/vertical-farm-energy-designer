@@ -1918,7 +1918,8 @@ class DesignEngine:
         # P4-2 (MAJOR): battery-only and pure-building configurations must also
         # report economics.  Gate on either PV or battery being present so
         # evaluate() matches sweep()'s handling of [0, E_bat] and [0, 0].
-        if p.pv_area_m2 > 0 or p.battery_kwh > 0:
+        # G1 (Wave 2): pv_arrays replaces the sizing scalars when set.
+        if p.pv_area_m2 > 0 or p.battery_kwh > 0 or p.pv_arrays:
             try:
                 from ..pvbes.energy_system import EnergySystem
                 from ..pvbes.pv import PVSystem
@@ -1971,15 +1972,101 @@ class DesignEngine:
                     interest_rate=p.interest_rate,
                 )
 
+                # ── G1 (Wave 2): multi-array PV ─────────────────────────────
+                # When pv_arrays is set the single sizing scalar is replaced
+                # by per-orientation arrays.  Each unique (tilt, azimuth)
+                # gets its own POA weather series (fetch_weather keys the
+                # cache on orientation); each array runs calculate_pv_output
+                # at its own area and the series are summed, then injected
+                # into dispatch via pv_power_override so the battery/grid
+                # logic is byte-identical to the single-array path.  With
+                # pv_arrays empty (default) the override stays None and the
+                # legacy path below is untouched (golden baseline).
+                _pv_area_total = p.pv_area_m2
+                _pv_power_override = None
+                _pv_array_kwh = []
+                if p.pv_arrays:
+                    _pv_area_total = float(sum(a.area_m2 for a in p.pv_arrays))
+                    _main_orient = (
+                        round(float(p.site.tilt), 6),
+                        round(float(p.site.azimuth), 6),
+                    )
+                    _orient_weather = {}
+                    _pv_series = np.zeros(n, dtype=float)
+                    for a in p.pv_arrays:
+                        _key = (round(float(a.tilt), 6), round(float(a.azimuth), 6))
+                        if _key not in _orient_weather:
+                            if _key == _main_orient:
+                                # Same orientation as the site: the main POA
+                                # DataFrame already carries these columns.
+                                _orient_weather[_key] = weather
+                            else:
+                                _orient_weather[_key] = fetch_weather(
+                                    p.site.lat,
+                                    p.site.lon,
+                                    p.site.year,
+                                    tz_hours=p.site.tz_hours,
+                                    tilt=a.tilt,
+                                    azimuth=a.azimuth,
+                                    cache_dir=self.cache_dir,
+                                    city=p.site.city,
+                                    provider=getattr(p.site, "weather_provider", "open-meteo"),
+                                    ghi_scale=getattr(p.site, "ghi_scale", 1.0),
+                                    albedo=p.site.albedo,
+                                    transposition=p.site.transposition,
+                                )
+                        _w = _orient_weather[_key]
+                        _arr_weather = {
+                            "direct_radiation": np.asarray(
+                                _w["direct_radiation"], dtype=float
+                            ),
+                            "diffuse_radiation": np.asarray(
+                                _w["diffuse_radiation"], dtype=float
+                            ),
+                            "temperature_2m": np.asarray(
+                                _w["temperature_2m"], dtype=float
+                            ),
+                        }
+                        if a.module is None or a.module == p.pv.module:
+                            _arr_sys = pv_sys
+                        else:
+                            # Per-array module: the _UNSET sentinel design in
+                            # PVSystem resolves the electrical fields from
+                            # the module library; explicit kwargs above win.
+                            _arr_sys = PVSystem(
+                                module=a.module,
+                                eta_inv=p.pv.eta_inv,
+                                eta_system=p.pv.eta_system,
+                                C_pv=resolve_unit_price(
+                                    p.pv.C_pv, USD_C_PV, p.currency, p.exchange_rate
+                                ),
+                            )
+                        _series_i = _arr_sys.calculate_pv_output(
+                            _arr_weather, a.area_m2, year=es.lifetime // 2
+                        )
+                        _pv_series += _series_i
+                        _pv_array_kwh.append(
+                            {
+                                "name": a.name or f"array_{len(_pv_array_kwh) + 1}",
+                                "tilt": float(a.tilt),
+                                "azimuth": float(a.azimuth),
+                                "area_m2": float(a.area_m2),
+                                "module": a.module or p.pv.module,
+                                "annual_kwh": round(float(np.sum(_series_i)), 2),
+                            }
+                        )
+                    _pv_power_override = _pv_series
+
                 # Single simulation call (calculate_metrics calls
                 # simulate_performance internally; call it once directly)
                 perf = es.simulate_performance(
-                    [p.pv_area_m2, p.battery_kwh],
+                    [_pv_area_total, p.battery_kwh],
                     _raw["weather"],
                     _raw["load"],
                     # Mid-life degradation year (see sweep.py: LCOE uses CRF
                     # over the lifetime, paired with average PV output).
                     year=es.lifetime // 2,
+                    pv_power_override=_pv_power_override,
                 )
 
                 # ── P1-3a: monthly PV-dispatch columns (additive) ──────────
@@ -2006,8 +2093,10 @@ class DesignEngine:
                 ).tolist()
 
                 # ── Cost breakdown (full-system capital, aligned with sweep.py) ──
-                # PV+Battery component costs (for legacy fields)
-                pv_cost = pv_sys.calculate_costs(p.pv_area_m2)
+                # PV+Battery component costs (for legacy fields).  G1: the
+                # total array area prices the PV capital; per-module price
+                # differentiation stays on the main pv config until G7.
+                pv_cost = pv_sys.calculate_costs(_pv_area_total)
                 bat_cost = bat_sys.calculate_costs(p.battery_kwh)
                 pv_capital = pv_cost.get("capital_cost", 0)
                 bat_capital = bat_cost.get("capital_cost", 0)
@@ -2015,7 +2104,7 @@ class DesignEngine:
                 # Full-system capital (LED+HVAC+DEH+PV+Battery+Equipment+Envelope)
                 from .sweep import _total_capital, _annualized_capital, _compute_lcoe
 
-                cap = _total_capital(p, p.pv_area_m2, p.battery_kwh)
+                cap = _total_capital(p, _pv_area_total, p.battery_kwh)
                 annual_cap = _annualized_capital(p, cap)
                 annual_om = (
                     p.opex.maintenance_pct * cap["total"]
@@ -2079,6 +2168,10 @@ class DesignEngine:
                     logging.warning(f"PVBES detail stats failed (degraded): {e2}")
 
                 summary["total_electricity_cost"] = round(float(total_electricity_cost), 2)
+                # G1 (Wave 2): per-array generation breakdown (multi-array
+                # mode only -- the default key set is unchanged).
+                if _pv_array_kwh:
+                    summary["pv_arrays"] = _pv_array_kwh
                 summary["lcoe"] = round(float(lcoe), 4)
                 summary["specific_cost_per_kg"] = round(
                     (annual_cap + annual_om + net_grid_cost) / max(annual_harvest_fw_kg, 1e-6),

@@ -20,7 +20,7 @@ demand charge inside ``Tariff.annual_cost``/``net_grid_cost`` (requires
 """
 
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 
@@ -47,11 +47,22 @@ class EnergySystem:
 
     # ---- simulation -----------------------------------------------------
     def simulate_performance(
-        self, x, weather: Dict[str, np.ndarray], load: np.ndarray, year: int = 0
+        self,
+        x,
+        weather: Dict[str, np.ndarray],
+        load: np.ndarray,
+        year: int = 0,
+        pv_power_override: Optional[np.ndarray] = None,
     ) -> Dict[str, np.ndarray]:
         A_pv, E_bat = float(x[0]), float(x[1])
         load = np.asarray(load, dtype=float)
-        pv_power = self.pv.calculate_pv_output(weather, A_pv, year=year)
+        # G1 (Wave 2): multi-array mode sums per-array PV output upstream and
+        # injects it here, bypassing the single-array model call.  None keeps
+        # the exact legacy path (bitwise-identical).
+        if pv_power_override is not None:
+            pv_power = np.asarray(pv_power_override, dtype=float)
+        else:
+            pv_power = self.pv.calculate_pv_output(weather, A_pv, year=year)
         power_balance = pv_power - load
         # P1-2: hand the tariff + hour-of-day to the battery only when grid
         # charging is enabled; the default path keeps the exact previous
@@ -136,11 +147,19 @@ class EnergySystem:
 
     # ---- metrics --------------------------------------------------------
     def calculate_metrics(
-        self, x, weather: Dict[str, np.ndarray], load: np.ndarray, dt: float = 1.0, year: int = 0
+        self,
+        x,
+        weather: Dict[str, np.ndarray],
+        load: np.ndarray,
+        dt: float = 1.0,
+        year: int = 0,
+        pv_power_override: Optional[np.ndarray] = None,
     ) -> Dict[str, float]:
         A_pv, E_bat = float(x[0]), float(x[1])
         load = np.asarray(load, dtype=float)
-        perf = self.simulate_performance(x, weather, load, year=year)
+        perf = self.simulate_performance(
+            x, weather, load, year=year, pv_power_override=pv_power_override
+        )
         hours = np.asarray(weather.get("hour", np.zeros(len(load))), dtype=int)
 
         pv_cost = self.pv.calculate_costs(A_pv)

@@ -1146,6 +1146,28 @@ class PVConfig:
 
 
 @dataclass
+class PVArrayConfig:
+    """One PV array on a specific mounting surface (G1, Wave 2).
+
+    An empty project ``pv_arrays`` tuple means the legacy single-array
+    sizing (``pv_area_m2`` at the site tilt/azimuth).  When ``pv_arrays``
+    is non-empty the arrays replace the single sizing decision: each entry
+    carries its own tilt/azimuth/area (and optionally its own module);
+    the engine builds one POA weather series per unique orientation and
+    sums the per-array outputs.  Mutually exclusive with ``pv_area_m2 > 0``.
+    """
+
+    name: Optional[str] = None  # optional label for summary breakdowns
+    tilt: float = 20.0  # array tilt (deg; 0 = horizontal, 90 = vertical facade)
+    azimuth: float = 180.0  # array azimuth (deg; 180 = south)
+    area_m2: float = 0.0  # array area (m2; strictly positive when configured)
+    # None = inherit the project-level pv.module parameter set; a library
+    # name selects that module preset for this array only (fail-fast on
+    # unknown names and on presets lacking complete STC points).
+    module: Optional[str] = None
+
+
+@dataclass
 class BatteryConfig:
     c_energy: Optional[float] = None  # 电池储能单价 (USD 基准缺省 220/kWh)——这是"单价"不是容量!
     #   R26 哨兵: None (缺省/null) = USD 基准 220/kWh × exchange_rate 自动
@@ -1277,6 +1299,10 @@ class DesignProject:
     # ── sizing decisions (energy system) ──
     pv_area_m2: float = 0.0  # PV array area (m²); 0 = skip energy system
     battery_kwh: float = 0.0  # 电池能量容量 (kWh); 0 = 无电池。单价见 battery.c_energy (项目货币/kWh)
+    # G1 (Wave 2): per-surface arrays; empty tuple = legacy single-array
+    # sizing via pv_area_m2.  Set only by from_dict; never emitted by
+    # to_dict when empty (same rule as the None sentinels above).
+    pv_arrays: Tuple["PVArrayConfig", ...] = ()
 
     # ---- (de)serialisation ---------------------------------------------
     def to_dict(self) -> dict:
@@ -1355,6 +1381,11 @@ class DesignProject:
             for _k in ("setpoint_ppm", "co2_initial_ppm"):
                 if _co2.get(_k) is None:
                     _co2.pop(_k, None)
+        # Wave 2 (G1): an empty pv_arrays tuple means "legacy single-array
+        # sizing via pv_area_m2" -- omit it so default projects serialize
+        # exactly as before.
+        if not d.get("pv_arrays"):
+            d.pop("pv_arrays", None)
         return d
 
     def save(self, path) -> None:
@@ -1402,6 +1433,7 @@ class DesignProject:
             "exchange_rate",
             "pv_area_m2",
             "battery_kwh",
+            "pv_arrays",
         }
         unknown_top = set(d.keys()) - _TOP_KEYS
         if unknown_top:
@@ -2606,6 +2638,66 @@ class DesignProject:
                 f"{type(_out_co2).__name__}: {_out_co2!r}"
             )
 
+        # ── G1 (Wave 2): multi-array PV sizing ──────────────────────────
+        # ``pv_arrays`` replaces the legacy single scalar when non-empty;
+        # the two are mutually exclusive (fail fast on both being set).
+        _pv_arrays_raw = d.get("pv_arrays", [])
+        if not isinstance(_pv_arrays_raw, (list, tuple)):
+            raise ValueError(
+                f"pv_arrays must be a list of array entries, got "
+                f"{type(_pv_arrays_raw).__name__}"
+            )
+        _pv_arrays = []
+        for _i, _a in enumerate(_pv_arrays_raw):
+            if not isinstance(_a, dict):
+                raise ValueError(
+                    f"pv_arrays[{_i}] must be a mapping, got {type(_a).__name__}"
+                )
+            _unknown_a = set(_a) - {"name", "tilt", "azimuth", "area_m2", "module"}
+            if _unknown_a:
+                raise ValueError(
+                    f"Unrecognised keys in 'pv_arrays[{_i}]': "
+                    f"{sorted(_unknown_a)}. Valid keys: "
+                    "['area_m2', 'azimuth', 'module', 'name', 'tilt']"
+                )
+            _tilt = float(_a.get("tilt", 20.0))
+            _az = float(_a.get("azimuth", 180.0))
+            _area = _a.get("area_m2")
+            _mod = _a.get("module")
+            if not (0.0 <= _tilt <= 90.0):
+                raise ValueError(
+                    f"pv_arrays[{_i}].tilt must be in [0, 90] deg, got {_tilt}"
+                )
+            if not (0.0 <= _az <= 360.0):
+                raise ValueError(
+                    f"pv_arrays[{_i}].azimuth must be in [0, 360] deg, got {_az}"
+                )
+            if _area is None or not (0.0 < float(_area) <= 1000.0):
+                raise ValueError(
+                    f"pv_arrays[{_i}].area_m2 must be in (0, 1000] m2, "
+                    f"got {_area}"
+                )
+            if _mod is not None:
+                from ..pvbes.modules import resolve_module
+
+                resolve_module(_mod)  # unknown module name fails fast here
+            _pv_arrays.append(
+                PVArrayConfig(
+                    name=_a.get("name"),
+                    tilt=_tilt,
+                    azimuth=_az,
+                    area_m2=float(_area),
+                    module=_mod,
+                )
+            )
+        _pv_arrays = tuple(_pv_arrays)
+        if _pv_arrays and float(d.get("pv_area_m2", 0.0) or 0.0) > 0.0:
+            raise ValueError(
+                "pv_arrays and pv_area_m2 are mutually exclusive -- set "
+                "either the per-surface array list or the single legacy "
+                "area, not both"
+            )
+
         project = cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**site_cfg),
@@ -2633,6 +2725,7 @@ class DesignProject:
             exchange_rate=d.get("exchange_rate", 1.0),
             pv_area_m2=d.get("pv_area_m2", 0.0),
             battery_kwh=d.get("battery_kwh", 0.0),
+            pv_arrays=_pv_arrays,
         )
 
         # ── R26 currency engine: materialize USD-baseline default prices ──
