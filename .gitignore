@@ -52,6 +52,12 @@ data/datasets/**
 !data/datasets/**/
 !data/datasets/**/*.md
 
+# NREL SAM module libraries (2026-11-01): 6.3 MB / 195 KB CSVs regeneratable
+# from the SAM GitHub develop branch; source URL recorded in
+# reference/pvbes-validation/readme.md (do not track the bulk data)
+reference/pvbes-validation/raw/cec_modules.csv
+reference/pvbes-validation/raw/sandia_modules.csv
+
 # Original UC Davis archive (unpacked copy lives in data/datasets/)
 data/Lettuce_growth.zip
 
@@ -62,3 +68,5 @@ scripts/benchmarks/bestest/energyplus/out*/
 vfed-web/
 # Local backups (never tracked)
 backups/
+# vendor datasheet PDFs (large, redistributable-on-request; extraction results live in modules/*.yaml)
+reference/pvbes-validation/raw/datasheets/

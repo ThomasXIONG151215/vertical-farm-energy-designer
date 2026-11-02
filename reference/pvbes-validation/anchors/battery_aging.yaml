@@ -1,0 +1,87 @@
+# 锂电池日历/循环老化验证锚点（开放获取）
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+entries:
+  keil2016_calendar_aging:
+    paper: "Keil, Schuster, Wilhelm, Travi, Hauser, Karl & Jossen 2016, J. Electrochem. Soc. 163(9) A1872-A1880, DOI 10.1149/2.0411609jes"
+    chemistry_coverage:
+      NCA: {model: Panasonic NCR18650PD, capacity_ah: 2.8}
+      NMC: {model: Sanyo UR18650E, capacity_ah: 2.05}
+      LFP: {model: A123 APR18650M1A, capacity_ah: 1.1}
+    design: 18650 商用电池（同生产批次），16 个存储 SoC（0-100%）x {25, 40, 50} degC，存储 9-10 个月，25 degC 定期检查
+    model_form: square_root_time
+    model_form_note: >-
+      正文明确结论：最大衰减出现在最初数周，总体呈 sqrt(t) 行为，与 SEI 生长
+      动力学一致（linear with square root of time）。
+    lfp_fade_rate_25c_pp_per_month: 0.2
+    lfp_fade_rate_50c_pp_per_month: 0.5
+    lfp_rate_note: >-
+      正文原文为存储第 9 个月后 LFP 的容量衰减对时间导数："ca. 0.2 percentage
+      points of capacity fade per month at 25 degC and ca. 0.5 percentage points
+      per month at 50 degC"。因衰减呈 sqrt(t)，该速率不可长期线性外推。
+    soc_structure:
+      high_fade_plateau_onset_soc_pct: {NCA: 60, NMC: 60, LFP: 70}
+      medium_fade_soc_range_pct: {NCA_NMC: [30, 60], LFP: [40, 70]}
+      note: >-
+        衰减随 SoC 呈平台结构（平台宽度超过 20-30% SoC）；NMC 在 50 degC 且
+        SoC>70% 时衰减最高，100% SoC 出现陡增（正文陈述，未给单点百分比）。
+    # ── 图 2 数字化（2026-11-01，pymupdf 矢量提取，脚本级轴标定）──
+    # 方法：PDF 图为纯矢量；用页 4 文字对象坐标标定每面板 x(SoC 0-100) 与
+    # y(相对容量 0.7-1.0) 轴（最小二乘），提取 marker 形心，按描边色分系列，
+    # 按容量中位数定名（before/25C/40C/50C）。before 线读数 1.0030 作为
+    # 标定偏置，全部读数已减去（容量校正 -0.0030）。代表点取 50% SoC 桶
+    # （正文：中等 SoC 区衰减最大且为平台结构，50% SoC 是台面代表点；
+    # 模型不模拟 SoC 依赖，取该代表点）。读数精度约 +/-0.5 个百分点容量。
+    # 交叉验证（三条独立正文陈述全部吻合）：
+    #   1) LFP 末端导数反推 25C 0.16 pp/月 ≈ 正文 "ca. 0.2"；50C 0.63 ≈ "ca. 0.5"；
+    #   2) 中等 SoC 处 LFP(11.8%) ≈ NMC(12.1%) > NCA(7.4%) @50C；
+    #   3) NMC 50C 高 SoC 陡增：100% SoC 处 NMC 容量 0.770 < NCA 0.876 / LFP 0.855。
+    figure2_digitized:
+      method: vector_path_extraction
+      rep_soc_pct: 50
+      capacity_at_rep_soc:
+        # 相对容量（已做 before=1.0000 偏置校正）
+        NCA: {"25c_10mo": 0.970, "40c_10mo": 0.948, "50c_10mo": 0.926}
+        NMC: {"25c_10mo": 0.973, "40c_10mo": 0.935, "50c_10mo": 0.879}
+        LFP: {"25c_9mo": 0.971, "40c_9mo": 0.929, "50c_9mo": 0.882}
+      nmc_high_soc_note: NMC 50 degC 100% SoC 读数 0.770（陡增，正文一致）
+      status: verified
+    nca_nmc_25c_fade_pct: {NCA: 3.0, NMC: 2.7}
+    nca_nmc_25c_fade_note: >-
+      图 2a/2b 数字化（50% SoC 代表点，存储 10 个月，25 degC）。正文未给
+      单点百分比，此值为矢量数字化结果，精度约 +/-0.5 个百分点。
+    nmc_fade_rate_25c_pp_per_month: 0.136
+    nmc_fade_rate_50c_pp_per_month: 0.604
+    nmc_deriv_ref_months: 10.0
+    nmc_rate_note: >-
+      末端导数语义（与 LFP 键同族）：容量衰减 sqrt(t)，存储 10 个月末的
+      衰减对时间导数 = fade/(2*10)。由数字化 50% SoC 点换算：
+      25C 2.71%/20 = 0.136 pp/月；50C 12.08%/20 = 0.604 pp/月。
+      40C 数字化值 6.52% (0.326 pp/月) 仅存档校验，模型用 25/50C 两点
+      Arrhenius 插值。注意 25C 下 NMC(2.7%) 与 LFP(2.9%) 相当，
+      NMC 的显著劣化出现在 40-50C（正文陈述一致）。
+    source:
+      url: https://iopscience.iop.org/article/10.1149/2.0411609jes/pdf
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        CC-BY 开放获取。PDF 下载成功（10 页），原文存
+        raw/keil2016_calendar_aging_jes.pdf，提取文本同目录 _extracted.txt。
+        所列数值均为正文文字陈述，逐字核对。
+    raw_files:
+      - raw/keil2016_calendar_aging_jes.pdf
+      - raw/keil2016_calendar_aging_jes_extracted.txt
+    status: verified
+  cycle_aging:
+    description: 循环老化（每等效循环容量衰减，LFP 与 NMC）
+    value: null
+    source:
+      url: null
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        本轮经 OpenAlex 开放获取检索（fulltext 检索 "lithium-ion battery
+        calendar aging LiFePO4 capacity fade"，1084 命中）首屏均为综述与
+        方法类文献（Severson 2019 循环寿命预测、Attia 2020 等），未取得可
+        逐字核对的每等效循环衰减数值。候选补充通道：Keil 系列后续循环老化
+        论文、MDPI Batteries 开放论文。待补（to_follow）。
+    status: to_follow

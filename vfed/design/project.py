@@ -113,6 +113,10 @@ HARD_LIMITS: Dict[str, Tuple[float, float]] = {
     "crop_cycle_days": (15, 60),
     "pv_area": (0, 1000),
     "battery": (0, 500),
+    # G2 (Wave 1): ground reflectance for the POA transposition.  Band
+    # (0, 1) — 0 = no ground reflection, 1 = perfect mirror; typical
+    # surfaces sit at 0.15-0.25 (the legacy hard-coded value was 0.2).
+    "albedo": (0, 1),
 }
 
 # Mapping: hard-limit name -> (project_dict_section, field_name) for the
@@ -131,6 +135,7 @@ PARAM_PATH_MAP: Dict[str, Tuple[str, str]] = {
     "outdoor_co2_ppm": ("envelope", "outdoor_co2_ppm"),
     "co2_band_ppm": ("co2", "band_ppm"),
     "co2_capacity_g_per_h": ("co2", "capacity_g_per_h"),
+    "albedo": ("site", "albedo"),
 }
 
 # PVBES sizing keys (pv_area / battery) have no nested section: their YAML
@@ -380,6 +385,17 @@ class SiteConfig:
     ghi_scale: float = 1.0
     #   GHI bias-correction multiplier, band (0.5, 1.5]; see the class
     #   docstring above — the cache always stores unscaled values.
+    # ── Wave 0 contract fields (G1-G13 program, 2026-11) ──
+    # Declared now so the YAML contract carries them; consumed when their
+    # wave lands.  Non-default values are rejected by from_dict until then
+    # (fail-fast: never accept-and-ignore).  See the pending-wiring guards
+    # in DesignProject.from_dict.
+    albedo: float = 0.2  # ground reflectance for the POA transposition (−)
+    #   G2 (Wave 1): weather_bridge.add_poa currently hard-codes 0.2; the
+    #   default reproduces the legacy bitstream exactly.
+    transposition: str = "isotropic"  # sky transposition model name
+    #   G2 (Wave 1): only "isotropic" (legacy) is valid today; the G2 wave
+    #   adds "hay_davies".
 
 
 @dataclass
@@ -1089,6 +1105,11 @@ class SetpointConfig:
 
 @dataclass
 class PVConfig:
+    module: str = "jinko_jkm580n"
+    #   G3 (Wave 1): module-library key.  The default names the legacy
+    #   inline parameter set below (Jinko JKM580N-78HL4-BDV, TOPCon) so the
+    #   bitstream is unchanged; other keys are rejected until the library
+    #   (vfed/pvbes/modules.py) lands.
     eta_pv: float = 0.233  # 组件 STC 效率 (−, 无量纲); 仅信息性, MPP 功率由 I_mp×V_mp 计算
     area_to_power: float = 4.3  # 单位容量所需组件面积 (m²/kWp); A_pv/area_to_power = 峰值功率 (kWp)
     N_s: int = 156  # 组件串联电池片数 (−)
@@ -1146,6 +1167,14 @@ class BatteryConfig:
     #           置换高价电 (TOU 套利; 仅当峰价 > 谷价/(η_ch·η_dis) 往返盈亏
     #           平衡点时启用, 平价电价为空操作)。
     #   false = 现行为 (仅 PV 余电充电), 调度路径逐位不变。
+    # ── Wave 0 contract fields (G1-G13 program, 2026-11) ──
+    power_kw: Optional[float] = None  # PCS 额定充/放功率 (kW)
+    #   G10 (Wave 1): None = legacy behavior (power limit = c_rate × E_now);
+    #   a number decouples power from energy capacity.  Rejected until
+    #   battery.py wires an independent rating.
+    chemistry: str = "legacy"  # legacy | lfp | nmc
+    #   G11 (Wave 1): "legacy" = current linear-cycle fade only; lfp/nmc
+    #   add calendar aging.  Rejected until battery.py wires them.
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
 
@@ -1168,6 +1197,14 @@ class TariffConfig:
 
     hourly_prices: Optional[List[float]] = None  # None -> USD baseline [0.10]*24 x exchange_rate
     export_price: Optional[float] = None  # None -> USD baseline 0.05 x exchange_rate
+    # ── Wave 0 contract fields (G1-G13 program, 2026-11) ──
+    export_limit_kw: Optional[float] = None  # feed-in power cap (kW)
+    #   G12 (Wave 1): None = unlimited (legacy: every surplus kWh is
+    #   exported).  A number caps hourly export; the excess is curtailed.
+    demand_charge_per_kw: Optional[float] = None  # demand charge (currency/kW-month)
+    #   G12 (Wave 1): None (or 0.0) = off (legacy).  >0 adds a peak-demand
+    #   charge on the monthly maximum grid draw.  None sentinel keeps the
+    #   programmatic-default to_dict section-empty behavior (21.5).
 
 
 @dataclass
@@ -1291,12 +1328,22 @@ class DesignProject:
             d.get("pv", {}).pop("C_pv", None)
         if d.get("battery", {}).get("c_energy") is None:
             d.get("battery", {}).pop("c_energy", None)
+        # Wave 0 (G10): power_kw None = legacy c_rate x E_now behavior --
+        # omit the null sentinel, same roundtrip rule as c_energy.
+        if d.get("battery", {}).get("power_kw") is None:
+            d.get("battery", {}).pop("power_kw", None)
         _tar = d.get("tariff")
         if isinstance(_tar, dict):
             if _tar.get("hourly_prices") is None:
                 _tar.pop("hourly_prices", None)
             if _tar.get("export_price") is None:
                 _tar.pop("export_price", None)
+            # Wave 0 (G12): None = unlimited / off -- omitted sentinels keep
+            # the empty-section drop above working for default projects.
+            if _tar.get("export_limit_kw") is None:
+                _tar.pop("export_limit_kw", None)
+            if _tar.get("demand_charge_per_kw") is None:
+                _tar.pop("demand_charge_per_kw", None)
             if not _tar:
                 d.pop("tariff", None)
         # CO2 supplement (M1): None sentinels (setpoint_ppm ->
@@ -1633,6 +1680,44 @@ class DesignProject:
         # values at load time (fail-fast).
         pv_cfg = sub(PVConfig, d.get("pv", {}), yaml_path="pv", has_nested_capital=True)
         _check_capital(pv_cfg, "pv")  # P0-1: reject per_watt on PV at load
+        # G3 (Wave 1): materialize pv.module from the library
+        # (vfed/pvbes/modules.py).  Only fields the user did NOT set are
+        # filled from the spec (explicit YAML wins); a merged STC point set
+        # that is still incomplete fails fast here -- never silently mix
+        # the legacy jinko defaults into another module.
+        _pv_module = pv_cfg.get("module")
+        if _pv_module is not None and _pv_module != "jinko_jkm580n":
+            from ..pvbes.modules import resolve_module
+
+            _spec = resolve_module(_pv_module)  # unknown name fails fast
+            for _f in (
+                "eta_pv",
+                "area_to_power",
+                "N_s",
+                "I_sc_stc",
+                "V_oc_stc",
+                "I_mp_stc",
+                "V_mp_stc",
+                "gamma_pmp",
+                "NOCT",
+                "degradation",
+            ):
+                if pv_cfg.get(_f) is None:
+                    _v = getattr(_spec, _f)
+                    if _v is not None:
+                        pv_cfg[_f] = _v
+            _missing = [
+                _f
+                for _f in ("I_sc_stc", "V_oc_stc", "I_mp_stc", "V_mp_stc", "gamma_pmp")
+                if pv_cfg.get(_f) is None
+            ]
+            if _missing:
+                raise ValueError(
+                    f"pv.module = {_pv_module!r} lacks datasheet values for "
+                    f"{', '.join(_missing)} and they were not set explicitly; "
+                    f"refusing to mix the legacy jinko defaults into another "
+                    f"module (fail-fast until anchors land)."
+                )
         _pv_alpha = pv_cfg.get("alpha_sc")
         if _pv_alpha is not None and not (0.0 < _pv_alpha < 0.01):
             raise ValueError(f"pv.alpha_sc must be in (0, 0.01) /K (relative), got {_pv_alpha}")
@@ -2026,6 +2111,26 @@ class DesignProject:
         # at load time; the defaults themselves are always valid).
         validate_weather_provider(site_cfg.get("weather_provider", "open-meteo"))
         validate_ghi_scale(site_cfg.get("ghi_scale", 1.0))
+        # ── G2 (Wave 1): POA transposition inputs ──
+        # site.albedo feeds the ground-reflected term and site.transposition
+        # selects the sky model in weather_bridge.add_poa (defaults
+        # reproduce the legacy isotropic / albedo=0.2 bitstream).
+        _alb = site_cfg.get("albedo")
+        if _alb is not None:
+            _alb_lo, _alb_hi = HARD_LIMITS["albedo"]
+            if not (isinstance(_alb, (int, float)) and not isinstance(_alb, bool) and _alb_lo <= _alb <= _alb_hi):
+                raise ValueError(
+                    f"site.albedo = {_alb!r} is outside the hard limit "
+                    f"[{_alb_lo}, {_alb_hi}] -- clamp it to the valid band."
+                )
+        from ..weather.weather_bridge import TRANSPOSITION_MODELS
+
+        _transp = site_cfg.get("transposition")
+        if _transp is not None and _transp not in TRANSPOSITION_MODELS:
+            raise ValueError(
+                f"site.transposition must be one of "
+                f"{' | '.join(sorted(TRANSPOSITION_MODELS))}, got {_transp!r}"
+            )
 
         # P0-1: battery + top-level capital blocks -- validate the pricing
         # basis before constructing the project (fail-fast, YAML paths).
@@ -2051,6 +2156,53 @@ class DesignProject:
                 f"battery.soh_eol must be in (0, 1] (usable-capacity fraction at "
                 f"end of life; 1.0 disables fade), got {_soh!r}"
             )
+        # ── G10/G11 (Wave 1): PCS rating + aging chemistry ──
+        # power_kw=None keeps the legacy c_rate x E_now power limit; a
+        # positive number is an independent inverter (PCS) cap.  chemistry
+        # selects the fade model: 'legacy' (linear cycle only,
+        # bit-identical), 'lfp' (calendar + cycle, anchors from
+        # battery_aging.yaml), 'nmc' (structure ready; dispatch raises
+        # until its anchors land).
+        _bpk = battery_cfg.get("power_kw")
+        if _bpk is not None:
+            if isinstance(_bpk, bool) or not isinstance(_bpk, (int, float)) or _bpk <= 0:
+                raise ValueError(
+                    f"battery.power_kw must be a positive number (kW), got {_bpk!r}"
+                )
+        _chem = battery_cfg.get("chemistry")
+        if _chem is not None and _chem not in ("legacy", "lfp", "nmc"):
+            raise ValueError(
+                f"battery.chemistry must be one of legacy | lfp | nmc, got {_chem!r}"
+            )
+        # Tariff (G12, Wave 1): validated on the raw dict because _tariff()
+        # has a legacy peak/normal/valley branch with its own key handling.
+        # export_limit_kw / demand_charge_per_kw are consumed downstream by
+        # grid.py + energy_system.py (cap on hourly export; monthly peak
+        # demand charge).
+        _tariff_raw = d.get("tariff", {})
+        if isinstance(_tariff_raw, dict):
+            _exp_lim = _tariff_raw.get("export_limit_kw")
+            if _exp_lim is not None:
+                if (
+                    isinstance(_exp_lim, bool)
+                    or not isinstance(_exp_lim, (int, float))
+                    or _exp_lim < 0
+                ):
+                    raise ValueError(
+                        f"tariff.export_limit_kw must be a non-negative number "
+                        f"(kW), got {_exp_lim!r}"
+                    )
+            _dc = _tariff_raw.get("demand_charge_per_kw")
+            if _dc is not None:
+                if (
+                    isinstance(_dc, bool)
+                    or not isinstance(_dc, (int, float))
+                    or _dc < 0
+                ):
+                    raise ValueError(
+                        f"tariff.demand_charge_per_kw must be a non-negative "
+                        f"number (currency/kW-month), got {_dc!r}"
+                    )
         _equipment_cap = CapitalCostConfig(
             **sub(CapitalCostConfig, d.get("equipment_capital", {}), yaml_path="equipment_capital")
         )

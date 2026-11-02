@@ -120,7 +120,15 @@ def test_toplevel_sizing_keys_cover_whole_table():
 # ---------------------------------------------------------------------------
 # T1  from_dict scalar guard: reject out-of-band, accept in-band
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("param", sorted(PARAM_PATH_MAP))
+# G2 (Wave 1) note: site.albedo is wired through weather_bridge.add_poa, so
+# in-band non-default albedo values behave like every other parameter here
+# (rejected above the band, accepted inside it).
+
+
+@pytest.mark.parametrize(
+    "param",
+    sorted(PARAM_PATH_MAP),
+)
 def test_scalar_over_limit_rejected_in_band_accepted(param):
     lo, hi = HARD_LIMITS[param]
     section, field = PARAM_PATH_MAP[param]

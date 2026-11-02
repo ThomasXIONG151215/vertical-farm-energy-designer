@@ -1,0 +1,31 @@
+# 纤纳光电 MQ-alpha2 钙钛矿-晶硅叠层彩色 BIPV 组件 - 叠层/BIPV 技术锚点
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+name: Microquanta MQ-alpha2 colored perovskite-silicon tandem BIPV module
+technology: perovskite-silicon tandem (4 端子, TOPCon 底电池), 彩色 BIPV
+p_mp_w: 165
+v_mp_v: null
+i_mp_a: null
+v_oc_v: null
+i_sc_a: null
+n_s: null
+gamma_pmp_per_kelvin: null
+eta_stc: 0.26
+area_m2: null
+bifaciality: null
+degradation_first_year_pct: 2.0
+degradation_annual_pct: 0.7
+warranty_years: 25
+source:
+  url: https://www.pv-magazine.com/2026/06/24/microquanta-launches-26-efficient-colored-perovskite-silicon-tandem-modules-for-building-integrated-pv/
+  accessed: "2026-11-01"
+  method: table_value
+  note: >-
+    页面逐字核对：组件效率 26%；功率范围 65-165 W（p_mp_w 记上限）；首年衰减
+    2%、此后 0.7%/年、25 年保 80%；25 年线性功率质保 + 12 年产品与工艺质保；
+    1500 V 系统、额定电流 15 A、前后静态载荷 2400 Pa、25 mm 冰雹 23 m/s 抗击
+    测试。组件为 make-to-order（尺寸与电气参数定制），故 STC 点值、温度系数、
+    电池片数均未公布，置 null。warranty_years 记线性功率质保年限。
+    2026-11-01 补充：make-to-order 意味着公开固定 STC 点可能根本不存在——
+    本预设的 v_mp/i_mp 或永远无法从公开来源补齐，模型侧使用需按具体订单
+    数据手工填入（或长期保持 fail-fast）。额定电流 15 A 为唯一公开电气值。
+status: verified

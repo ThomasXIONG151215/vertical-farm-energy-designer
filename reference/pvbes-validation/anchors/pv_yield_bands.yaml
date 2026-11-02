@@ -1,0 +1,56 @@
+# PVGIS 固定倾角年比能量锚点（免费 API，无密钥）
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+pvgis_api_version: v5_2
+entries:
+  shanghai_fixed25:
+    location: {lat: 31.23, lon: 121.47, elevation_m: 8.0}
+    config:
+      slope_deg: 25
+      azimuth_deg: 0
+      peakpower_kwp: 1.0
+      system_loss_pct: 14
+      mounting: free-standing
+      pv_technology: c-Si
+    E_y_kwh_per_kwp: 1272.34
+    H_i_y_kwh_per_m2: 1626.54
+    losses_total_pct: -21.78
+    losses_temperature_irradiance_pct: -6.48
+    losses_aoi_pct: -2.74
+    interannual_sd_y_kwh: 56.24
+    radiation_db: PVGIS-ERA5
+    period: {year_min: 2005, year_max: 2020}
+    source:
+      url: https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=31.23&lon=121.47&peakpower=1&loss=14&angle=25&aspect=0&outputformat=json
+      accessed: "2026-11-01"
+      method: api_response
+      note: HTTP 200；原始 JSON 响应逐字存于 raw/pvgis_shanghai.json（含逐月数据）。
+    raw_file: raw/pvgis_shanghai.json
+    status: verified
+  beijing_fixed35:
+    location: {lat: 39.90, lon: 116.40, elevation_m: 55.0}
+    config:
+      slope_deg: 35
+      azimuth_deg: 0
+      peakpower_kwp: 1.0
+      system_loss_pct: 14
+      mounting: free-standing
+      pv_technology: c-Si
+    E_y_kwh_per_kwp: 1541.32
+    H_i_y_kwh_per_m2: 1954.21
+    losses_total_pct: -21.13
+    losses_temperature_irradiance_pct: -5.96
+    losses_aoi_pct: -2.48
+    interannual_sd_y_kwh: 21.8
+    radiation_db: PVGIS-ERA5
+    period: {year_min: 2005, year_max: 2020}
+    source:
+      url: https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=39.90&lon=116.40&peakpower=1&loss=14&angle=35&aspect=0&outputformat=json
+      accessed: "2026-11-01"
+      method: api_response
+      note: HTTP 200；原始 JSON 响应逐字存于 raw/pvgis_beijing.json（含逐月数据与输入元数据）。
+    raw_file: raw/pvgis_beijing.json
+    status: verified
+usage_note: >-
+  E_y 为给定固定倾角配置的年发电量（kWh/kWp）。测试应将同址同配置的仿真年
+  产电量约束在 E_y 的约 ±10% 带内作为物理合理性下限。PVGIS-ERA5 覆盖
+  2005-2020 年，逐年波动以 SD_y 表征（上海 56 kWh、北京 22 kWh）。

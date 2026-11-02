@@ -1,0 +1,63 @@
+# 逆变器效率与 DC/AC 削顶验证锚点
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+entries:
+  cec_weighted_efficiency_definition:
+    description: CEC 加权效率的定义与典型峰值效率范围
+    typical_peak_efficiency_2009: {min_pct: 94.0, note: "as of July 2009, 'over 94%, some as high as 96%'"}
+    definition_note: >-
+      维基（Grid-tie inverter，Datasheets 节）：CEC weighted efficiency 由加州
+      能源委员会在其 GoSolar 网站发布；与峰值效率不同，它是平均效率，更能
+      代表逆变器的实际运行剖面。
+    source:
+      url: https://en.wikipedia.org/wiki/Grid-tie_inverter
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        页面可访问且逐字核对。峰值效率数据为 2009 年 7 月市场快照，仅作历史
+        下限参考，不应作为现代机型效率锚点。
+    status: verified
+  cec_eligible_list_values_2005_2009:
+    description: CEC 合格逆变器清单中的实测加权效率取值带（2005-2009 机型）
+    observed_weighted_efficiency_pct: {min: 89.0, max: 97.5}
+    examples:
+      - {model: "Beacon M5", weighted_efficiency_pct: 89.0}
+      - {model: "SMA SB3800U-240", weighted_efficiency_pct: 96.0}
+      - {model: "Fronius IG Plus 12.0-3WYE277", weighted_efficiency_pct: 96.0}
+      - {model: "Advanced Energy Solaron 333kW (3159000-110)", weighted_efficiency_pct: 97.5}
+    source:
+      url: https://web.archive.org/web/20090210142931/http://gosolarcalifornia.org/equipment/inverter.php
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        GoSolarCalifornia 合格逆变器清单的 Wayback 快照（抓取于 2009-02-10，
+        列出 2005-2009 年间认证机型）。加权效率列取值范围 89-97.5%，现代机型
+        （2010s 后期至今）普遍上移，测试使用时注意年代偏差。
+    status: verified
+  cec_weighting_load_points:
+    description: CEC 效率测试协议的负载率点位与加权系数
+    load_points_pct: null
+    weights: null
+    source:
+      url: https://web.archive.org/web/20090210142931/http://gosolarcalifornia.org/equipment/inverter.php
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        加权系数未能在可访问来源中核实：协议原文位于单机测试摘要 PDF（Wayback
+        PDF 抓取持续 429）与 NREL/Sandia 协议文档（nrel.gov/osti.gov 从建库
+        网络 TLS 阻断）。调研声称的 30/50/75/100% 加权点位未经复核，置 null。
+        使用前必须找到可访问的一手协议来源。
+    status: partial
+  dc_ac_ratio_clipping_band:
+    description: DC/AC 超配削顶年损失经验带（调研值：ILR≈1.25 时约 0.5-2%/年）
+    annual_clipping_loss_pct: null
+    source:
+      url: https://doi.org/10.1016/j.egyr.2024.10.055
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        未获得可访问来源：Bahloul & Khadem 2024（Energy Reports 12:5110-5115,
+        OpenAlex 标注 gold OA）DOI 落地页可访问，但 ScienceDirect PDF 端点对
+        非浏览器客户端返回 403；同主题 NREL 预印本 "The Effect of Inverter
+        Loading Ratio on Energy Estimate Bias"（OSTI 1882670，green OA）位于
+        被阻断的 osti.gov。调研经验带未证实，置 null，待补（to_follow）。
+    status: to_follow

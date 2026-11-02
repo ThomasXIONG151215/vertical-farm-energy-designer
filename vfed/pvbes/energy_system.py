@@ -10,6 +10,13 @@ legacy scope (single-lifetime CRF + hard-coded maintenance).  The authoritative
 LCOE is computed centrally in ``sweep._compute_lcoe`` / ``sweep._annualized_capital``
 (per-component CRF depreciation years) and reused by ``engine.run``; O&M is charged
 there via ``opex.maintenance_pct``.  Do not read LCOE from this class.
+
+G12 (Wave 1): optional tariff features, both default-OFF (bit-identical
+legacy path).  ``tariff.export_limit_kw`` caps the hourly feed-in at the
+grid interface (the clipped surplus is curtailed, reported only while the
+cap is configured); ``tariff.demand_charge_per_kw`` adds a monthly peak
+demand charge inside ``Tariff.annual_cost``/``net_grid_cost`` (requires
+``weather["month"]`` labels, fail-fast while active).
 """
 
 from dataclasses import dataclass, field
@@ -83,7 +90,23 @@ class EnergySystem:
         elif recon < 0.0:
             battery_discharge[-1] += -recon
             grid_export[-1] += -recon
-        return {
+        # ── G12 (Wave 1): feed-in cap and curtailment ─────────────────────
+        # The surplus that reaches the grid interface (PV after load and
+        # charging, including the P4-18 year-end dump applied above) is
+        # clipped hour by hour to tariff.export_limit_kw.  The clipped
+        # excess is curtailed energy: it is never sold (annual_cost prices
+        # the capped grid_export only) and never redirected to load or
+        # battery -- those are served earlier in the dispatch order, so
+        # only the feed-in share beyond the cap is lost.  None (default)
+        # skips the block entirely: bit-identical legacy dispatch, no
+        # curtailment array, no extra perf key.
+        pv_curtailed = None
+        if self.tariff.export_limit_kw is not None:
+            _cap = float(self.tariff.export_limit_kw)
+            _capped = np.minimum(grid_export, _cap)
+            pv_curtailed = grid_export - _capped
+            grid_export = _capped
+        perf = {
             "pv_power": pv_power,
             "battery_discharge": battery_discharge,
             "battery_charge": battery_charge,
@@ -104,6 +127,12 @@ class EnergySystem:
             # recon-adjusted last timestep.
             "power_deficit": np.maximum(0.0, load - pv_power - battery_discharge),
         }
+        if pv_curtailed is not None:
+            # G12: hourly curtailed energy (kW), present ONLY while a
+            # feed-in cap is configured (metrics expose the annual sum as
+            # pv_curtailed_kwh).
+            perf["pv_curtailed"] = pv_curtailed
+        return perf
 
     # ---- metrics --------------------------------------------------------
     def calculate_metrics(
@@ -125,7 +154,14 @@ class EnergySystem:
         capital_cost = pv_cost["capital_cost"] + bat_cost["capital_cost"]
         annual_om = capital_cost * self.maintenance
 
-        tcost = self.tariff.annual_cost(perf["grid_import"], perf["grid_export"], hours, dt=dt)
+        # G12 (Wave 1): month labels for the demand charge (one integer
+        # 1-12 per timestep).  Read from weather["month"]; absent labels
+        # stay None, which Tariff.annual_cost accepts silently while the
+        # charge is off and rejects (fail fast) while it is active.
+        months = weather.get("month")
+        tcost = self.tariff.annual_cost(
+            perf["grid_import"], perf["grid_export"], hours, dt=dt, months=months
+        )
         net_grid_cost = tcost["net_grid_cost"]
 
         # Baseline: same load served entirely from grid (no PV/battery).
@@ -182,6 +218,21 @@ class EnergySystem:
                 crf_life = 1.0 / self.lifetime
             battery_replacement_annual = pv_extra * crf_life
 
+        # ── G12 (Wave 1) bookkeeping ───────────────────────────────────────
+        # New keys appear ONLY while the corresponding tariff feature is
+        # active; with both off (the defaults) the dict below is the exact
+        # legacy key set and every value is bit-identical.  The demand
+        # charge itself already sits inside net_grid_cost (annual_grid_cost)
+        # via Tariff.annual_cost, so annual_savings / payback_period and the
+        # export credit (curtailment removes the capped kWh from the priced
+        # grid_export) inherit both features with no further edits.
+        extras: Dict[str, float] = {}
+        if "pv_curtailed" in perf:
+            extras["pv_curtailed_kwh"] = float(np.sum(perf["pv_curtailed"]))
+        _rate = self.tariff.demand_charge_per_kw
+        if _rate is not None and _rate != 0.0:
+            extras["annual_demand_charge"] = float(tcost["demand_charge"])
+
         return {
             "grid_dependency_pct": grid_dependency_pct,  # P6-6
             "tlps": grid_dependency_pct,  # backward-compat alias
@@ -200,4 +251,5 @@ class EnergySystem:
             "annual_load": annual_load,
             "battery_cycles": perf["battery_cycles"],
             "peak_power_kwp": pv_cost["peak_power_kwp"],
+            **extras,
         }

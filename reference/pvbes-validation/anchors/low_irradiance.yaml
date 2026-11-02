@@ -1,0 +1,62 @@
+# 弱光/低辐照响应验证锚点
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+entries:
+  pvwatts_v5_default_linear:
+    description: PVWatts v5 默认 DC 模型对辐照严格线性；恒等 eta_rel 曲线（eta_rel_nodes=null）与该默认行为一致
+    source:
+      url: https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.pvwatts_dc.html
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        pvlib pvwatts_dc 文档确认：PVWatts v5 默认 DC 模型为
+        P = Pdc0 * G/1000 * (1 + gamma*(Tcell-25))，对辐照 G 线性，无低辐照
+        效率修正项。VFED 的 eta_rel_nodes=null 恒等曲线因此是文献合规默认
+        （等价 PVWatts v5），不是数据缺失的权宜。权威出处：Dobos 2014,
+        "PVWatts Version 5 Manual", NREL/TP-6A20-62641, OSTI 1158421,
+        DOI 10.2172/1158421（nrel.gov/osti.gov 本网络不可达，结论经 pvlib
+        文档转引核实）。可选低辐照修正 = Marion 2008 单参数 k 模型
+        （DOI 10.1109/PVSC.2008.4922586）：k = (0.2*Pdc0 - P200)/Pdc0，
+        P200 为组件 200 W/m2 低光输出（datasheet 低光行）；文档示例：
+        500 W 组件 200 W/m2 出 95 W 则 k = 0.01。cap_adjustment 仅在
+        G <= 1000 W/m2 时应用。落地路径：每个需要弱光修正的模块从其
+        datasheet 低光行取 P200 算 k，再离散化为 eta_rel_nodes。
+    status: verified
+  pvwatts_v5_eta_polynomial:
+    description: NREL PVWatts 组件模型相对效率-辐照多项式系数 eta(G)
+    coefficients: null
+    source:
+      url: https://www.nrel.gov/docs/fy18osti/71042.pdf
+      accessed: "2026-11-01"
+      method: datasheet
+      note: >-
+        访问失败：webfetch Transport error；本机 curl(schannel) 与 Python
+        requests(OpenSSL) 对 nrel.gov 的 TLS 握手全部失败；Wayback Machine
+        PDF 抓取持续 429。同主题权威文档 PVWatts v5 Manual（Dobos 2014,
+        NREL/TP-6A20-62641, OSTI 1158421, OpenAlex 标注 gold OA 且链接
+        https://www.osti.gov/servlets/purl/1158421）同样位于被阻断的
+        osti.gov/nrel.gov 域。系数留 null，待网络可达或找到镜像后补。
+    status: inaccessible
+  mavromatakis_marion_2017:
+    description: 低辐照损耗量化（Solar Energy, 157:496-506）
+    values: null
+    source:
+      url: https://doi.org/10.1016/j.solener.2017.08.062
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        已知付费墙。访问仅返回 Crossref 题录（Mavromatakis, Vignola &
+        Marion 2017, Solar Energy 157, 496-506），无正文数值。
+    status: paywalled
+  asi_diffuse_light_advantage:
+    description: a-Si 相对 c-Si 在漫射光/部分阴影下的性能优势（定性）
+    quantitative_values: null
+    source:
+      url: https://onyxsolar.com/photovoltaic-glass/compare-pv-glass-options
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        页面 FAQ 明确陈述 a-Si "offers better performance under diffuse light
+        conditions or partial shading"，建议在阴影/间接光环境选用 a-Si。
+        定性陈述（无数值），供弱光模型方向性校验：a-Si 的 eta(G) 低辐照段
+        相对 c-Si 更平缓。
+    status: verified

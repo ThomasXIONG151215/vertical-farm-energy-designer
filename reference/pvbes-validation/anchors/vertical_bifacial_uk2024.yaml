@@ -1,0 +1,42 @@
+# 垂直双面 PV 一年实测研究（英国约克大学，开放获取）
+# Badran & Dhimish 2024, Scientific Reports 14:18380, DOI 10.1038/s41598-024-68018-1
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+paper: "Comprehensive study on the efficiency of vertical bifacial photovoltaic systems: a UK case study"
+system:
+  site: University of York, UK（Physics Tower 屋顶）
+  period: "2023-02 至 2023-12（2022-12 安装，2023-01 投运）"
+  vbpv: HJT 双面垂直安装，36 个串联单元，1.5 kWp（STC），3 kW 逆变器
+  module_temp_coefficient_pmp_per_c: -0.29   # %/degC
+  module_efficiency: 0.225
+  ground: 白色砾石（高反照率），行间距 50 cm
+  baselines:
+    VMPV: 垂直安装单晶单面，1.5 kW
+    TMPV: 传统 45 度倾斜多晶单面，1.5 kW（英国常规）
+source:
+  url: https://www.nature.com/articles/s41598-024-68018-1
+  accessed: "2026-11-01"
+  method: table_value
+  note: >-
+    开放获取，摘要与正文在线可读。调研提取的全部数值在页面逐字核对一致；
+    时段/季节增益为研究级平均值（摘要与图 6/7 节文字），单日样例另列。
+    注意"full annual cycle"实为 2023-02 至 2023-12 共 11 个月。
+status: verified
+entries:
+  vs_tmpv:
+    morning_gain_pct: {window: "05:30-09:00", value: 26.91}
+    evening_gain_pct: {window: "17:00-20:30", value: 22.88}
+    seasonal_avg_gain_pct: {spring: 19.32, summer: 14.77, autumn: 20.27, winter: 24.52}
+    example_day_gains_pct: {date: "2023-05-07", day1: 25.38, day2: 21.40}
+  vs_vmpv:
+    morning_gain_pct: {abstract_value: 7.12}
+    evening_gain_pct: {abstract_value: 10.12}
+    seasonal_avg_gain_pct: {spring: 11.42, summer: 8.13, autumn: 10.94, winter: 12.45}
+    example_day_daily_gains_pct: {date: "2023-04-26", day1: 7.87, day2: 11.45}
+  economics:
+    install_cost_gbp_per_kw: {VBPV: 1200, VMPV: 1000, TMPV: 900}
+    electricity_price_gbp_per_kwh: 0.2862
+    annual_saving_gbp: {vs_VMPV: 932.58, vs_TMPV: 1221.13}
+survey_reconciliation: >-
+  调研数值（清晨 +26.91%、傍晚 +22.8%、四季夏 14.77/春 19.32/秋 20.27/
+  冬 24.52%、冬季 vs 垂直单面 +12.45%、造价 1200 vs 900 £/kW）全部与来源
+  一致；傍晚值来源精确为 22.88%。

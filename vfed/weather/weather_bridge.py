@@ -54,6 +54,54 @@ NASA_POWER_PARAMS = "T2M,RH2M,WS10M,ALLSKY_SFC_SW_DWN"
 # guard and the CLI override).
 WEATHER_PROVIDERS = ("open-meteo", "nasa-power")
 
+# G2 (Wave 1): POA transposition-model vocabulary (single source of truth
+# for add_poa, fetch_weather and the SiteConfig field).  "isotropic" is the
+# legacy pre-G2 sky model; "hay_davies" adds the Hay & Davies (1980)
+# anisotropic sky.
+TRANSPOSITION_MODELS = ("isotropic", "hay_davies")
+
+# G2: total solar irradiance reference value (W/m^2) used for the
+# extraterrestrial normal irradiance in the Hay-Davies anisotropy index.
+# Open data: Gueymard (2018), Sol. Energy 168, 2-23 (TSI ~1361 W/m^2);
+# ISO 21348.  (erbs_split keeps its own 1367 W/m^2 clearness-index constant
+# untouched -- the legacy bitstream depends on it.)
+SOLAR_CONSTANT_WM2 = 1361.0
+
+
+def _extraterrestrial_normal(doy: np.ndarray) -> np.ndarray:
+    """Extraterrestrial NORMAL irradiance D_on (W/m^2) per day of year.
+
+    Duffie & Beckman, "Solar Engineering of Thermal Processes", 4th ed.,
+    eq. 1.4.1:  D_on = G_sc * (1 + 0.033 * cos(360*n/365)), n = day of
+    year, G_sc = 1361 W/m^2 (see SOLAR_CONSTANT_WM2).
+    """
+    doy = np.asarray(doy, dtype=float)
+    return SOLAR_CONSTANT_WM2 * (1.0 + 0.033 * np.cos(np.deg2rad(360.0 * doy / 365.0)))
+
+
+def _validate_transposition_args(albedo: float, transposition: str) -> None:
+    """G2 fail-fast guard shared by ``add_poa`` and ``fetch_weather``.
+
+    Mirrors the SiteConfig contract (TRANSPOSITION_MODELS whitelist; the
+    ``albedo`` HARD_LIMIT band [0, 1] in design/project.py) so an invalid
+    model name or reflectance fails at the entry point instead of after a
+    full-year network fetch (or silently producing a negative ground term).
+    """
+    if transposition not in TRANSPOSITION_MODELS:
+        raise ValueError(
+            "transposition must be one of isotropic|hay_davies, got "
+            f"{transposition!r}."
+        )
+    if isinstance(albedo, bool) or not isinstance(albedo, (int, float)):
+        raise ValueError(
+            "albedo must be a number (ground reflectance in [0, 1]), got "
+            f"{type(albedo).__name__}: {albedo!r}"
+        )
+    if not (0.0 <= float(albedo) <= 1.0):
+        raise ValueError(
+            f"albedo must be within [0, 1] (ground reflectance), got {albedo}."
+        )
+
 
 class WeatherFetchError(Exception):
     """Raised when weather data cannot be acquired (error code E003).
@@ -64,7 +112,13 @@ class WeatherFetchError(Exception):
     """
 
 
-__all__ = ["fetch_weather", "add_poa", "erbs_split", "WeatherFetchError"]
+__all__ = [
+    "fetch_weather",
+    "add_poa",
+    "erbs_split",
+    "WeatherFetchError",
+    "TRANSPOSITION_MODELS",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +159,8 @@ def _cache_path(
     azimuth: float = 180.0,
     tz_hours: float = 8.0,
     provider: str = "open-meteo",
+    albedo: float = 0.2,
+    transposition: str = "isotropic",
 ) -> Path:
     """Tilt-aware cache key — POA depends on (tilt, azimuth, tz_hours).
 
@@ -112,9 +168,19 @@ def _cache_path(
     same coordinates never mix ERA5 and POWER data in one file — the two
     reanalyses differ by a few W/m^2/W/K everywhere, and a silent cross-hit
     would be invisible in every downstream KPI.
+
+    G2 (Wave 1) backward compatibility: non-default transposition parameters
+    (``albedo != 0.2`` or ``transposition != "isotropic"``) append an
+    ``_r{albedo:.3f}_m{model}`` tag, so a POA field computed with a
+    different ground reflectance / sky model never cross-hits a
+    default-parameter cache.  With the defaults the filename is
+    byte-identical to the pre-G2 name — every existing cache file keeps
+    hitting (no refetch, no network).
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
     suffix = "" if provider == "open-meteo" else "_power"
+    if albedo != 0.2 or transposition != "isotropic":
+        suffix += f"_r{albedo:.3f}_m{transposition}"
     return cache_dir / (
         f"weather_{lat:.3f}_{lon:.3f}_{year}" f"_t{tilt:.3f}_a{azimuth:.3f}_z{tz_hours:.3f}{suffix}.csv"
     )
@@ -211,14 +277,37 @@ def add_poa(
     lat: float = 31.2,
     lon: float = 121.5,
     tz_hours: float = 8.0,
+    albedo: float = 0.2,
+    transposition: str = "isotropic",
 ) -> pd.DataFrame:
     """Add ``poa_radiation`` (and overwrite direct/diffuse as POA components).
 
-    Model = beam (``dni * cos(incidence)``) + isotropic diffuse
-    (``(1 + cos(tilt))/2`` sky view factor) + isotropic ground reflection
-    (``albedo * GHI * (1 - cos(tilt))/2``).  No horizon brightening or
-    circumsolar (Hay) enhancement is applied (P6-8).
+    ``transposition="isotropic"`` (default, legacy): beam
+    (``dni * cos(incidence)``) + isotropic diffuse (``(1 + cos(tilt))/2``
+    sky view factor) + isotropic ground reflection
+    (``albedo * GHI * (1 - cos(tilt))/2``).  With the default arguments
+    the output is bit-identical to the pre-G2 implementation, whose
+    hard-coded ground reflectance was 0.2.  No horizon brightening is
+    applied (P6-8).
+
+    ``transposition="hay_davies"`` (G2, Wave 1): Hay & Davies (1980)
+    anisotropic sky (Duffie & Beckman, "Solar Engineering of Thermal
+    Processes", 4th ed., eq. 2.16.7).  The sky diffuse becomes
+    ``DHI * [(1 - AI) * (1 + cos(tilt))/2 + AI * Rb]`` where
+    ``AI = DNI/D_on`` is the anisotropy index (the circumsolar fraction of
+    the diffuse; ``D_on`` = extraterrestrial normal irradiance, eq. 1.4.1,
+    solar constant 1361 W/m^2) and ``Rb = cos(incidence)/cos(zenith)`` is
+    the beam projection ratio (both cosines clipped exactly like the beam
+    term, so circumsolar radiation behind the plane is zero).  Overcast
+    hours (``DNI -> 0`` hence ``AI -> 0``) reduce the model to the
+    isotropic formulation.  Solar constant per the TSI reference value
+    (Gueymard 2018, Sol. Energy 168; ISO 21348, open data).
+
+    ``albedo`` is the ground reflectance in [0, 1] (the same band as the
+    ``albedo`` HARD_LIMIT in design/project.py); ``albedo=0`` makes the
+    ground-reflected term exactly zero.
     """
+    _validate_transposition_args(albedo, transposition)
     out = df.copy()
     if "poa_radiation" in out.columns:
         # P6-8: input is already POA-ised — direct/diffuse are plane-of-array
@@ -261,11 +350,24 @@ def add_poa(
     cos_z = np.clip(np.cos(zen_r), 1e-3, 1.0)
     # Beam (POA)
     beam_poa = dni * cos_inc
-    # Diffuse: isotropic sky model only (no Hay/horizon-brightening term, P6-8)
-    diffuse_poa = diffuse_h * (1 + np.cos(tilt_r)) / 2.0
+    # Diffuse sky on the plane.  The isotropic branch keeps the legacy
+    # expression and operand order verbatim, so the default-parameter
+    # bitstream is unchanged (golden test 31).
+    iso_view = (1 + np.cos(tilt_r)) / 2.0
+    if transposition == "hay_davies":
+        # Hay & Davies 1980 (Duffie & Beckman 4th ed., eq. 2.16.7): the
+        # circumsolar share AI of the diffuse arrives from the sun's
+        # direction (projection ratio Rb), the isotropic share (1 - AI)
+        # from the sky dome.  AI is clipped to [0, 1]: DNI > D_on can only
+        # happen from Erbs-split edge cases near the horizon.
+        d_on = _extraterrestrial_normal(out.index.dayofyear.values)
+        ai = np.clip(dni / d_on, 0.0, 1.0)
+        rb = cos_inc / cos_z
+        diffuse_poa = diffuse_h * ((1.0 - ai) * iso_view + ai * rb)
+    else:
+        diffuse_poa = diffuse_h * iso_view
     # Ground reflected
-    alb = 0.2
-    ground = alb * ghi * (1 - np.cos(tilt_r)) / 2.0
+    ground = albedo * ghi * (1 - np.cos(tilt_r)) / 2.0
     poa = np.clip(beam_poa + diffuse_poa + ground, 0.0, None)
     out["poa_radiation"] = poa
     # Re-express direct/diffuse as POA components (their sum = POA).
@@ -368,24 +470,28 @@ def _stale_cache_fallback(
     lat: float,
     lon: float,
     tz_hours: float,
+    albedo: float = 0.2,
+    transposition: str = "isotropic",
 ) -> pd.DataFrame:
     """P4-16 offline fallback: reuse a pre-fix (shifted-window) cache when
     the re-fetch fails (no network) rather than aborting — the tz-shift
     only costs the first tz_hours hours of Jan 1.  Shared by the
-    Open-Meteo and NASA POWER fetch branches (identical semantics)."""
+    Open-Meteo and NASA POWER fetch branches (identical semantics).
+    G2: ``albedo``/``transposition`` pass through to add_poa (the stale
+    cache's POA columns are dropped and recomputed from GHI anyway)."""
     warnings.warn(
         f"Weather re-fetch failed ({err}); reusing stale pre-P4-16 cache "
         f"{path} (local calendar offset by tz_hours={tz_hours}).",
         stacklevel=3,
     )
     if "poa_radiation" not in fb.columns:
-        fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours)
+        fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
     else:
         # P6-1: stale legacy POA geometry is unknown — recompute from
         # GHI so the offline fallback still honours the requested
         # tilt/azimuth (pure numpy, no network needed).
         fb = fb.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
-        fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours)
+        fb = add_poa(fb, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
     # P2-2: provenance metadata (offline stale-cache fallback).
     fb.attrs["weather_source"] = "cache"
     fb.attrs["weather_source_detail"] = f"{path.name} (stale pre-P4-16)"
@@ -406,6 +512,8 @@ def fetch_weather(
     timeout: float = 120.0,
     provider: str = "open-meteo",
     ghi_scale: float = 1.0,
+    albedo: float = 0.2,
+    transposition: str = "isotropic",
 ) -> pd.DataFrame:
     """Fetch (and cache) hourly weather for a calendar year.
 
@@ -422,11 +530,23 @@ def fetch_weather(
     ``ghi_scale`` (default 1.0) multiplies the radiation field at the df
     exit — see ``_apply_ghi_scale``; the cache itself always stores
     unscaled provider values.
+
+    G2 (Wave 1): ``albedo`` (ground reflectance, default 0.2) and
+    ``transposition`` (``"isotropic"`` | ``"hay_davies"``, default
+    ``"isotropic"``) pass through to ``add_poa`` — see its docstring.
+    Defaults keep every output bit-identical to the pre-G2 fetch and keep
+    hitting the existing (untagged) cache keys; non-default values append
+    an ``_r{albedo}_m{model}`` tag to the cache filename (see
+    ``_cache_path``), so the two parameterisations never cross-hit.
     """
     if provider not in WEATHER_PROVIDERS:
         raise WeatherFetchError(
             f"provider must be one of {WEATHER_PROVIDERS}, got {provider!r}."
         )
+    # G2: fail fast BEFORE any network fetch or cache bookkeeping (an
+    # invalid model name found only inside add_poa would waste a
+    # full-year API call first).
+    _validate_transposition_args(albedo, transposition)
     cache_dir = Path(cache_dir) if cache_dir else Path("weather_cache")
 
     # ── City-based local CSV (no API) ──
@@ -470,12 +590,21 @@ def fetch_weather(
                     f"local calendar year {year} (first row {first_ts}, "
                     f"{len(df)} rows, expected {expected_n} rows starting "
                     f"{year}-01-01 00:00:00, strictly monotonic={strict_mono}); "
-                    f"using it as-is without interpolation. Regenerate the "
-                    f"file from Open-Meteo for an aligned window.",
+                    "using it as-is without interpolation. Regenerate the "
+                    "file from Open-Meteo for an aligned window.",
                     stacklevel=2,
                 )
             if "poa_radiation" not in df.columns:
-                df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+                df = add_poa(df, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
+            elif albedo != 0.2 or transposition != "isotropic":
+                # G2: the city file's POA was computed with the legacy
+                # defaults (albedo=0.2, isotropic sky).  A non-default
+                # request must not silently return those columns — drop
+                # and recompute from GHI (same convention as the legacy
+                # geometry-mismatch recompute below; pure numpy, no
+                # network).
+                df = df.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
+                df = add_poa(df, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
             # P2-2: provenance metadata (in-process only; attrs never enter
             # to_csv round-trips or the JSON result schema).
             df.attrs["weather_source"] = "pre-downloaded city file"
@@ -483,7 +612,18 @@ def fetch_weather(
             return _apply_ghi_scale(df, ghi_scale)
 
     # ── Standard lat/lon cache (tilt-aware key with legacy fallback, P6-1) ──
-    cp = _cache_path(cache_dir, lat, lon, year, tilt, azimuth, tz_hours, provider=provider)
+    cp = _cache_path(
+        cache_dir,
+        lat,
+        lon,
+        year,
+        tilt,
+        azimuth,
+        tz_hours,
+        provider=provider,
+        albedo=albedo,
+        transposition=transposition,
+    )
     # Round 22: the legacy (pre-P6-1) name is an Open-Meteo-era artefact —
     # a NASA POWER run must never adopt it (its POA came from ERA5 GHI).
     lp = _legacy_cache_path(cache_dir, lat, lon, year) if provider == "open-meteo" else None
@@ -506,7 +646,7 @@ def fetch_weather(
         )
         if aligned:
             if "poa_radiation" not in df.columns:
-                df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+                df = add_poa(df, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
             elif legacy:
                 # P6-1: legacy cache is keyed on lat/lon/year only, so its POA
                 # may have been computed for a different tilt/azimuth/tz.
@@ -516,7 +656,7 @@ def fetch_weather(
                 # user12 T5: once-per-process notice (see _notify_legacy_cache_once).
                 _notify_legacy_cache_once(path, tilt, azimuth, tz_hours)
                 df = df.drop(columns=["poa_radiation", "direct_radiation", "diffuse_radiation"])
-                df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+                df = add_poa(df, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
             # P2-2: provenance metadata (cache hit, legacy or geometry-aware).
             df.attrs["weather_source"] = "cache"
             df.attrs["weather_source_detail"] = path.name
@@ -569,7 +709,9 @@ def fetch_weather(
             fb = locals().get("fallback_df")
             if fb is not None:
                 return _apply_ghi_scale(
-                    _stale_cache_fallback(fb, path, e, tilt, azimuth, lat, lon, tz_hours),
+                    _stale_cache_fallback(
+                        fb, path, e, tilt, azimuth, lat, lon, tz_hours, albedo, transposition
+                    ),
                     ghi_scale,
                 )
             raise WeatherFetchError(
@@ -593,7 +735,7 @@ def fetch_weather(
                 f"NASA POWER yielded {len(df)} hourly rows for local year "
                 f"{year} (expected {expected_n}); refusing a partial year."
             )
-        df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+        df = add_poa(df, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
         df.to_csv(cp)
         # P2-2: provenance metadata (live NASA POWER).  Detail carries the
         # API host only — no query string (key-safe by construction).
@@ -687,7 +829,7 @@ def fetch_weather(
     hi = pd.Timestamp(f"{year + 1}-01-01 00:00:00", tz=tz)
     df = df[(df.index >= lo) & (df.index < hi)]
     df.index = df.index.tz_localize(None)  # naive local wall time (cache format)
-    df = add_poa(df, tilt, azimuth, lat, lon, tz_hours)
+    df = add_poa(df, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
     df.to_csv(cp)
     # P2-2: provenance metadata (live Open-Meteo).  Detail carries the API
     # host only -- no query string, no credentials (Open-Meteo is keyless,

@@ -413,6 +413,7 @@ def _build_energy_system(project: DesignProject) -> EnergySystem:
     (project-currency values; from_dict already materialized them, this
     covers raw programmatic constructions)."""
     pv = PVSystem(
+        module=project.pv.module,  # G3 (Wave 1): library preset
         eta_pv=project.pv.eta_pv,
         area_to_power=project.pv.area_to_power,
         N_s=project.pv.N_s,
@@ -443,10 +444,14 @@ def _build_energy_system(project: DesignProject) -> EnergySystem:
         cycle_life=project.battery.cycle_life,
         soh_eol=project.battery.soh_eol,  # P2-4 capacity fade
         allow_grid_charging=project.battery.allow_grid_charging,  # P1-2
+        power_kw=project.battery.power_kw,  # G10 (Wave 1): independent PCS cap
+        chemistry=project.battery.chemistry,  # G11 (Wave 1): fade model
     )
     tariff = Tariff(
         hourly_prices=list(project.tariff.hourly_prices),
         export_price=project.tariff.export_price,
+        export_limit_kw=project.tariff.export_limit_kw,  # G12
+        demand_charge_per_kw=project.tariff.demand_charge_per_kw,  # G12
     )
     return EnergySystem(pv=pv, battery=battery, tariff=tariff)
 
@@ -719,13 +724,28 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
         # sweep only overrides building/PVBES sizing, never the tariff).
         _load_arr = np.asarray(sim["load"], dtype=float)
         _hours_arr = np.asarray(sim["weather"]["hour"], dtype=int)
+        # G12: month labels drive the demand charge.  The real engine always
+        # provides weather["month"]; stub/legacy sim dicts may not — pass
+        # None then and let Tariff fail fast ONLY if a demand charge is
+        # actually configured (months=None + active rate raises inside
+        # annual_cost, preserving the fail-fast gate at the point of use).
+        _months_arr = sim["weather"].get("month")
         _tariff = Tariff(
             hourly_prices=list(project.tariff.hourly_prices),
             export_price=project.tariff.export_price,
+            export_limit_kw=project.tariff.export_limit_kw,  # G12
+            demand_charge_per_kw=project.tariff.demand_charge_per_kw,  # G12
         )
-        baseline_grid_cost = _tariff.annual_cost(_load_arr, np.zeros_like(_load_arr), _hours_arr)[
-            "net_grid_cost"
-        ]
+        baseline_grid_cost = _tariff.annual_cost(
+            _load_arr,
+            np.zeros_like(_load_arr),
+            _hours_arr,
+            months=(
+                np.asarray(_months_arr, dtype=int)
+                if _months_arr is not None
+                else None
+            ),
+        )["net_grid_cost"]
         # F1 (round 21): payback baseline capital for this building combo —
         # the same config priced at pv=0 / battery=0.  Pure config arithmetic
         # (no simulation), so it works whether or not the scan grid contains
@@ -865,11 +885,18 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
                 tariff = Tariff(
                     hourly_prices=list(project.tariff.hourly_prices),
                     export_price=project.tariff.export_price,
+                    export_limit_kw=project.tariff.export_limit_kw,  # G12
+                    demand_charge_per_kw=project.tariff.demand_charge_per_kw,  # G12
                 )
                 net_grid = tariff.annual_cost(
                     sim["load"],
                     np.zeros_like(sim["load"]),
                     np.asarray(sim["weather"]["hour"], dtype=int),
+                    months=(
+                        np.asarray(sim["weather"]["month"], dtype=int)
+                        if "month" in sim["weather"]
+                        else None
+                    ),
                 )["net_grid_cost"]
             cap = _total_capital(p, A_pv, E_bat)
             annual_cap = _annualized_capital(p, cap, (m or {}).get("battery_life_years"))

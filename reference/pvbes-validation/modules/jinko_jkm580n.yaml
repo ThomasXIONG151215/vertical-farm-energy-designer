@@ -1,0 +1,50 @@
+# JinkoSolar Tiger Neo 580 W 级组件 - VFED PVBES 现用基准
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+name: JinkoSolar Tiger Neo JKM580N (580 W class)
+technology: TOPCon (n-type)
+p_mp_w: 580
+v_mp_v: 45.85
+i_mp_a: 12.66
+v_oc_v: 57.34
+i_sc_a: 13.98
+n_s: 156
+gamma_pmp_per_kelvin: -0.0030
+eta_stc: null
+area_m2: null
+bifaciality: null
+degradation_first_year_pct: null
+degradation_annual_pct: null
+warranty_years: null
+source:
+  url: https://www.pv-magazine.com/press-releases/jinkosolar-reaches-a-new-height-tiger-neo-3-0-complies-with-and-surpasses-multiple-latest-national-efficiency-standards/
+  accessed: "2026-11-01"
+  method: datasheet
+  note: >-
+    页面可访问，但内容只覆盖 Tiger Neo 3.0（前表面功率 650-670 W，首批量产
+    650/655/660 W；前表面效率最高 24.8%；双面率 85% ±5%；新国标 TOPCon 门槛
+    23.2%）。上述 580 W 级 STC 数值（p_mp 580 W、v_oc 57.34 V、i_sc 13.98 A、
+    v_mp 45.85 V、i_mp 12.66 A、n_s 156、gamma_pmp 约 -0.30 %/K）来自项目先期
+    调研，在本 URL 上无法复核；晶科官方规格表 PDF 从建库网络不可达。STC 数值
+    应视为"调研来源、规格表出处未确认"。gamma 为近似值，不确定度约
+    ±0.0002 /K（调研舍入）。eta_stc 与 area_m2 因缺组件面积无法计算。
+status: partial
+context_from_source:
+  tiger_neo_3_0_front_power_w_range: [650, 670]
+  tiger_neo_3_0_max_front_efficiency: 0.248
+  tiger_neo_3_0_bifaciality: "85% ± 5%"
+  cec_72hl4_neighbor:
+    library: "NREL SAM CEC Modules (deploy branch, version 2026.7.3)"
+    local_file: raw/cec_modules.csv
+    row_name: "Jinko Solar JKM580N-72HL4-BDV"
+    i_sc_a: 13.95
+    v_oc_v: 52.5
+    i_mp_a: 13.22
+    v_mp_v: 43.88
+    gamma_pmp_per_kelvin: -0.00295
+    note: >-
+      2026-11-01 数据补齐会话从 NREL SAM GitHub raw 下载 CEC 库交叉核对。
+      库中存在的是 72HL4（72 半片）邻档，非本文件主条目 78HL4-BDV（78 半片、
+      n_s=156）。72HL4 的 v_oc 52.5 V 与主条目 57.34 V 的差异符合串数比
+      72/78（52.5/57.34 = 0.915 vs 72/78 = 0.923，趋势一致），主条目数值
+      因此获得旁证但仍非直接复核。78HL4-BDV 行在 CEC 库中不存在。gamma
+      -0.295%/degC 与调研近似值 -0.30 %/K 一致（差 <2%）。

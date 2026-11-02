@@ -1,0 +1,57 @@
+# 植物工厂-光伏覆盖案例锚点
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+cases:
+  A1_rooftop_pv_coverage:
+    paper: "Ceccanti, Bischi, Antonelli & Baccioli 2026, arXiv:2607.24385（光纤导入日光 vs 屋顶 PV 的垂直农场批判性评估）"
+    rooftop_pv_annual_electricity_coverage_pct: 22.0
+    rooftop_pv_payback_years: [11, 12]
+    context:
+      useful_par_delivery_efficiency_pct: [19, 27]   # 光纤系统年有效 PAR 输送效率
+      electricity_reduction_pct_vs_led: [35, 89]     # 光纤方案节电区间
+      light_pipe_electricity_reduction_pct: 12.0
+      hybrid_seec_kwh_per_kg: 3.16
+      daylight_only_seec_kwh_per_kg: 1.81
+    source:
+      url: https://arxiv.org/abs/2607.24385
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        arXiv 摘要页可访问，摘要逐字包含 "Rooftop photovoltaics covered 22% of
+        annual electricity demand and achieved an 11-12-year payback"。全部
+        调研数值与摘要一致。
+    status: verified
+  A4_us_ten_cities_pv_offset:
+    paper: "Hu & You 2024, Chemical Engineering Transactions 114:373-378, DOI 10.3303/CET24114063"
+    average_energy_offset_pct: 25.7
+    operational_cost_increase_pct: 18.0
+    scope: 美国人口最多的十个城市 CEA 设施加装光伏
+    context:
+      co2_reduction_kg_per_m2: 0.658
+      light_pollution_increase_pct: 5.0
+      nitrification_nh3_eq_kg_per_m2: 0.77
+    source:
+      url: https://www.cetjournal.it/index.php/cet/article/view/14968
+      accessed: "2026-11-01"
+      method: table_value
+      note: >-
+        CET 期刊页可访问，摘要逐字核对："on average, 25.7% of the energy
+        consumption ... can be offset"、运营开支上升约 18%。开放 PDF 位于
+        https://www.cetjournal.it/cet/24/114/063.pdf（未另抓取）。
+    status: verified
+  A2_full_envelope_bipv_floors:
+    paper: "Rehman 2021, Journal of Solar Energy Engineering 144(1), DOI 10.1115/1.4052055"
+    farm_area_m2: 300
+    auckland_max_floors: 1.87
+    dubai_max_floors: 3.47
+    source:
+      url: https://api.openalex.org/works/doi:10.1115/1.4052055
+      accessed: "2026-11-01"
+      method: api_response
+      note: >-
+        原文为闭访问（OpenAlex: is_oa=false, oa_status=closed，doi.org 落地页
+        仅返回题录）。数值经 OpenAlex 摘要元数据核实：abstract_inverted_index
+        重构句 "Hypothetical 300 m2 vertical farms, partially occupied by
+        growing trays, located in Auckland and Dubai, were found to have
+        maximum heights of 1.87 and 3.47 floors, respectively."。正文细节
+        （倾角/间距优化等）未读，标 partial。
+    status: partial

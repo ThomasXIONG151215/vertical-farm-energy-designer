@@ -854,6 +854,10 @@ class DesignEngine:
                 # pass-through; defaults keep the open-meteo path identical).
                 provider=getattr(p.site, "weather_provider", "open-meteo"),
                 ghi_scale=getattr(p.site, "ghi_scale", 1.0),
+                # G2 (Wave 1): POA transposition inputs (defaults keep the
+                # legacy isotropic / albedo=0.2 bitstream).
+                albedo=p.site.albedo,
+                transposition=p.site.transposition,
             )
         # P2-2: weather provenance (fetch layer tags df.attrs) -- copy it out
         # so the reporting layer can self-evidence the weather source.  The
@@ -1904,6 +1908,9 @@ class DesignEngine:
                 "temperature_2m": T_ext,
                 "hour": hours,
                 "shortwave_radiation": GHI,
+                # G12 (Wave 1): month labels for the demand-charge peak
+                # calculation (read only when the tariff activates it).
+                "month": months,
             },
         }
 
@@ -1919,6 +1926,7 @@ class DesignEngine:
                 from ..pvbes.grid import Tariff
 
                 pv_sys = PVSystem(
+                    module=p.pv.module,  # G3 (Wave 1): library preset
                     eta_pv=p.pv.eta_pv,
                     area_to_power=p.pv.area_to_power,
                     N_s=p.pv.N_s,
@@ -1947,10 +1955,14 @@ class DesignEngine:
                     cycle_life=p.battery.cycle_life,
                     soh_eol=p.battery.soh_eol,  # P2-4 capacity fade
                     allow_grid_charging=p.battery.allow_grid_charging,  # P1-2 passthrough
+                    power_kw=p.battery.power_kw,  # G10 (Wave 1): independent PCS cap
+                    chemistry=p.battery.chemistry,  # G11 (Wave 1): fade model
                 )
                 tariff = Tariff(
                     hourly_prices=p.tariff.hourly_prices,
                     export_price=p.tariff.export_price,
+                    export_limit_kw=p.tariff.export_limit_kw,  # G12
+                    demand_charge_per_kw=p.tariff.demand_charge_per_kw,  # G12
                 )
                 es = EnergySystem(
                     pv=pv_sys,
@@ -2013,11 +2025,13 @@ class DesignEngine:
                 )
                 annual_load = float(np.sum(perf["load"]))
 
-                # Grid cost
+                # Grid cost (months labels ride along for the G12 demand
+                # charge; annual_cost ignores them when it is off).
                 tcost = tariff.annual_cost(
                     perf["grid_import"],
                     perf["grid_export"],
                     hours,
+                    months=months,
                 )
                 net_grid_cost = tcost["net_grid_cost"]
                 total_electricity_cost = net_grid_cost
@@ -2110,10 +2124,14 @@ class DesignEngine:
             tariff = Tariff(
                 hourly_prices=p.tariff.hourly_prices,
                 export_price=p.tariff.export_price,
+                export_limit_kw=p.tariff.export_limit_kw,  # G12
+                demand_charge_per_kw=p.tariff.demand_charge_per_kw,  # G12
             )
             annual_load = float(np.sum(load_kw))
             # grid_import == load, grid_export == 0 (no PV, no battery)
-            tcost = tariff.annual_cost(load_kw, np.zeros_like(load_kw), hours)
+            tcost = tariff.annual_cost(
+                load_kw, np.zeros_like(load_kw), hours, months=months
+            )
             net_grid_cost = tcost["net_grid_cost"]
 
             # ── P1-3a: monthly grid / cost columns (additive) ──────────────

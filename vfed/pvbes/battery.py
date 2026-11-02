@@ -22,14 +22,176 @@ The fade applies inside the dispatch loop (C-rate limit, SOC headroom, SOC
 update denominators); ``battery_cycles`` keeps its nameplate-capacity
 definition so replacement timing (P4-15) is unchanged.  ``soh_eol = 1.0``
 disables the fade (bitwise legacy dispatch).
+
+G10 (independent power rating): ``power_kw`` optionally decouples the PCS
+rated charge/discharge power from the energy capacity.  ``None`` (default)
+keeps the legacy cell-side cap ``c_rate * E_now`` bitwise; a number makes the
+per-step terminal cap ``min(c_rate * E_now, power_kw)`` so the cell C-rate
+and the PCS converter rating constrain simultaneously.  The cap applies to
+the charge path, the discharge path and the P1-2 valley grid-charging
+headroom (same battery terminals).
+
+G11 (chemistry + calendar aging): ``chemistry`` selects ``legacy`` (linear
+cycle fade only, bitwise default), ``lfp`` or ``nmc``.  lfp/nmc add calendar
+aging on top of the cycle fade, both in [0, 1] degradation fractions::
+
+    SOH_total = k_cycle * cycles_now + k_cal(T) * sqrt(t_months)
+    E_now     = E_bat * max(1 - SOH_total, 1e-3)     (existing clamp kept)
+
+The sqrt-of-time law and its coefficients follow Keil et al. 2016,
+"Calendar Aging of Lithium-Ion Batteries I", J. Electrochem. Soc. 163(9)
+A1872-A1880, DOI 10.1149/2.0411609jes: calendar fade is SEI-growth driven
+and grows linearly with the square root of storage time.  The open-data
+anchor file ``reference/pvbes-validation/anchors/battery_aging.yaml`` (entry
+``keil2016_calendar_aging``, status verified) stores the LFP fade-rate
+derivatives measured after 9 months of storage -- ca. 0.2 percentage points
+per month at 25 degC and ca. 0.5 pp per month at 50 degC.  For
+SOH_cal(t) = k*sqrt(t) the derivative k/(2*sqrt(t)) at t = 9 months gives
+k_cal = 2*sqrt(9)*rate, i.e. the coefficient is derived, never guessed.
+Between the two anchor temperatures k_cal(T) uses a two-point Arrhenius fit
+k = A*exp(-Ea/(R*T)); the anchor pair implies an effective Ea of about
+29 kJ/mol, inside the band typical of SEI-growth kinetics that Keil 2016
+identify as the calendar-fade driver -- hence Arrhenius rather than a fit
+linear in T.  Temperatures outside [25, 50] degC (``temperature_c``, default
+25, stands in for the battery temperature) are clamped to the nearest
+anchor; the coefficients are not extrapolated beyond the measured range.
+NMC coefficients come from the digitized Keil 2016 Fig. 2b 50%-SoC points
+(anchor keys nmc_fade_rate_*); if the anchor file lacks them,
+``chemistry='nmc'`` raises NotImplementedError instead of inventing numbers.
+The legacy calendar clock convention matches the cycle counter: each
+``calculate_battery_flows`` call starts from a fresh cell at t = 0.
 """
 
+import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
 
-__all__ = ["BatterySystem"]
+__all__ = ["BatterySystem", "CALENDAR_MONTH_HOURS"]
+
+
+# ── G11: calendar-aging anchor (open data, Keil 2016) ─────────────────────
+CALENDAR_MONTH_HOURS = 365.25 * 24.0 / 12.0  # hours per average month (730.5)
+
+_CAL_ANCHOR_RELPATH = ("reference", "pvbes-validation", "anchors", "battery_aging.yaml")
+_CAL_DERIV_REF_MONTHS = 9.0  # Keil 2016 evaluated the LFP fade-rate
+# derivative after 9 months of storage (anchor note quotes the paper).
+_CAL_T_COLD_C = 25.0  # cold anchor temperature (degC)
+_CAL_T_HOT_C = 50.0  # hot anchor temperature (degC)
+_KELVIN = 273.15
+_CAL_ANCHOR_CACHE: Dict[str, Dict[str, float]] = {}
+
+_NMC_TO_FOLLOW_MSG = (
+    "battery chemistry 'nmc' needs anchor data: the calendar-aging anchor "
+    "file reference/pvbes-validation/anchors/battery_aging.yaml does not "
+    "carry the 'nmc_fade_rate_25c_pp_per_month' / "
+    "'nmc_fade_rate_50c_pp_per_month' keys (Keil 2016 Fig. 2b digitization, "
+    "DOI 10.1149/2.0411609jes). Do not guess numbers."
+)
+
+
+def _cal_anchor_candidates() -> List[Path]:
+    """Candidate anchor-file paths: repo root next to this file, then cwd."""
+    here = Path(__file__).resolve()
+    roots = [here.parents[2], Path.cwd()]
+    return [root.joinpath(*_CAL_ANCHOR_RELPATH) for root in roots]
+
+
+def _load_calendar_coeffs() -> Dict[str, Dict[str, float]]:
+    """Per-chemistry sqrt-law calendar coefficients from the anchor yaml.
+
+    Only chemistries with verified anchor data are returned (currently lfp).
+    Provenance rule: the numbers come exclusively from
+    ``reference/pvbes-validation/anchors/battery_aging.yaml`` entry
+    ``keil2016_calendar_aging`` (status verified).  The anchor stores the LFP
+    fade-rate derivatives (percentage points per month) measured after 9
+    months of storage at 25 degC and 50 degC; for SOH_cal(t) = k*sqrt(t)
+    (t in months) the derivative k/(2*sqrt(t)) at t = 9 months gives
+    k = 2*sqrt(9)*rate.  Loaded once per process.
+    """
+    if _CAL_ANCHOR_CACHE:
+        return _CAL_ANCHOR_CACHE
+    candidates = _cal_anchor_candidates()
+    path = next((p for p in candidates if p.is_file()), None)
+    if path is None:
+        tried = ", ".join(str(p) for p in candidates)
+        raise FileNotFoundError(
+            "battery chemistry 'lfp'/'nmc' needs the calendar-aging anchor "
+            f"file; none of the candidate paths exist: {tried}"
+        )
+    import yaml  # core dependency, imported lazily: the legacy path never reads files
+
+    entry = yaml.safe_load(path.read_text(encoding="utf-8"))["entries"][
+        "keil2016_calendar_aging"
+    ]
+    k_cold = (
+        2.0
+        * math.sqrt(_CAL_DERIV_REF_MONTHS)
+        * float(entry["lfp_fade_rate_25c_pp_per_month"])
+        / 100.0
+    )
+    k_hot = (
+        2.0
+        * math.sqrt(_CAL_DERIV_REF_MONTHS)
+        * float(entry["lfp_fade_rate_50c_pp_per_month"])
+        / 100.0
+    )
+    if not (math.isfinite(k_cold) and math.isfinite(k_hot) and 0.0 < k_cold < k_hot):
+        raise ValueError(
+            "calendar-aging anchor data is inconsistent (expected "
+            f"0 < k_25C < k_50C, got k_25C={k_cold!r}, k_50C={k_hot!r}) from {path}"
+        )
+    _CAL_ANCHOR_CACHE["lfp"] = {"k_cold": k_cold, "k_hot": k_hot}
+    # G11 (2026-11): NMC branch from the digitized Fig. 2b 50%-SoC points
+    # (end-of-storage derivative after 10 months; same sqrt(t) semantics as
+    # the LFP keys but t_ref comes from 'nmc_deriv_ref_months').
+    if entry.get("nmc_fade_rate_25c_pp_per_month") is not None:
+        t_ref_nmc = float(entry.get("nmc_deriv_ref_months", 10.0))
+        k_cold_nmc = (
+            2.0
+            * math.sqrt(t_ref_nmc)
+            * float(entry["nmc_fade_rate_25c_pp_per_month"])
+            / 100.0
+        )
+        k_hot_nmc = (
+            2.0
+            * math.sqrt(t_ref_nmc)
+            * float(entry["nmc_fade_rate_50c_pp_per_month"])
+            / 100.0
+        )
+        if not (
+            math.isfinite(k_cold_nmc)
+            and math.isfinite(k_hot_nmc)
+            and 0.0 < k_cold_nmc < k_hot_nmc
+        ):
+            raise ValueError(
+                "calendar-aging anchor data is inconsistent (expected "
+                f"0 < k_25C < k_50C for nmc, got k_25C={k_cold_nmc!r}, "
+                f"k_50C={k_hot_nmc!r}) from {path}"
+            )
+        _CAL_ANCHOR_CACHE["nmc"] = {"k_cold": k_cold_nmc, "k_hot": k_hot_nmc}
+    return _CAL_ANCHOR_CACHE
+
+
+def _arrhenius_interp(temperature_c: float, k_cold: float, k_hot: float) -> float:
+    """Two-point Arrhenius interpolation of k_cal between the 25/50 degC
+    anchors, clamped to the validated range.
+
+    k(T) = A*exp(-Ea/(R*T)) fitted through (25 degC, k_cold) and
+    (50 degC, k_hot).  The anchor pair implies an effective Ea of roughly
+    29 kJ/mol, consistent with the SEI-growth kinetics Keil 2016 identify as
+    the calendar-fade driver -- hence Arrhenius rather than linear in T.
+    Outside [25, 50] degC the nearest anchor value is used (no extrapolation
+    beyond the measured range).
+    """
+    t_c = min(_CAL_T_HOT_C, max(_CAL_T_COLD_C, float(temperature_c)))
+    t_cold_k = _CAL_T_COLD_C + _KELVIN
+    t_hot_k = _CAL_T_HOT_C + _KELVIN
+    t_k = t_c + _KELVIN
+    ea_over_r = math.log(k_hot / k_cold) / (1.0 / t_cold_k - 1.0 / t_hot_k)
+    return k_cold * math.exp(ea_over_r * (1.0 / t_cold_k - 1.0 / t_k))
 
 
 @dataclass
@@ -65,6 +227,70 @@ class BatterySystem:
     # imports later.  Gated on peak > valley/(eta_ch*eta_dis) (round-trip
     # breakeven); flat tariffs are a no-op.  Default False = legacy
     # PV-charging-only dispatch, bitwise unchanged.
+    power_kw: Optional[float] = None  # G10: PCS rated charge/discharge power
+    # (kW).  None = legacy cap c_rate*E_now (bitwise); a positive number
+    # makes the per-step charge AND discharge terminal cap
+    # min(c_rate*E_now, power_kw) — the cell C-rate and the PCS converter
+    # rating both apply.  Also caps the P1-2 valley grid-charging headroom.
+    chemistry: str = "legacy"  # G11: 'legacy' | 'lfp' | 'nmc' (exact,
+    # case-sensitive, pure ASCII).  legacy = linear cycle fade only
+    # (bitwise default, no calendar term).  lfp adds the sqrt(t) calendar
+    # fade from the Keil 2016 anchor.  nmc is structurally wired but raises
+    # NotImplementedError until the anchor file carries the digitized
+    # Keil 2016 NMC coefficients (anchor status: to_follow).
+    temperature_c: float = 25.0  # G11: battery/ambient temperature (degC)
+    # driving k_cal(T) when calendar aging is on; clamped to the validated
+    # [25, 50] degC anchor range.
+
+    def __post_init__(self) -> None:
+        # G10/G11 fail-fast contract checks (pure ASCII messages).
+        if self.power_kw is not None and (
+            not math.isfinite(self.power_kw) or self.power_kw <= 0.0
+        ):
+            raise ValueError(
+                "battery power_kw must be a positive finite number (kW), "
+                f"got {self.power_kw!r}"
+            )
+        if self.chemistry not in ("legacy", "lfp", "nmc"):
+            raise ValueError(
+                f"battery chemistry {self.chemistry!r} is not one of "
+                "'legacy', 'lfp', 'nmc'"
+            )
+        if not math.isfinite(self.temperature_c) or self.temperature_c <= -_KELVIN:
+            raise ValueError(
+                "battery temperature_c must be finite and above absolute "
+                f"zero (degC), got {self.temperature_c!r}"
+            )
+
+    def calendar_sqrt_coeff(self) -> float:
+        """k_cal(T) — calendar-fade fraction per sqrt(month) for this chemistry.
+
+        Returns 0.0 for 'legacy' (calendar aging off).  For 'lfp' and 'nmc'
+        the two anchor coefficients (25 degC, 50 degC, Keil 2016; NMC from
+        the digitized Fig. 2b 50%-SoC points) are combined with the
+        two-point Arrhenius fit at ``self.temperature_c`` (clamped to
+        [25, 50] degC).  'nmc' raises NotImplementedError only when the
+        anchor file does not carry its digitized rates.
+        """
+        if self.chemistry == "legacy":
+            return 0.0
+        coeffs = _load_calendar_coeffs().get(self.chemistry)
+        if coeffs is None:
+            raise NotImplementedError(_NMC_TO_FOLLOW_MSG)
+        return _arrhenius_interp(
+            self.temperature_c, coeffs["k_cold"], coeffs["k_hot"]
+        )
+
+    def calendar_fade(self, elapsed_hours: float) -> float:
+        """Capacity fraction lost to calendar aging after ``elapsed_hours``
+        of storage from new: k_cal(T) * sqrt(t_months) (Keil 2016
+        sqrt-of-time SEI growth law).  Zero for 'legacy'.
+        """
+        if self.chemistry == "legacy" or elapsed_hours <= 0.0:
+            return 0.0
+        return self.calendar_sqrt_coeff() * math.sqrt(
+            elapsed_hours / CALENDAR_MONTH_HOURS
+        )
 
     def calculate_battery_flows(
         self,
@@ -126,15 +352,26 @@ class BatterySystem:
         soh_k = (1.0 - self.soh_eol) / max(int(self.cycle_life), 1)
         cycles_now = 0.0
         E_now = E_bat
+        # ── G11: calendar-aging coefficient.  0.0 for legacy (the term
+        # never enters the dispatch); 'nmc' raises NotImplementedError here,
+        # before any work is done (anchor data to_follow). ────────────────
+        k_cal = self.calendar_sqrt_coeff()
         for i in range(n):
             net = power_balance[i]
             soc *= 1.0 - self.self_discharge * dt
             if E_bat <= 0:
                 battery_soc[i] = 0.0
                 continue
-            p_charge_max = min(self.c_rate * E_now, (self.soc_max - soc) * E_now / dt)
+            # ── G10: effective terminal power cap.  None keeps the legacy
+            # cell-side limit c_rate*E_now bitwise; a power_kw rating makes
+            # the PCS and the cell C-rate constrain simultaneously. ────────
+            if self.power_kw is None:
+                p_crate_cap = self.c_rate * E_now
+            else:
+                p_crate_cap = min(self.c_rate * E_now, self.power_kw)
+            p_charge_max = min(p_crate_cap, (self.soc_max - soc) * E_now / dt)
             p_discharge_max = (
-                min(self.c_rate * E_now, (soc - self.soc_min) * E_now / dt) * self.eta_dis
+                min(p_crate_cap, (soc - self.soc_min) * E_now / dt) * self.eta_dis
             )
             if net >= 0:  # surplus -> charge
                 ch = min(net, max(0.0, p_charge_max))
@@ -158,7 +395,7 @@ class BatterySystem:
             # average) higher-priced hours.  Skipped entirely unless the
             # tariff passed the round-trip breakeven check above.
             if grid_charging_on and int(hours[i]) % n_p in valley_set:
-                headroom = min(self.c_rate * E_now, (self.soc_max - soc) * E_now / dt)
+                headroom = min(p_crate_cap, (self.soc_max - soc) * E_now / dt)
                 g = max(0.0, headroom)
                 if g > 0.0:
                     soc += g * self.eta_ch * dt / E_now
@@ -170,11 +407,18 @@ class BatterySystem:
 
             # ── P2-4: age the cell by this step's throughput (nameplate
             # EFC), then refresh the usable capacity for the next step.
+            # G11: calendar aging (lfp) adds k_cal*sqrt(t_months) on top of
+            # the linear cycle fade; the combined degradation keeps the
+            # existing 1e-3 clamp.  Legacy (k_cal == 0) never enters the
+            # calendar branch — the fade expression stays bitwise identical.
             cycles_now += (
                 battery_charge[i] * self.eta_ch
                 + battery_discharge[i] / max(self.eta_dis, 0.01)
             ) * dt / (2.0 * E_bat)
-            E_now = E_bat * max(1.0 - soh_k * cycles_now, 1e-3)
+            fade = soh_k * cycles_now
+            if k_cal > 0.0:
+                fade += k_cal * math.sqrt((i + 1) * dt / CALENDAR_MONTH_HOURS)
+            E_now = E_bat * max(1.0 - fade, 1e-3)
 
         # ── Year-end periodic reconciliation (P4-18) ──────────────────────
         # Dispatch starts at soc0 but is not guaranteed to end there, leaving

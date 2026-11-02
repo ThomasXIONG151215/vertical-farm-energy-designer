@@ -1,0 +1,45 @@
+# 隆基 Hi-MO X10 BC 组件 - BC 技术锚点
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+name: Longi Hi-MO X10 (HPBC 2.0 back contact; 抗燃屋顶版 580-630 W)
+technology: BC (hybrid passivated back contact, HPBC 2.0)
+p_mp_w: 630
+v_mp_v: null
+i_mp_a: null
+v_oc_v: null
+i_sc_a: null
+n_s: 108
+gamma_pmp_per_kelvin: -0.0026
+eta_stc: 0.248
+area_m2: null
+bifaciality: null
+degradation_first_year_pct: 1.0
+degradation_annual_pct: 0.35
+warranty_years: 30
+source:
+  url: https://www.pv-magazine.com/2026/03/10/longi-launches-fire-resistant-solar-module-for-rooftop-pv/
+  accessed: "2026-11-01"
+  method: table_value
+  note: >-
+    页面逐字核对：Hi-MO X10 系列峰值效率 24.8%、量产平均 >24.5%（eta_stc 记
+    峰值）；功率温度系数 -0.26 %/degC；30 年产品+功率质保。抗燃版本为 108
+    半片（n_s 按半片计）、1500 V DC、580-630 W（p_mp_w 记该版本上限）、工作
+    温度 -40 至 +85 degC。STC 电气点值（v_oc、i_sc、v_mp、i_mp）页面未给出，
+    置 null。衰减曲线（首年 1%、此后 0.35%/年）来自系列另一变体（640-670 W
+    抗尘版，2026-03-06 报道，见 context_from_source），按系列级质保口径采信。
+    v_mp/i_mp 官方规格表为 JS 渲染页面，取数清单见 raw/fetch_list.md。
+status: verified
+context_from_source:
+  anti_dust_variant_640_670w:
+    url: https://www.pv-magazine.com/2025/03/06/longi-launches-mono-facial-anti-dust-module-based-on-hi-mo-x10/
+    v_oc_stc_range_v: [53.70, 54.30]
+    v_oc_noct_range_v: [51.04, 51.61]
+    i_sc_stc_range_a: [15.13, 15.60]
+    cell_count_half_cells: 144
+    dimensions_mm: [2382, 1134, 30]
+    degradation_first_year_pct: 1.0
+    degradation_annual_pct: 0.35
+    note: >-
+      144 半片 640-670 W 变体的数值（与本文件主条目的 108 半片 580-630 W
+      抗燃变体不同型号）。v_oc/i_sc 为该变体区间，不适用于主条目 n_s=108
+      变体（串数不同电压等级不同），仅存档。尺寸 2382x1134 mm 可推该变体
+      面积 2.70 m2。抗尘增益 2.04%、遮阳损失 -70%。

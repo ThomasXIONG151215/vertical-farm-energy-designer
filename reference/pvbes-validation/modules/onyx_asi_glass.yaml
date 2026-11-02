@@ -1,0 +1,36 @@
+# Onyx Solar 非晶硅光伏玻璃 - a-Si BIPV 技术锚点
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+name: Onyx Solar amorphous-silicon photovoltaic glass (a-Si BIPV)
+technology: amorphous silicon (a-Si) thin-film laminated PV glass
+p_mp_w: null
+v_mp_v: null
+i_mp_a: null
+v_oc_v: null
+i_sc_a: null
+n_s: null
+gamma_pmp_per_kelvin: null
+eta_stc: 0.0576
+area_m2: 1.0
+bifaciality: null
+degradation_first_year_pct: null
+degradation_annual_pct: null
+warranty_years: null
+source:
+  url: https://onyxsolar.com/photovoltaic-glass/compare-pv-glass-options
+  accessed: "2026-11-01"
+  method: table_value
+  note: >-
+    页面逐字核对：a-Si 光伏玻璃最大标称功率密度约 57.6 Wp/m2；晶硅光伏玻璃
+    最高可达 180 Wp/m2（不透明配置）；玻璃可滤除最高 99% 的 UV 与 IR；三玻
+    两腔（氩气 + low-e）U 值最低 0.70 W/m2K；厂家明确推荐 a-Si 用于漫射光/
+    部分阴影环境（定性）。eta_stc 为换算值（computed）：57.6 Wp/m2 除以 STC
+    参考辐照 1000 W/m2 = 5.76%，来源未直接给出百分比。area_m2 = 1.0 为构造
+    值（功率按每平方米报价）。单组件 STC 电气点值未公布，置 null。
+    注意：页面 FAQ 有一句内部矛盾的表述（"a-Si 功率约为晶硅玻璃的三倍"），
+    与数值 57.6 vs 180 Wp/m2（晶硅约为 a-Si 的 3.1 倍）相反，判定为来源编辑
+    错误，以数值为准。
+status: verified
+context_from_source:
+  csi_max_power_density_w_per_m2: 180
+  uv_ir_filtering_pct: 99
+  triple_glazing_min_u_value_w_per_m2k: 0.70

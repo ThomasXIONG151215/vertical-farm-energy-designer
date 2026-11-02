@@ -1,0 +1,32 @@
+# 华晟 Himalaya HJT 组件 - HJT 技术锚点
+# 溯源规则见 readme.md。测试代码不得内联本文件数值。
+name: Huasun Himalaya HSN-212-B132 (730-770 W, 2000 V HJT)
+technology: HJT (heterojunction, G12 叠片, 双面双玻)
+p_mp_w: 770
+v_mp_v: null
+i_mp_a: null
+v_oc_v: 50.46
+i_sc_a: 19.33
+n_s: 132
+gamma_pmp_per_kelvin: -0.0024
+eta_stc: 0.248
+area_m2: 3.106
+bifaciality: null
+degradation_first_year_pct: 1.0
+degradation_annual_pct: 0.3
+warranty_years: 30
+source:
+  url: https://www.pv-magazine.com/2025/11/28/huasun-unveils-770-w-2000-v-heterojunction-solar-module/
+  accessed: "2026-11-01"
+  method: table_value
+  note: >-
+    全部数值在页面上逐字核对一致。共 8 个版本，功率 730-770 W（p_mp_w 记最高
+    版本）；v_oc 范围 49.66-50.46 V、i_sc 范围 18.62-19.33 A（均记最高版本）；
+    效率范围 23.5-24.8%（eta_stc 记上限 24.8%，与 770 W/3.106 m2 = 24.8% 自洽）。
+    最大功率温度系数 -0.24 %/degC。首年衰减 1%，此后每年上限 0.3%，30 年保
+    ≥90.3%。area_m2 由页面尺寸 2384 x 1303 mm 计算得出（computed，边框 33 mm、
+    重 36.5 kg）。v_mp、i_mp 页面未给出。双面双玻结构但双面率百分比未公布。
+    2026-11-01 补充：全文八档参数表逐档复核（730/735/740/745/750/755/760/
+    770 W），各档 v_oc 49.66-50.46 V、i_sc 18.62-19.33 A 区间连续无跳变，
+    主条目取顶档成立。v_mp/i_mp 需官网 JS 渲染规格表，见 raw/fetch_list.md。
+status: verified

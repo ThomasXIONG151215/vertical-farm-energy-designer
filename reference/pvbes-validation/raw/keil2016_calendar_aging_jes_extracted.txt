@@ -1,0 +1,1185 @@
+Journal of The
+Electrochemical Society
+       
+OPEN ACCESS
+Calendar Aging of Lithium-Ion Batteries
+To cite this article: Peter Keil et al 2016 J. Electrochem. Soc. 163 A1872
+ 
+View the article online  for updates and enhancements.
+You may also like 
+Aging Mechanism For Calendar Aging of 
+Li-Ion Cells With Si/Graphite Anodes 
+Katharina Bischof, Marius Flügel, Markus 
+Hölzle et al. 
+-
+Durability and Reliability of EV Batteries 
+under Electric Utility Grid Operations: Path 
+Dependence of Battery Degradation 
+Matthieu Dubarry, George Baure and 
+Arnaud Devie 
+-
+Modeling Calendar Aging of Lithium-Ion 
+Batteries: Analysis of SEI-Growth Models 
+and Their Experimentally Efficient 
+Parameterization 
+Veronika Vachenauer, Philipp Eiffert, 
+Alexander Karger et al. 
+-
+ 
+This content was downloaded from IP address 219.79.243.128 on 01/11/2026 at 14:36
+A1872 Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016)
+Calendar Aging of Lithium-Ion Batteries
+I. Impact of the Graphite Anode on Capacity Fade
+Peter Keil,a, ∗,z Simon F. Schuster,a J¨orn Wilhelm,a, ∗ Julian Travi,a Andreas Hauser,b
+Ralph C. Karl,a and Andreas Jossena,b
+aInstitute for Electrical Energy Storage Technology, Technical University of Munich (TUM), Munich, Germany
+bTUM CREATE Ltd., Singapore
+In this study, the calendar aging of lithium-ion batteries is investigated at different temperatures for 16 states of charge (SoCs) from 0
+to 100%. Three types of 18650 lithium-ion cells, containing different cathode materials, have been examined. Our study demonstrates
+that calendar aging does not increase steadily with the SoC. Instead, plateau regions, covering SoC intervals of more than 20%–30%
+of the cell capacity, are observed wherein the capacity fade is similar. Differential voltage analyses conﬁrm that the capacity fade
+is mainly caused by a shift in the electrode balancing. Furthermore, our study reveals the high impact of the graphite electrode on
+calendar aging. Lower anode potentials, which aggravate electrolyte reduction and thus promote solid electrolyte interphase growth,
+have been identiﬁed as the main driver of capacity fade during storage. In the high SoC regime where the graphite anode is lithiated
+more than 50%, the low anode potential accelerates the loss of cyclable lithium, which in turn distorts the electrode balancing. Aging
+mechanisms induced by high cell potential, such as electrolyte oxidation or transition-metal dissolution, seem to play only a minor
+role. To maximize battery life, high storage SoCs corresponding to low anode potential should be avoided.
+© The Author(s) 2016. Published by ECS. This is an open access article distributed under the terms of the Creative Commons
+Attribution 4.0 License (CC BY ,http://creativecommons.org/licenses/by/4.0/), which permits unrestricted reuse of the work in any
+medium, provided the original work is properly cited. [DOI: 10.1149/2.0411609jes] All rights reserved.
+Manuscript submitted March 15, 2016; revised manuscript received May 20, 2016. Published July 6, 2016.
+Calendar aging comprises all aging processes that lead to a degra-
+dation of a battery cell independent of charge-discharge cycling. It
+is an important factor in many applications of lithium-ion batteries
+where the operation periods are substantially shorter than the idle
+intervals, such as in electric vehicles. Furthermore, the degradation
+owing to calendar aging can also be predominant in cycle aging stud-
+ies, especially when cycle depths and current rates are low.1
+In contrast to cycle aging, where mechanical strain in the electrode
+active materials2–4 or lithium plating5–9 can cause severe degradation,
+the predominant mechanism of calendar aging is the evolution of pas-
+sivation layers at the electrode–electrolyte interfaces.10–12 The forma-
+tion, growth, or reconstruction of passivation layers consume cyclable
+lithium as a result of electrolyte decomposition, i.e., reduction at the
+anode and oxidation at the cathode interface.13,14 Furthermore, the
+growth of the passivation layer at the anode, which is usually referred
+to as the solid electrolyte interphase (SEI), is said to be additionally
+catalyzed by dissolved transition-metal ions from the cathode, which
+are in turn reduced again to metals at the anode.15,16 Basically, both
+the evolution of passivation layers and transition-metal dissolution are
+promoted by a high state of charge (SoC) and temperature.13,14
+As these are the main drivers of calendar aging, continuously ac-
+celerated degradation with an increase of the storage SoC and temper-
+ature is commonly assumed for lithium-ion cells with graphite anodes
+and transition-metal-layered cathodes. Whereas lithium loss is gener-
+ally ascribed to the evolution of the SEI, the passivation layer at the
+cathode is associated with rising impedance.15 As the evolution of the
+SEI is driven by the respective potential of the anode with regard to
+the electrochemical stability of the electrolyte solvent and conducting
+salt(s), a continuously accelerated capacity fade with an increase of
+the storage SoC is disputable in the case of the staging phenomenon
+in graphite.2,17 Thus, even if the effect of transition-metal dissolution
+continuously increases with higher storage SoC, the cell capacity fade
+due to calendar aging should exhibit plateaus corresponding to the
+respective stages of the graphite potential when SEI evolution is the
+predominant aging mechanism.
+There are many studies on calendar aging of lithium-ion batteries
+and they all reported accelerated aging at higher SoCs. However,
+these studies usually considered only a few storage SoCs or storage
+voltages. Most of the studies examined only three different values or
+fewer,18–28 and there is one study that investigated ﬁve SoCs from 20%
+∗Electrochemical Society Member.
+zE-mail: peter.keil@tum.de
+to 100%.29 Hence, none of these studies covered the entire SoC range
+from 0 to 100% and none are able to thoroughly report the relationship
+between SoC and capacity fade.
+Only Ecker et al. 30 investigated calendar aging with a ﬁner SoC
+resolution; they examined the aging of NMC lithium-ion cells at 12
+storage voltages. A correlation between the capacity fade and the
+graphite stages was identiﬁed. Since the correlation between open cir-
+cuit voltage and SoC changes with aging, the SoCs of cells examined
+with a predeﬁned voltage level tend to drift with increasing capacity
+fade.31 This impedes the assignment of the aging results to explicit
+SoC values which represent a certain ratio of stored ampere-hours to
+cell capacity. Moreover, it prevents a robust analysis of storage SoCs
+close to the potential steps of the graphite anode when the balancing
+of the electrodes shifts due to a loss of cyclable lithium.
+Consequently, to further examine and verify the impact of the
+graphite electrode on the calendar aging of lithium-ion batteries,
+we conducted an experimental aging study with different lithium-
+ion chemistries and with a ﬁne SoC resolution in which the storage
+SoCs were always related to the actual cell capacity instead of being
+deﬁned as voltage levels.
+Experimental
+For this paper, we performed an extensive calendar aging study
+with special focus on the dependency of the storage SoC on capacity
+degradation. We used differential voltage analysis (DV A) to iden-
+tify interdependencies between the electrode balancing and calendar
+aging. This section presents the different lithium-ion cells and stor-
+age conditions examined in our aging study. Furthermore, the test
+procedure and the fabrication of coin cells for supporting half-cell
+measurements are described.
+Lithium-ion cells.— For our experimental investigations on cal-
+endar aging, three types of commercial 18650 cells with different
+cathode materials were selected. To minimize the impact of stochas-
+tic variations, cells from identical production lots were examined. As
+s h o w ni nT a b l eI, the cells all contain graphite anodes and have NCA,
+NMC, and LFP cathodes. Their capacities range between 1.1 and
+2.8 Ah. In addition to the minimum and maximum operating voltages
+(Vmin and Vmax), Table I also compares the coated electrode areas of
+the three cell types. Cathode areas are presented, as they are generally
+somewhat smaller than anode areas. Although the capacities differ by
+a factor of up to 2.5, the electrode areas are rather similar. This leads to
+Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016) A1873
+Table I. Properties of the investigated types of lithium-ion cells.
+NCA cells NMC cells LFP cells
+Manufacturer Panasonic Sanyo A123
+Model NCR18650PD UR18650E APR18650M1A
+Nominal Capacity (CN) 2.8 Ah 2.05 Ah 1.1 Ah
+Maximum V oltage (Vmax) 4.2 V 4.2 V 3.6 V
+Minimum V oltage (Vmin) 2.5 V 2.75 V 2.0 V
+Anode Material Graphite Graphite Graphite
+Cathode Material LiNiCoAlO 2 LiNiCoMnO2 LiFePO4
+Coated Area∗ (Ac)
+(double-sided coating)
+2 × 667 mm × 57.5 mm = 767 cm2 2 × 690 mm × 57.0 mm = 787 cm2 2 × 710 mm × 55.5 mm = 788 cm2
+Areal Capacity (CN/Ac) 3.65 mAh cm –2 2.6 mAh cm–2 1.4 mAh cm–2
+∗Cathode areas, as they are slightly smaller than the anode areas.
+differences in areal capacities, which are also listed in Table I.S i n c e
+the cells all have a similar volume due to the 18650 form factor and
+since the capacity variations are substantially larger than the differ-
+ences in the speciﬁc capacities of the three cathode materials,32 the
+differences in capacity must origin mainly from different electrode
+porosities and thicknesses.
+To obtain comparable results for the three cell types, identical ab-
+solute current values instead of identical C-rates were used in our
+measurement procedures. Due to the similar electrode areas, the
+identical absolute current values provided similar current densities
+(A cm–2) for all cells. As demonstrated by the areal capacity values in
+Table I, using identical C-rates would have caused higher current den-
+sities for the cells with higher capacity. Thus, the high-energy NCA
+cells would have been exposed to a current density 2.6 times as high
+as for the high-power LFP cells. Hence, they would have been dis-
+proportionately stressed by the higher current density. This conﬁrms
+that when using identical C-rates for cells of the same size, cells with
+a higher energy content may be penalized for their higher capacity.33
+Consequently, identical absolute current values were preferred in this
+aging study.
+Storage conditions.— To investigate calendar aging, cells were
+stored at different SoCs and at different temperatures. In this paper,
+the SoC is always regarded as the stored amount of chargeQstored with
+respect to the actual cell capacity Cactual:
+SoC = Qstored/Cactual [1]
+In total, 16 storage SoCs from 0 to 100% were examined. The
+investigated storage SoCs comprised all multiples of 10% and addi-
+tionally 5%, 45%, 55%, 65%, and 95% to obtain a ﬁner resolution
+at very low SoC, at very high SoC, and in the medium SoC range,
+for which substantial changes in calendar aging were reported in pre-
+vious aging studies.30,34 These 16 SoCs were examined at storage
+temperatures of 25◦C, 40◦C, and 50◦C.
+Test procedure.— To monitor the degradation of the cells, a uni-
+form checkup procedure was performed periodically at 25 ◦Cf o ra l l
+cells. As listed in Table II, this checkup comprised a constant current
+Table II. Checkup sequence at 25 ◦C, containing steps for
+differential voltage analysis (3) and capacity measurement (5).
+Step Parameters Termination
+1 Discharge CCCV I = –1 A, V = Vmin I > –0.1 A
+2P a u s e t > 15 min
+3C h a r g eC C I = 100 mA V > Vmax
+4P a u s e t > 15 min
+5 Discharge CCCV I = –2 A, V = Vmin I > –0.1 A
+6P a u s e t > 15 min
+7C h a r g eC C I = 700 mA SoC > 50%
+(CC) charging step with a low charging current of 100 mA for DV A
+and a constant current constant voltage (CCCV) discharging step to
+measureCactual. In this paper, charging currents have positive values
+whereas discharging currents are represented by negative values.
+DV A is an advanced technique for electrical characterization of bat-
+tery cells. From a constant current charging or discharging sequence,
+the derivative dV/dQ is computed, which represents a linear super-
+position of the anode and cathode derivative.35 Hence, a differential
+voltage spectrum can be used to identify the balancing and the utiliza-
+tion of the two electrodes without inserting a reference electrode.36
+In aging studies, DV A allows the separation of anode degradation,
+cathode degradation, and shifts in the electrode balancing due to a
+loss of cyclable lithium.37,38 Figure 1 shows the low-current charging
+curves and the resulting differential voltage spectra for the three cell
+types in the new state. For all three cell types, the charging current of
+100 mA corresponds to a current density of approximately 0.13 mA
+cm–2 for each side of the double-sided electrodes.
+Furthermore, discharge pulses from 0 A to –3 A with a duration
+of 10 s were evaluated at 50% SoC to identify changes in the cell
+resistance.Rdc,10s was obtained from the cell voltage immediately
+0 0.5 1 1.5 2 2.5 3
+2.4
+2.7
+3
+3.3
+3.6
+3.9
+4.24.2Voltage (V)
+LFP cell
+NMC cell
+NCA cell
+0 0.5 1 1.5 2 2.5 3
+Stored Capacity (Ah)
+0
+0.5
+1
+dV/dQ (V)
+(a)
+(b)
+Figure 1. (a) V oltage curves over stored capacity for low-current charging
+with 100 mA; (b) the resulting differential voltage spectra.
+A1874 Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016)
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.7
+0.75
+0.8
+0.85
+0.9
+0.95
+1
+Relative Capacity
+NCA cells
+before storage
+25°C  10 months
+40°C  10 months
+50°C  10 months
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.7
+0.75
+0.8
+0.85
+0.9
+0.95
+1
+Relative Capacity
+NMC cells
+before storage
+25°C  10 months
+40°C  10 months
+50°C  10 months
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.7
+0.75
+0.8
+0.85
+0.9
+0.95
+1
+Relative Capacity
+LFP cells
+before storage
+25°C  9 months
+40°C  9 months
+50°C  9 months
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+1
+1.2
+1.4
+1.6
+1.8
+2
+Relative Resistance  Rdc,10s
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+1
+1.2
+1.4
+1.6
+1.8
+2
+Relative Resistance  Rdc,10s
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+1
+1.2
+1.4
+1.6
+1.8
+2
+Relative Resistance  Rdc,10s
+(a)
+(d) (e) (f)
+(c)(b)
+Figure 2. Battery degradation after ca. 9–10 months of storage at various SoCs and different temperatures: (a-c) capacity fade; (d-f) rise of internal resistances.
+before the pulse (V0s) and at the end of the pulse (V10s).
+Rdc,10s = (V10s − V0s) / −3A [2]
+After the checkup procedure, the cells were brought to storage
+SoC. The standard procedure for this was charging the cells with
+Qcharge from the completely discharged state to the storage SoC:
+Qcharge = SoC · Cactual [3]
+The distribution of the lithium atoms in the electrodes is supposed
+to vary for different charge-discharge histories. Regarding the cell
+potential, this becomes apparent by a hysteresis in the open circuit
+voltage between charging and discharging to the same SoC, which
+amounts to 10–20 mV .39–42 For graphite electrodes, different lithium
+distributions for the same SoC have also been conﬁrmed by electro-
+optical measurements.43 To study the dependence of calendar aging
+on the charge-discharge history, an alternative procedure for reaching
+the storage SoC was examined, i.e., dischargingQdischarge from the
+fully charged cells to reach the storage SoC.
+Qdischarge =− (1 − SoC ) · Cactual [4]
+The checkup procedure was performed with a BaSyTec CTS bat-
+tery test system containing 32 individual 5 V/±5 A test channels and
+the cells were tested inside a 25◦C thermal chamber. After the checkup,
+all cells were brought to the respective storage SoC at 25 ◦Cb e f o r e
+they were stored in thermal chambers with constant temperatures of
+25, 40, and 50◦C.
+Coin cells.— To study the behavior of the individual electrodes and
+to verify the balancing of the electrodes in the commercial full-cells
+obtained by DV A, coin cells were built from the respective active
+materials. For each cell type, one cell at 0% SoC and one cell at 100%
+SoC was opened. The jelly roll was extracted and electrode samples
+with a diameter of 14 mm were punched out for 2032-sized coin cells.
+The samples were used to build half-cells together with metal lithium
+electrodes with a diameter of 15 mm. For the fabrication of the coin
+cells, ﬁberglass separators with a diameter of 16 mm and ca. 160μlo f
+fresh electrolyte (1 M LiPF6 in EC:EMC (3:7) + 2% VC) were used.
+Single-sided anode samples could be extracted from the NMC and
+NCA cells, since the outermost anode winding was coated only on
+the inner side. Hence, no side effects from the back side of the elec-
+trode sample occurred during the measurements. All other electrode
+samples had double-sided coatings, for which capacity drifts due to
+an interfering back side coating had to be expected during cycling.44
+For the coin cells, similar current densities as for the DV A mea-
+surement of the commercial cells were applied. Thus, the charging
+and discharging currents were deﬁned as follows:
+Icoin =± (1.4c m /2)2 · π · 0.13 mAcm−2 =± 0.2m A [ 5 ]
+All coin cell measurements were performed at 25◦C. The graphite
+half-cells were cycled between 0.1 and 1.5 V , the NCA and NMC
+half-cells between 2.5 and 4.3 V , and the LFP half-cells between 2.0
+and 3.7 V . Before the charge-discharge cycling, the coin cells were
+stored for at least 12 h to provide sufﬁcient time for the electrolyte to
+soak into the pores of the active material and the separator.
+The half-cell proﬁles were used to reconstruct the full-cell volt-
+age characteristics and enable correlation between the plateaus in the
+anode potential and the capacity fade of the commercial lithium-ion
+cells.
+Results and Discussion
+The focus of this paper is the dependency of the capacity fade on
+storage SoCs. Changes of the internal resistances are only presented
+brieﬂy, as they will be examined thoroughly in a separate article.
+The following sections present and discuss the impact of the anode
+potential on calendar aging.
+General aging behavior.—For the three types of lithium-ion cells
+examined, Figures 2a–2c show the capacity fade after a storage period
+of 9–10 months. As expected, they all exhibit an increased calendar ag-
+ing with higher storage temperature. However, no steadily increasing
+degradation with SoC is observed. Instead, there are plateau regions,
+covering SoC intervals of more than 20%–30% of the cell capacity,
+in which the capacity fade is similar. A marked step in the capacity
+curves is observed at about 60% SoC for the NCA and NMC cells
+and above 70% SoC for the LFP cells. For the observed relationships
+between storage SoC and capacity fade, no simple linear, polynomial,
+or exponential approximations are possible without considerable de-
+viation in certain SoC regions. Hence, the measurement of calendar
+Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016) A1875
+0 50 100 150 200
+Time (h)
+0
+0.5
+1
+1.5Voltage (V)
+Anode 0% SoC
+Anode 100% SoC
+0 50 100 150 200
+Time (h)
+0
+0.5
+1
+1.5Voltage (V)
+Anode 0% SoC
+Anode 100% SoC
+01234567
+Stored Capacity (mAh)
+0
+0.5
+1
+1.5Voltage (V)
+Anode 0% SoC
+Anode 100% SoC
+0123456
+Stored Capacity (mAh)
+0
+0.5
+1
+1.5Voltage (V)
+Anode 0% SoC
+Anode 100% SoC
+Delithiation
+Lithiation
+Delithiation
+Lithiation
+(a) (b)
+(d)(c)
+Figure 3. Three charge-discharge cycles of the graphite half-cells from an empty (0% SoC) and a full (100% SoC) NCA and NMC cell in new condition. (a, c)
+V oltage over time; (b, d) voltage over stored capacity. Markers indicate the potential and the stored capacity of the graphite anodes for the full-cel ls at 0% (blue
+circles) and 100% SoC (red diamonds).
+aging for only three SoCs, as is the case in most publications, is not
+sufﬁcient to precisely describe calendar aging with respect to the SoC
+when the qualitative characteristics over the entire SoC range are not
+known.
+Figure 2 also reveals different storage durations for the three cell
+types owing to variations in the checkup schedules of the different cell
+types. The 9 months of storage of the LFP cells are shorter than the
+storage periods of the NCA and NMC cells. To estimate the capacity
+fade of the LFP cells for 10 months of storage, the derivative of the
+capacity fade with respect to time has been evaluated after 9 month of
+storage. It amounts to ca. 0.2 percentage points of capacity fade per
+month at 25◦C and to ca. 0.5 percentage points per month at 50 ◦C.
+Adding this additional capacity fade to the capacity curves depicted
+in Figure2c enables a better comparability of the three cell types.
+The capacity curves of the different cell types then show that in the
+medium SoC region (around 50% SoC), the capacity fade is largest
+for the LFP and NMC cells, especially at higher storage temperatures
+of 40◦C and 50◦C.
+For storage at 50◦C and SoCs above 70%, the NMC cells exhibit
+a higher capacity fade than the NCA and LFP cells. A similar aging
+behavior for the NMC cells has already been reported by Ref.30,
+in which calendar aging at 50 ◦C revealed a substantially increasing
+capacity fade at 100% SoC and a somewhat lower capacity fade at
+95% SoC compared with that at 80%–90% SoC.
+The changes in cell resistance after 9–10 months of storage are
+shown in Figures 2d–2f. The resistance increase for the LFP cells is
+lowest and also largely independent of the storage SoC. For the NCA
+and NMC cells, resistances increase with higher storage SoC and no
+plateaus similar to the capacity fade are observed. For the NCA cells,
+the resistance increase is constant between 0 and 30% SoC, where the
+capacity fade increases notably, and the resistance increase accelerates
+substantially above 90% SoC, where the capacity fade only slightly
+increases.
+For all three types of lithium-ion cells examined, there is no direct
+correlation between capacity fade and resistance increase. Particularly,
+the step in capacity fade observed at ca. 60%–70% SoC is not reﬂected
+in the resistance change. Half-cell investigations with coin cells and
+DV A are performed in the subsequent sections to demonstrate that
+this step in capacity fade is attributable to the potential of the graphite
+anode.
+Potential and utilization of the graphite anode.—To describe pos-
+sible interdependencies between calendar aging and the graphite po-
+tential, the balancing of the cells has been examined with coin cells
+fabricated from the electrode material of the commercial full-cells
+in the new condition. At least three half-cells were fabricated from
+each electrode material. Since the cycling behavior was highly repro-
+ducible, the results of only one half-cell sample are presented.
+For the NCA and NMC cells, Figures 3a, 3c show three charge-
+discharge cycles of the graphite anode half-cells, which were per-
+formed with low currents of 0.2 mA to clearly obtain the different
+voltage plateaus. Each charge or discharge step has a duration of up to
+32 h for the anode coin cells from the NCA cells and up to 25 h for the
+coin cells from the NMC cells. In Figures3b, 3d, the same half-cell
+voltage data is plotted versus stored capacity. Since these coin cells
+contain electrode samples with only single-sided coatings, the three
+cycles are rather similar and no capacity drifts occur. For the anode
+coin cells of the LFP cells and all cathode coin cells, a capacity drift
+was observed, especially for the ﬁrst charge-discharge cycle due to
+an interfering back side coating. From these coin cells, only the last
+charging or discharging sequence has been used for the reconstruction
+of the full-cell spectra. In Figures3b and 3d, the circle and diamond
+markers indicate the initial potential and stored capacity of the half-
+cells after the fabrication process. The blue circles show that a 0% SoC
+of the full-cell correlates with a completely delithiated anode. For the
+full-cells at 100% SoC, the anode is not completely lithiated. The red
+diamonds in Figures3b and 3d illustrate the utilization of the over-
+sized graphite anodes. At ca. 50% of the maximum storage capacity,
+a potential step can be observed, which indicates a different staging
+conﬁguration of the intercalated lithium. Above 50% lithiation, the
+two-phase regime of LiC12 and LiC6 can be observed.2,45
+Reconstruction of full-cell behavior from half-cell spectra.—To
+investigate the transitions between different phase equilibria, DV A
+has been used. It also allows to reconstruct the full-cell behavior from
+A1876 Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016)
+0 2 04 06 08 0 1 0 0
+Full Cell SoC (%)
+0
+1
+2
+dV/dQ·Q0 (V)
+0 2 04 06 08 0 1 0 0
+0
+1
+2
+3
+4
+Full Cell Voltage (V)
+Electrode Potential vs. Li/Li+ (V)
+NCA cells
+18650 cell
+Anode
+Cathode
+Anode + Cathode
+0 2 04 06 08 0 1 0 0 1 2 0
+Full-Cell SoC (%)
+0
+1
+2
+dV/dQ·Q0 (V)
+0 2 04 06 08 0 1 0 0 1 2 0
+0
+1
+2
+3
+4
+Full-Cell Voltage (V)
+Electrode Potential vs. Li/Li+ (V)
+NMC cells
+18650 cell
+Anode
+Cathode
+Anode + Cathode
+0 2 04 06 08 0 1 0 0 1 2 0
+Full-Cell SoC (%)
+0
+1
+2
+dV/dQ·Q0 (V)
+0 2 04 06 08 0 1 0 0 1 2 0
+0
+1
+2
+3
+4
+Full-Cell Voltage (V)
+Electrode Potential vs. Li/Li+ (V)
+LFP cells
+18650 cell
+Anode
+(Cathode)
+Anode + (Cathode)
+Lithiation
+Q2Q2Q1Q1(d) (f)
+(b)(a) (c)
+Delithiation
+Lithiation Lithiation
+Q1
+Delithiation
+Q2 (e)
+Delithiation
+Figure 4. Reconstruction of the full-cell voltage of a new cell and the differential voltage spectrum from half-cell data. (a-c) V oltage behavior for low-curr ent
+charging; (d-f) differential voltage spectra with the central graphite peak highlighted by the dotted vertical line, which separates the actual cap acity into two
+characteristic capacity values Q1 and Q2. Q1 is an indicator for graphite degradation and Q2 is an indicator for shifts in the electrode balancing.
+half-cell data, which helps to identify the different staging regimes for
+the full-cells without opening the cells.
+For all three cell types, Figure 4 illustrates the reconstruction of
+the full-cell voltage and the differential voltage spectrum by linear
+superposition from half-cell data of the anode and the cathode. Fig-
+ures4d–4f show that slopes and peaks of the individual electrodes
+can be clearly recognized in the full-cell spectrum. Hence, the dif-
+ferential voltage spectra contain valuable information on the scaling
+and balancing of the two electrodes. An excellent agreement between
+half-cell data and full-cell behavior can be achieved in the reconstruc-
+tion process, especially when using the differential voltage spectra
+for scaling and shifting the individual contributions of the anode and
+cathode half-cell.
+As already described in the previous section, Figures 4a–4c also
+show that the decreasing cell voltage indicating 0% SoC is generally
+caused by the rising potential of the delithiated graphite anode. Hence,
+an empty anode determines the lower end of the capacity window
+usable for charge-discharge cycling. The upper end of the usable
+capacity window is not determined by the graphite anode, since it
+is oversized. Thus, the upper end is determined by the increasing
+potential of the delithiated cathode.
+The slopes and peaks in the differential voltage spectra help to
+correctly scale the capacities of the graphite anodes and the NCA and
+NMC cathodes in the reconstruction process. For the LFP cathode,
+however, no precise capacity scaling is possible due to the character-
+istic half-cell voltage of the LFP cathode, which is constant over a
+wide SoC range and exhibits notable changes only at very low and
+very high degrees of lithiation. Thus LFP only exhibits two slopes in
+the differential voltage spectrum and no further characteristic peaks.
+In the differential voltage spectrum of the full-cell, only the slope
+due to the rising potential of the LFP cathode toward 100% SoC can
+be identiﬁed. As the decreasing potential of the LFP toward the fully
+lithiated state is not reached in the full-cell, the second LFP slope does
+not become visible in the full-cell spectrum. Since no second refer-
+ence mark could be determined for the horizontal scaling of the LFP
+curves, the scaling of the cathode data in Figure4f is only an estimate,
+which is indicated by the parenthesis. For the graphite anodes, a cor-
+rect capacity scaling has been possible for all three types of cell due to
+the numerous characteristic peaks in the differential voltage spectra.
+Since the peak distances are proportional to the storage capacity
+of an electrode and since the peaks and slopes can be clearly assigned
+to the anode or cathode, DV A enables us to track the degradation of
+the electrodes and the shifts in the electrode balancing without open-
+ing the cells to insert a reference electrode or the need to perform
+post-mortem analyses. In Figures4d–4f, the central graphite peak,
+which indicates a degree of lithiation of the graphite anode of about
+50%, is highlighted. This peak divides the cell capacity Cactual into
+two characteristic capacities Q1 and Q2. Q1, which represents the
+distance between 0% SoC and the central graphite peak, provides in-
+formation about the storage capacity of the graphite anode.Q2,w h i c h
+represents the distance between the central graphite peak and 100%
+SoC, provides information about the balancing of both electrodes. A
+change inQ2 without a change of the anode and cathode capacity
+indicates a loss of cyclable lithium, also termed loss of lithium inven-
+tory, due to lithium-consuming side reactions. Since the differential
+voltage spectra of NMC and LFP do not contain characteristic peaks
+that can be easily evaluated, no third capacity value could be deﬁned
+for monitoring changes in the cathode capacity. Hence, changes in
+cathode capacity have been evaluated by ﬁtting the entire spectrum
+and analyzing the resulting capacity scaling factor of the cathode.
+For all three cell types examined, the reconstruction of full-cell
+behavior from half-cell data has demonstrated how the effects of both
+electrodes add linearly and that changes in anode capacity and elec-
+trode balancing can be identiﬁed easily from changes in the differential
+voltage spectrum of the commercial full-cell.
+Capacity fade versus anode potential.—The information on the
+balancing and utilization of the electrodes, which has been obtained
+by half-cell measurements and DV A, is now examined for correlations
+with calendar aging. Since we assume a considerable impact of the
+anode potential on capacity fade, both values are plotted versus SoC
+and opposed to each other in Figure5.
+It becomes obvious that in the plateaus of the highest capacity
+fade, the anode potential is lowest. For the NCA and NMC cells,
+the low anode potential starts at about 60% SoC and for the LFP
+cells, the low anode potential starts at about 70%. The medium anode
+potential between 30% and 60% SoC for the NCA and NMC cells
+and between 40% and 70% for the LFP cells correlates well with the
+Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016) A1877
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Full-Cell SoC (%)
+0
+0.2
+0.4
+Vanode vs Li/Li+ (V)
+NCA cells
+Delithiation
+Lithiation
+Average
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Full-Cell SoC (%)
+0
+0.2
+0.4
+Vanode vs Li/Li+ (V)
+NMC cells
+Delithiation
+Lithiation
+Average
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Full-Cell SoC (%)
+0
+0.2
+0.4
+Vanode vs Li/Li+ (V)
+LFP cells
+Delithiation
+Lithiation
+Average
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.7
+0.75
+0.8
+0.85
+0.9
+0.95
+1
+Relative Capacity
+before storage
+25°C  2.1 months
+25°C  4.0 months
+25°C  6.6 months
+25°C  9.6 months
+50°C  1.9 months
+50°C  3.8 months
+50°C  6.5 months
+50°C  9.5 months
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.7
+0.75
+0.8
+0.85
+0.9
+0.95
+1
+Relative Capacity
+before storage
+25°C  2.4 months
+25°C  4.3 months
+25°C  7.1 months
+25°C  10.0 months
+50°C  2.4 months
+50°C  4.6 months
+50°C  7.4 months
+50°C  10.4 months
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.7
+0.75
+0.8
+0.85
+0.9
+0.95
+1
+Relative Capacity
+before storage
+25°C  1.9 months
+25°C  3.9 months
+25°C  6.2 months
+25°C  9.1 months
+50°C  1.9 months
+50°C  3.8 months
+50°C  6.3 months
+50°C  9.3 months
+(f)(e)(d)
+(a) (c)(b)
+Figure 5. (a-c) Anode potential over SoC from half-cell measurements; (d-f) capacity fade over storage SoC for different storage periods. The location of the
+central graphite peak in the new condition is highlighted by a dotted vertical line.
+medium capacity fade for these storage SoCs. In the low SoC regime
+below 30% or 40% SoC, the anode potential rises and the capacity
+fade diminishes.
+These trends can be clearly observed in Figures 5d–5f for the
+cells stored at 25 ◦C, where a sharp separation between the different
+aging regions can be observed. The transition from the plateau of
+medium capacity fade to the plateau of high capacity fade correlates
+particularly strongly with the position of the central graphite peak,
+indicating a degree of lithiation of ca. 50%. Hence, staying below this
+characteristic SoC can reduce calendar aging considerably.
+For the cells stored at 50 ◦C, the capacity fade is substantially
+higher. Moreover, the transition between the different aging plateaus
+is not as sharp as for the cells stored at 25◦C. The reason for this
+will be discussed in the last result section, which focuses explicitly
+on this transition zone. Furthermore, some additional aging effects
+toward 100% SoC can be observed: The NCA cells exhibit a some-
+what increasing capacity fade from 80% to 100% SoC; and the NMC
+cells reveal a steep increase in capacity fade for the 100% cell. As
+these effects do not correlate with the graphite potential, they are
+thought to be caused by side-reactions driven by high cell voltage,
+such as oxidation of the electrolyte and transition-metal dissolution,
+and higher degrees of delithiation of the cathode, which can deteriorate
+the lattice structure of the cobalt-oxide-based and nickel-oxide-based
+cathode materials.3,46 This also explains why no additional capacity
+fade toward 100% SoC has been observed for the LFP cells, since their
+maximum voltage is considerably lower and the LFP lattice structure
+has a higher stability which allows complete delithiation.47,48
+As illustrated in Figures 5d–5f, the location of the central graphite
+peak ranges between 57% SoC for the high-energy NCA cells and
+73% SoC for the high-power LFP cells. The corresponding capacity
+fade curves demonstrate that the cell design of the high-power LFP
+cells, where the central graphite peak lies at a higher SoC, enables
+higher storage SoCs without reaching the region of fastest capacity
+fade.
+For all three cell types, a continuously decreasing degradation
+over time is observed. The largest capacity fade occurs during the
+ﬁrst weeks of storage and the overall trend exhibits a square-root-
+of-time behavior. This trend is in good correlation with SEI growth,
+for which a linear increase with the square root of time is generally
+assumed.49,50 Overall, the results conﬁrm a clear correlation between
+the anode potential and calendar aging of lithium-ion cells.
+Electrode degradation and shift of electrode balancing.—In the
+previous section, an increasing capacity fade was reported for lower
+anode potentials. However, this information on capacity fade does
+not provide much information about the degradation mechanisms and
+origins of the capacity loss. Therefore, the DV A data are evaluated to
+separate between anode degradation, cathode degradation, and shifts
+in the electrode balancing caused by a loss of cyclable lithium.
+The bars depicted in Figures 6a–6c show the capacity fade for
+six of the 16 storage SoCs and different temperatures. The entire bar
+length represents the remaining cell capacityCactual, which is further
+separated into a dark-colored part, representingQ1, and a light-colored
+part, representing Q2.
+Comparing the Q1 values of aged cells with the reference value of
+new cells (dark gray bars) reveals zero (or very minor) degradation
+of the graphite anode, since the position of the graphite peak and,
+thus, the storage capability of the graphite anode has remained largely
+unchanged. Graphite degradation is only observed for the NMC cells
+stored at 100% SoC and at higher temperatures. Even for the cells
+exhibiting a certain loss of anode capacity, this loss is substantially
+smaller than the fade of the overall cell capacity. Furthermore, this
+capacity fade has not affected the cell capacity, since the anodes are
+generally oversized.
+The reconstruction of the differential voltage spectra of aged cells
+with the half-cell proﬁles of anode and cathode has also indicated that
+there is zero (or very minor) cathode degradation. Thus, the loss of
+cyclable lithium can be conﬁrmed as the major cause of capacity fade
+due to calendar aging. The resulting shift in the electrode balancing
+can be analyzed quantitatively from the decreasingQ2 values.
+Impact of charge-discharge history.—Figure 7 compares the ca-
+pacity fades of two sets of NCA and NMC cells stored at 50 ◦C with
+different charge-discharge histories. For both types of cell, the capac-
+ity curves exhibit a very good agreement between the two sets of cells.
+This conﬁrms the low cell-to-cell variation in the production process
+A1878 Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016)
+0 2 04 06 08 0 1 0 0
+Storage SoC (%)
+0
+0.5
+1
+1.5
+2
+2.5
+3
+Capacity (Ah)
+(a) NCA cells
+new cells 25°C 40°C 50°C
+0 2 04 06 08 0 1 0 0
+Storage SoC (%)
+0
+0.5
+1
+1.5
+2
+2.5Capacity (Ah)
+(b) NMC cells
+new cells 25°C 40°C 50°C
+0 2 04 06 08 0 1 0 0
+Storage SoC (%)
+0
+0.2
+0.4
+0.6
+0.8
+1
+1.2Capacity (Ah)
+(c) LFP cells
+new cells 25°C 40°C 50°C
+Q1
+Q2
+Q2
+Q1
+Q1
+Q2
+Figure 6. (a-c) Cell capacity after ca. 9–10 months of storage at different temperatures separated into characteristic capacities Q1 and Q2. The average value of
+all the new cells serves as the reference (gray bars).
+for commercial 18650 lithium-ion cells. For the cells stored at 100%
+SoC, the differences in capacity fade should be minimal, as these cells
+had exactly the same test procedure. The remaining variations indicate
+that the effects of different charge-discharge history are less signiﬁ-
+cant than those of the general cell-to-cell variation. Moreover, they are
+substantially smaller than the differences owing to the SoC. Thus, no
+different aging behavior is identiﬁed between the cells charged from
+0% SoC to the storage SoC and the cells discharged from 100% SoC
+to the storage SoC. Thus, no effect due to the variations in lithium dis-
+tribution or the open circuit voltage hysteresis resulting from different
+charge-discharge histories is detected.
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.8
+0.85
+0.9
+0.95
+1
+Relative Capacity
+(a) NCA cells
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.8
+0.85
+0.9
+0.95
+1
+Relative Capacity
+(b) NMC cells
+before storage
+50°C  1.9 months
+50°C  3.8 months
+50°C  6.5 months
+50°C  9.5 months
+before storage
+50°C  2.4 months
+50°C  4.4 months
+50°C  7.4 months
+charging empty cells to storage SoC
+discharging full cells to storage SoC
+Figure 7. Comparison of capacity fade for the (a) NCA and (b) NMC cells
+stored at 50◦C with different charge-discharge histories.
+Impact of thickness changes.— Graphite anodes in lithium-ion
+batteries exhibit an expansion and contraction during lithiation and
+delithiation of 5%–10%.51,52 Several researchers have suggested that
+SEI cracks and SEI reformation due to volume changes of the graphite
+anode during cycling operations are the major cause of lithium
+consumption.28,53,54 Graphite anodes exhibit a largely linear expan-
+sion from 0% to 25% lithiation, only minor volume changes between
+25% and 50% lithiation, and another linear expansion above 50%
+lithiation, where the LiC6 phase formation begins.52 Comparing this
+thickness behavior of lithiated graphite with the observed trends in
+capacity fade, an interdependency between graphite expansion and
+calendar aging can be disregarded: In the high SoC region above the
+central graphite peak, corresponding to a lithiation of the graphite
+anode greater than 50%, a constant capacity fade is observed. The
+thickness of the graphite anode, however, is continuously expand-
+ing above the central graphite peak. If the observed degradation was
+related to volume expansion, a continuously increasing degradation
+above the central graphite peak would be observed. Thus, it is not
+the expansion of the graphite causing the accelerated degradation at
+higher storage SoCs.
+This conﬁrms that the observed plateaus in capacity fade de-
+pend solely on the graphite potential and not on the thickness of
+the graphite electrode. Thus, the accelerated capacity fade above the
+central graphite peak is attributed to the lower anode potential, which
+aggravates electrolyte reduction and, thus, promotes SEI growth.
+Transition zone at half-lithiated graphite anode.—In the capacity
+curves of Figures 2a–2c and Figures 5d–5f, a transition zone between
+moderate and high capacity fade has been observed around the central
+graphite peak. The high capacity fade occurs for storage SoCs above
+the peak location. These effects are now analyzed in more detail for
+the NCA cells. At 25◦C, the transition zone remains unchanged for
+up to 9.5 months of storage. At 50 ◦C, however, the transition zone
+widens.
+Figure 8 demonstrates that this effect is a result of a change in elec-
+trode balancing, which shifts the SoC location of the central graphite
+peak toward higher SoCs. Figures8a–8b conﬁrm the capacity fade of
+the NCA cells stored at 25 and 50◦C. The two cells stored at 60% SoC
+are highlighted. For these cells, Figures 8c–8d depict the correspond-
+ing differential voltage spectra for the different storage periods. The
+locations of the central graphite peak before the storage test and after
+about 9.5 months of storage are highlighted. The cells stored at 60%
+SoC were analyzed, since 60% SoC lies slightly above the location of
+the central graphite peak when the NCA cells are new. For storage at
+25◦C (Figure8c), the location of the central graphite peak still remains
+Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016) A1879
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.8
+0.9
+1
+Rel. Capacity
+before storage
+~2 months
+~4 months
+~6.5 months
+~9.6 months
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+SoC (%)
+0
+0.5
+1
+dV/dQ (V/Ah)
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+Storage SoC (%)
+0.8
+0.9
+1
+Rel. Capacity
+0 1 02 03 04 05 06 07 08 09 0 1 0 0
+SoC (%)
+0
+0.5
+1
+dV/dQ (V/Ah)
+(c)
+(a) (b)
+(d)25°C, 60%
+25°C
+50°C, 60%
+50°C
+Figure 8. (a, b) Capacity fade over time for the NCA cells stored at 25 or 50 ◦C. Cells stored at 60% are highlighted, for which (c, d) show the corresponding
+differential voltage spectra. The location of the central graphite peak is highlighted for the new state and that following ca. 9.5 months of storage.
+below 60% SoC after 9.5 months of storage. Hence, the cell stored
+at 25◦C and 60% SoC has always been in the plateau region of high
+capacity fade. Thus, the transition zone has remained between 55%
+and 60% SoC. For storage at 50◦C (Figure 8d), a higher capacity fade
+occurs, which is caused by a greater loss of cyclable lithium. Due to
+the larger shift in the electrode balancing, the location of the central
+graphite peak lies above 60% SoC after only ca. 2 months of storage.
+Hence, the NCA cell stored at 50◦C and 60% SoC exhibited high
+capacity fade only during the ﬁrst weeks of storage and then slipped
+into the regime of medium capacity fade. Thus, only the cells stored
+at 65% SoC and above exhibit the fastest capacity fade. Consequently,
+the transition zone expands to 55%–65% SoC. This clear correlation
+between the balancing of the graphite anode and the capacity fade
+during storage periods conﬁrms that the anode potential has been the
+major driving force of calendar aging in this study.
+The identiﬁcation and evaluation of a widening transition zone
+was only possible because storage SoCs related to the actual capacity
+were used instead of predeﬁned voltage levels. They allowed the anode
+potential at the investigated storage SoCs to change with aging, which
+resulted in different aging rates over time for storage SoCs slightly
+above the initial SoC location of the central graphite peak.
+Conclusions
+Our experimental study of three different types of commercial
+lithium-ion cells has demonstrated that calendar aging does not in-
+crease steadily with the SoC. Instead, plateau regions, covering SoC
+intervals of more than 20%–30% of the cell capacity, have been ob-
+served in which the capacity fade is largely constant. In-depth analyses
+by DV A conﬁrmed that the capacity fade is mainly caused by a shift
+in the electrode balancing and not by a degradation of the electrode
+materials.
+Furthermore, our study revealed a strong dependency of calendar
+aging on the graphite electrode. Lower anode potentials were iden-
+tiﬁed as the main driver of capacity fade during storage periods. In
+the high SoC regime where the graphite anode is lithiated more than
+50%, the low anode potential accelerates the loss of cyclable lithium,
+causing the shift in the electrode balancing. The comparison of differ-
+ent types of lithium-ion cells demonstrated that the more the graphite
+anode is oversized, the higher the storage SoC can be without reaching
+the SoC regime of highest capacity fade.
+The degradation due to the low anode potential can be attributed to
+electrolyte reduction and SEI growth. Signs of aging mechanisms in-
+duced by high cell voltage, such as electrolyte oxidation or transition-
+metal dissolution were observed only in few cases: A substantially
+accelerated capacity fade occurred for the NMC cells at 100% SoC.
+For the NCA cells, a storage SoC above 90% caused slightly increased
+battery aging. The aging behavior of the LFP cells correlates entirely
+with the anode potential. Moreover, no effects due to anode thickness
+or charge-discharge history on calendar aging were observed.
+Overall, the effects from low graphite potential were predominant
+in our calendar aging study. To maximize battery life, lithium-ion
+cells should not be stored at high SoC corresponding to low anode
+potential. For long-term storage, the graphite anode should be lithiated
+less than 50%. To determine the respective SoC range of the full-cell,
+DV A provides the relevant characterization of the electrode balancing
+without opening the cells to insert a reference electrode or the need
+for post-mortem analyses.
+References
+1. A. J. Smith, H. M. Dahn, J. C. Burns, and J. R. Dahn, “Long-Term Low-Rate Cy-
+cling of LiCoO 2/Graphite Li-Ion Cells at 55 ◦C,” J. Electrochem. Soc., 159, A705
+(2012).
+2. T. Ohzuku, “Formation of Lithium-Graphite Intercalation Compounds in Nonaque-
+ous Electrolytes and Their Application as a Negative Electrode for a Lithium Ion
+(Shuttlecock) Cell,” J. Electrochem. Soc., 140, 2490 (1993).
+3. W.-S. Yoon, K. Y . Chung, J. McBreen, and X.-Q. Yang, “A comparative study on
+structural changes of LiCo 1/3Ni1/3Mn1/3O2 and LiNi 0.8Co0.15Al0.05O2 during ﬁrst
+charge using in situ XRD,” Electrochemistry Communications, 8, 1257 (2006).
+4. W. H. Woodford, W. C. Carter, and Y .-M. Chiang, “Design criteria for electrochem-
+ical shock resistant battery electrodes,” Energy Environ. Sci., 5, 8014 (2012).
+5. B. Bitzer and A. Gruhle, “A new method for detecting lithium plating by measuring
+the cell thickness,” Journal of Power Sources, 262, 297 (2014).
+6. C. Uhlmann, J. Illig, M. Ender, R. Schuster, and E. Ivers-Tiff ´ee, “In situ detection of
+lithium metal plating on graphite in experimental cells,” Journal of Power Sources,
+279, 428 (2015).
+7. V . Zinth, C. von L ¨uders, M. Hofmann, J. Hattendorff, I. Buchberger, S. Erhard,
+J. Rebelo-Kornmeier, A. Jossen, and R. Gilles, “Lithium plating in lithium-ion bat-
+teries at sub-ambient temperatures investigated by in situ neutron diffraction,”Journal
+of Power Sources, 271, 152 (2014).
+8. S. F. Schuster, T. Bach, E. Fleder, J. M ¨uller, M. Brand, G. Sextl, and A. Jossen,
+“Nonlinear aging characteristics of lithium-ion cells under different operational con-
+ditions,” Journal of Energy Storage, 1, 44 (2015).
+9. N. Legrand, B. Knosp, P. Desprez, F. Lapicque, and S. Ra ¨el, “Physical character-
+ization of the charging process of a Li-ion battery and prediction of Li plating by
+electrochemical modelling,”Journal of Power Sources, 245, 208 (2014).
+10. P. B. Balbuena and Y . Wang, Lithium-ion batteries: Solid-electrolyte interphase,
+Imperial College Press, London, 2004.
+11. N. Dupr ´e, J.-F. Martin, J. Oliveri, P. Soudan, A. Yamada, R. Kanno, and
+D. Guyomard, “Relationship between surface chemistry and electrochemical be-
+havior of LiNi 1/2Mn1/2O2 positive electrode in a lithium-ion battery,” Journal of
+Power Sources, 196, 4791 (2011).
+A1880 Journal of The Electrochemical Society, 163 (9) A1872-A1880 (2016)
+12. S.-P. Kim, A. C. van Duin, and V . B. Shenoy, “Effect of electrolytes on the structure
+and evolution of the solid electrolyte interphase (SEI) in Li-ion batteries: A molecular
+dynamics study,” Journal of Power Sources, 196, 8590 (2011).
+13. M. Wohlfahrt-Mehrens, C. V ogler, and J. Garche, “Aging mechanisms of lithium
+cathode materials,” Journal of Power Sources, 127, 58 (2004).
+14. J. Vetter, P. Nov´ak, M. R. Wagner, C. Veit, K.-C. M¨oller, J. O. Besenhard, M. Winter,
+M. Wohlfahrt-Mehrens, C. V ogler, and A. Hammouche, “Ageing mechanisms in
+lithium-ion batteries,” Journal of Power Sources, 147, 269 (2005).
+15. M. Broussely, P. Biensan, F. Bonhomme, P. Blanchard, S. Herreyre, K. Nechev, and
+R. J. Staniewicz, “Main aging mechanisms in Li ion batteries,” Journal of Power
+Sources, 146, 90 (2005).
+16. I. Buchberger, S. Seidlmayer, A. Pokharel, M. Piana, J. Hattendorff, P. Kudejova,
+R. Gilles, and H. A. Gasteiger, “Aging Analysis of Graphite/LiNi 1/3Mn1/3Co1/3O2
+Cells Using XRD, PGAA, and AC Impedance,” J. Electrochem. Soc., 162, A2737
+(2015).
+17. A. Funabiki, “Stage Transformation of Lithium-Graphite Intercalation Compounds
+Caused by Electrochemical Lithium Intercalation,” J. Electrochem. Soc., 146, 2443
+(1999).
+18. I. Bloom, B. Cole, J. Sohn, S. Jones, E. Polzin, V . Battaglia, G. Henriksen, C. Motloch,
+R. Richardson, T. Unkelhaeuser, D. Ingersoll, and H. Case, “An accelerated calendar
+and cycle life study of Li-ion cells,” Journal of Power Sources, 101, 238 (2001).
+19. J. Belt, V . Utgikar, and I. Bloom, “Calendar and PHEV cycle life aging of high-energy,
+lithium-ion cells containing blended spinel and layered-oxide cathodes,” Journal of
+Power Sources, 196, 10213 (2011).
+20. S. Bourlot, P. Blanchard, and S. Robert, “Investigation of aging mechanisms of high
+power Li-ion cells used for hybrid electric vehicles,”Journal of Power Sources, 196,
+6841 (2011).
+21. S. Grolleau, A. Delaille, H. Gualous, P. Gyan, R. Revel, J. Bernard,
+E. Redondo-Iglesias, and J. Peter, “Calendar aging of commercial graphite/LiFePO4
+cell – Predicting capacity fade under time dependent storage conditions,” Journal of
+Power Sources, 255, 450 (2014).
+22. M. Kassem, J. Bernard, R. Revel, S. P´elissier, F. Duclaud, and C. Delacourt, “Calendar
+aging of a graphite/LiFePO4 cell,” Journal of Power Sources, 208, 296 (2012).
+23. M. Kassem and C. Delacourt, “Postmortem analysis of calendar-aged
+graphite/LiFePO4 cells,” Journal of Power Sources, 235, 159 (2013).
+24. E. Sarasketa-Zabala, I. Gandiaga, L. M. Rodriguez-Martinez, and I. Villarreal, “Cal-
+endar ageing analysis of a LiFePO 4/graphite cell with dynamic model validations:
+Towards realistic lifetime predictions,”Journal of Power Sources, 272, 45 (2014).
+25. B. Stiaszny, J. C. Ziegler, E. E. Krauß, M. Zhang, J. P. Schmidt, and E. Ivers-Tiff ´ee,
+“Electrochemical characterization and post-mortem analysis of aged LiMn 2O4–
+NMC/graphite lithium ion batteries part II: Calendar aging,” Journal of Power
+Sources, 258, 61 (2014).
+26. M. Safari and C. Delacourt, “Aging of a Commercial Graphite/LiFePO 4 Cell,” J.
+Electrochem. Soc., 158, A1123 (2011).
+27. D. Li, D. L. Danilov, J. Xie, L. Raijmakers, L. Gao, Y . Yang, and P. H. Notten,
+“Degradation Mechanisms of C6/LiFePO4 Batteries: Experimental Analyses of Cal-
+endar Aging,” Electrochimica Acta, 190, 1124 (2016).
+28. H. Zheng, L. Tan, L. Zhang, Q. Qu, Z. Wan, Y . Wang, M. Shen, and H. Zheng,
+“Correlation between lithium deposition on graphite electrode and the capacity loss
+for LiFePO4/graphite cells,” Electrochimica Acta, 173, 323 (2015).
+29. S. K ¨abitz, J. B. Gerschler, M. Ecker, Y . Yurdagel, B. Emmermacher,
+D. Andr ´e, T. Mitsch, and D. U. Sauer, “Cycle and calendar life study of a
+graphite|LiNi1/3Mn1/3Co1/3O2 Li-ion high energy system. Part A: Full cell char-
+acterization,” Journal of Power Sources, 239, 572 (2013).
+30. M. Ecker, N. Nieto, S. K ¨abitz, J. Schmalstieg, H. Blanke, A. Warnecke, and
+D. U. Sauer, “Calendar and cycle life study of Li(NiMnCo)O2-based 18650 lithium-
+ion batteries,” Journal of Power Sources, 248, 839 (2014).
+31. V . Pop, H. J. Bergveld, P. P. L. Regtien, Op het Veld, J. H. G. , D. Danilov, and
+P. H. L. Notten, “Battery Aging and Its Inﬂuence on the Electromotive Force,” J.
+Electrochem. Soc., 154, A744 (2007).
+32. M. M. Doeff and Battery Cathodes, in: R. J. Brodd (Ed.), Batteries for Sustainability,
+Springer, New York, NY, 2013, pp. 5.
+33. P. Keil and A. Jossen, “Charging Protocols for Lithium-Ion Batteries and their Impact
+on Cycle Life - An Experimental Study with Different 18650 High-Power Cells,”
+Journal of Energy Storagein press.
+34. P. Keil and A. Jossen, Aging of Lithium-Ion Batteries in Electric Vehicles: Impact of
+Regenerative Braking, Electric Vehicle Symposium (EVS28), Goyang, Korea, 2015.
+35. I. Bloom, A. N. Jansen, D. P. Abraham, J. Knuth, S. A. Jones, V . S. Battaglia, and
+G. L. Henriksen, “Differential voltage analyses of high-power, lithium-ion cells,”
+Journal of Power Sources, 139, 295 (2005).
+36. H. M. Dahn, A. J. Smith, J. C. Burns, D. A. Stevens, and J. R. Dahn, “User-Friendly
+Differential V oltage Analysis Freeware for the Analysis of Degradation Mechanisms
+in Li-Ion Batteries,” Journal of the Electrochemical Society, 159, A1405 (2012).
+37. M. Dubarry, C. Truchot, and B. Y . Liaw, “Synthesize battery degradation modes via
+a diagnostic and prognostic model,” Journal of Power Sources, 219, 204 (2012).
+38. K. Honkura and T. Horiba, “Study of the deterioration mechanism of LiCoO2/graphite
+cells in charge/discharge cycles using the discharge curve analysis,”Journal of Power
+Sources, 264, 140 (2014).
+39. A. K. Sleigh, J. J. Murray, and W. R. McKinnon, “Memory effects due to phase con-
+version and hysteresis in Li/LixMnO2 cells,” Electrochimica Acta, 36, 1469 (1991).
+40. W. Dreyer, C. Guhlke, and R. Huth, “The behavior of a many-particle electrode in a
+lithium-ion battery,” Physica D: Nonlinear Phenomena, 240, 1008 (2011).
+41. M. Hess, Kinetics and stage transitions of graphite for lithium-ion batteries,Z ¨urich,
+ETH / PSI, 2013.
+42. A. Barai, W. D. Widanage, J. Marco, A. McGordon, and P. Jennings, “A study of the
+open circuit voltage characterization technique and hysteresis assessment of lithium-
+ion cells,” Journal of Power Sources, 295, 99 (2015).
+43. D. Manka and E. Ivers-Tiff ´ee, “Electro-optical measurements of lithium
+intercalation/de-intercalation at graphite anode surfaces,” Electrochimica Acta, 186,
+642 (2015).
+44. Y . Lee, B. Son, J. Choi, J. H. Kim, M.-H. Ryou, and Y . M. Lee, “Effect of back-side-
+coated electrodes on electrochemical performances of lithium-ion batteries,”Journal
+of Power Sources, 275, 712 (2015).
+45. H. He, C. Huang, C.-W. Luo, J.-J. Liu, and Z.-S. Chao, “Dynamic study of Li
+intercalation into graphite by in situ high energy synchrotron XRD,”Electrochimica
+Acta, 92, 148 (2013).
+46. Y . Itou and Y . Ukyo, “Performance of LiNiCoO2 materials for advanced lithium-ion
+batteries,” Journal of Power Sources, 146, 39 (2005).
+47. W.-J. Zhang, “Structure and performance of LiFePO4 cathode materials: A review,”
+Journal of Power Sources, 196, 2962 (2011).
+48. C. Masquelier, S. Patoux, C. Wurm, and M. Morcrette, Polyanion-Based Positive
+Electrode Materials, in: G.-A. Nazri and G. Pistoia (Eds.), Lithium Batteries, Springer
+US, Boston, MA, 2003, pp. 445.
+49. M. Broussely, S. Herreyre, P. Biensan, P. Kasztejna, K. Nechev, and R. Staniewicz,
+“Aging mechanism in Li ion cells and calendar life predictions,” Journal of Power
+Sources, 97–98, 13 (2001).
+50. H. J. Ploehn, P. Ramadass, and R. E. White, “Solvent Diffusion Model for Aging of
+Lithium-Ion Battery Cells,” J. Electrochem. Soc., 151, A456 (2004).
+51. M. Winter, G. H. Wrodnigg, J. O. Besenhard, W. Biberacher, and P. Nov´ak, “Dilato-
+metric Investigations of Graphite Electrodes in Nonaqueous Lithium Battery Elec-
+trolytes,”J. Electrochem. Soc., 147, 2427 (2000).
+52. B. Rieger, S. Schlueter, S. V . Erhard, J. Schmalz, G. Reinhart, and A. Jossen, “Multi-
+scale investigation of thickness changes in a commercial pouch type lithium-ion
+battery,” Journal of Energy Storage, 6, 213 (2016).
+53. I. Laresgoiti, S. K ¨abitz, M. Ecker, and D. U. Sauer, “Modeling mechanical degra-
+dation in lithium ion batteries during cycling: Solid electrolyte interphase fracture,”
+Journal of Power Sources, 300, 112 (2015).
+54. R. Deshpande, M. Verbrugge, Y .-T. Cheng, J. Wang, and P. Liu, “Battery Cycle Life
+Prediction with Coupled Chemical Degradation and Fatigue Mechanics,” Journal of
+the Electrochemical Society, 159, A1730 (2012).
