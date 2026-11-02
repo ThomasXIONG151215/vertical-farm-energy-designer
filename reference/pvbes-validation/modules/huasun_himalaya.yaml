@@ -1,32 +1,54 @@
-# 华晟 Himalaya HJT 组件 - HJT 技术锚点
-# 溯源规则见 readme.md。测试代码不得内联本文件数值。
-name: Huasun Himalaya HSN-212-B132 (730-770 W, 2000 V HJT)
-technology: HJT (heterojunction, G12 叠片, 双面双玻)
-p_mp_w: 770
-v_mp_v: null
-i_mp_a: null
-v_oc_v: 50.46
-i_sc_a: 19.33
+name: huasun_himalaya
+technology: hjt_n_type
+p_mp_w: 730
+v_mp_v: 42.32
+i_mp_a: 17.26
+v_oc_v: 50.37
+i_sc_a: 18.35
 n_s: 132
 gamma_pmp_per_kelvin: -0.0024
-eta_stc: 0.248
-area_m2: 3.106
-bifaciality: null
+eta_stc: 0.235
+area_m2: 3.1068
+bifaciality: 0.90
+noct_c: 44
 degradation_first_year_pct: 1.0
-degradation_annual_pct: 0.3
+degradation_annual_pct: 0.30
 warranty_years: 30
 source:
-  url: https://www.pv-magazine.com/2025/11/28/huasun-unveils-770-w-2000-v-heterojunction-solar-module/
-  accessed: "2026-11-01"
-  method: table_value
+  url: reference/pvbes-validation/raw/datasheets/HSN-210-B132DS(700-730)_CN_20250814.pdf
+  accessed: 2026-11-02
+  method: datasheet STC table page 2, DS730 tier, pymupdf text layer
   note: >-
-    全部数值在页面上逐字核对一致。共 8 个版本，功率 730-770 W（p_mp_w 记最高
-    版本）；v_oc 范围 49.66-50.46 V、i_sc 范围 18.62-19.33 A（均记最高版本）；
-    效率范围 23.5-24.8%（eta_stc 记上限 24.8%，与 770 W/3.106 m2 = 24.8% 自洽）。
-    最大功率温度系数 -0.24 %/degC。首年衰减 1%，此后每年上限 0.3%，30 年保
-    ≥90.3%。area_m2 由页面尺寸 2384 x 1303 mm 计算得出（computed，边框 33 mm、
-    重 36.5 kg）。v_mp、i_mp 页面未给出。双面双玻结构但双面率百分比未公布。
-    2026-11-01 补充：全文八档参数表逐档复核（730/735/740/745/750/755/760/
-    770 W），各档 v_oc 49.66-50.46 V、i_sc 18.62-19.33 A 区间连续无跳变，
-    主条目取顶档成立。v_mp/i_mp 需官网 JS 渲染规格表，见 raw/fetch_list.md。
+    Official Huasun datasheet (user-provided). Tier DS730 of the 700-730 W
+    seven-tier HSN-210-B132 (Chinese edition). Self-consistency:
+    42.32 V x 17.26 A = 730.4 W; 730 W / 3.1059 m2 active area = 23.50 %
+    eta. Bifaciality 90 +/-5 %. NOCT 44 +/-2 C (datasheet; NOT the legacy
+    modeling default 45). Temperature coefficients: gamma_Pmax -0.24 %/C,
+    beta_Voc -0.22 %/C, alpha_Isc +0.04 %/C. BNPI row 818 W @ 135 W/m2
+    confirms ~90 % bifacial gain. Full seven-tier table in
+    context_from_source below. This is the HSN-210 neighbor tier of the
+    Himalaya 212 series (same B132 platform, 132 half-cells 6x22,
+    2384x1303x33 mm, 36.5 kg, 2.0 mm dual glass, DC 1500 V); preset name
+    stays "huasun_himalaya" (series-level name). area_to_power =
+    3.1068/0.730 = 4.256 m2/kWp. NOCT condition row DS730: 557 W, 40.41 V,
+    13.79 A, 48.08 V, 14.67 A.
+context_from_source:
+  seven_tier_table_stc:
+    # tier: p_mp_w, v_mp_v, i_mp_a, v_oc_v, i_sc_a
+    DS700: [700, 41.78, 16.76, 49.77, 17.81]
+    DS705: [705, 41.84, 16.86, 49.85, 17.92]
+    DS710: [710, 41.90, 16.96, 49.95, 18.03]
+    DS715: [715, 41.98, 17.04, 50.05, 18.12]
+    DS720: [720, 42.10, 17.12, 50.16, 18.20]
+    DS725: [725, 42.23, 17.18, 50.27, 18.26]
+    DS730: [730, 42.32, 17.26, 50.37, 18.35]
+  bnpi_row_ds730: {p_mp_w: 818, v_mp_v: 42.47, i_mp_a: 19.28, v_oc_v: 50.54, i_sc_a: 20.58}
+  noct_row_ds730: {p_mp_w: 557, v_mp_v: 40.41, i_mp_a: 13.79, v_oc_v: 48.08, i_sc_a: 14.67}
+  superseded_212_top_tier_from_research:
+    note: >-
+      Earlier research-sourced entry (HSN-212-B132 770 W top tier,
+      v_oc 50.46 / i_sc 19.33, eta 0.248, area 3.106) superseded by this
+      datasheet; kept here for traceability. The 770 W tier itself was
+      verified against the pv-magazine 2025-11-28 article, but v_mp/i_mp
+      were never published for it.
 status: verified

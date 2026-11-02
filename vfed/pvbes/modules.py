@@ -160,37 +160,55 @@ MODULES: Dict[str, ModuleSpec] = {
         degradation=0.004,
     ),
     # huasun_himalaya -- HJT anchor.  YAML status: verified
-    #   (pv-magazine 2025-11-28, 770 W / 2000 V HJT page).  v_mp / i_mp not
-    #   published -> None -> SDM-incomplete on purpose.  area_to_power
-    #   computed: 3.106 m2 / 0.770 kWp.  degradation = 0.3 %/yr (annual
-    #   warranty limit; the separate 1.0 % first-year loss is not
-    #   representable in the single-coefficient (1-deg)**year model).
-    #   NOCT 45 = VFED modeling default.  G4: identity curve (TODO anchor).
+    #   (official datasheet HSN-210-B132 CN 20250814, user-provided
+    #   2026-11-02; seven tiers 700-730 W).  DS730 tier used:
+    #   42.32 V x 17.26 A = 730.4 W; 730 W / 3.1059 m2 = 23.5 % eta.
+    #   Bifaciality 0.90 (datasheet 90 % +/-5).  NOCT 44 (datasheet
+    #   44 +/-2 C -- the first preset whose NOCT comes from a datasheet
+    #   rather than the modeling default).  degradation = 0.3 %/yr
+    #   (annual warranty limit; the separate 1.0 % first-year loss is
+    #   not representable in the single-coefficient (1-deg)**year model).
+    #   area_to_power = 3.1068 / 0.730 = 4.256 m2/kWp.
+    #   G4: identity curve (TODO anchor).  G5: bifaciality reserved.
     "huasun_himalaya": ModuleSpec(
-        eta_pv=0.248,
-        area_to_power=3.106 / 0.770,
-        I_sc_stc=19.33,
-        V_oc_stc=50.46,
-        I_mp_stc=None,
-        V_mp_stc=None,
+        eta_pv=0.235,
+        area_to_power=3.1068 / 0.730,
+        I_sc_stc=18.35,
+        V_oc_stc=50.37,
+        I_mp_stc=17.26,
+        V_mp_stc=42.32,
         N_s=132,
         gamma_pmp=-0.0024,
-        NOCT=45.0,
+        NOCT=44.0,
         degradation=0.3 / 100.0,
+        bifaciality=0.90,
     ),
-    # longi_himo_x10 -- BC anchor.  YAML status: verified (pv-magazine
-    #   2026-03-10, fire-resistant rooftop page).  STC electrical points
-    #   (v_oc / i_sc / v_mp / i_mp) and the degradation curve not published
-    #   -> None -> SDM-incomplete.  n_s = 108 (half-cell count per YAML
-    #   note).  eta 0.248 (peak); area_to_power computed 1/eta.
-    #   NOCT 45 = VFED modeling default.  G4: identity curve (TODO anchor).
-    "longi_himo_x10": ModuleSpec(
+    # longi_himo9_670m -- BC anchor, RENAMED from longi_himo_x10
+    #   (Hi-MO 9 and Hi-MO X10 are different generations on the same BC
+    #   platform; the datasheet at hand is Hi-MO 9, X10 STC points were
+    #   never published -- old X10 data preserved in the YAML
+    #   context_from_source.superseded_x10_entry).  YAML status: verified
+    #   (official datasheet Hi-MO 9 Edge LR8-66HYD 630-670 M EN V4.0,
+    #   user-provided 2026-11-02; Edgeclear / Sea-Shield variants share
+    #   the electrical table).  670 tier used: 41.38 V x 16.19 A =
+    #   669.9 W; 670 W / 2.7012 m2 = 24.8 % eta.  Bifaciality 0.75
+    #   (datasheet 75 % +/-5).  NOCT 45 (datasheet 45 +/-2 C).
+    #   degradation = 0.35 %/yr (2-30 yr linear warranty limit; the
+    #   1.0 % first-year loss not representable in the single-coefficient
+    #   model).  area_to_power = 2.7012 / 0.670 = 4.031 m2/kWp.
+    #   G4: identity curve (TODO anchor).  G5: bifaciality reserved.
+    "longi_himo9_670m": ModuleSpec(
         eta_pv=0.248,
-        area_to_power=1.0 / 0.248,
-        N_s=108,
+        area_to_power=2.7012 / 0.670,
+        I_sc_stc=16.86,
+        V_oc_stc=50.12,
+        I_mp_stc=16.19,
+        V_mp_stc=41.38,
+        N_s=132,
         gamma_pmp=-0.0026,
         NOCT=45.0,
-        degradation=None,
+        degradation=0.35 / 100.0,
+        bifaciality=0.75,
     ),
     # microquanta_bipv -- perovskite-silicon tandem BIPV anchor.  YAML
     #   status: verified (pv-magazine 2026-06-24).  Make-to-order module:

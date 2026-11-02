@@ -139,15 +139,18 @@ class TestWiredNonDefaultValues:
         # A user YAML that names a module without STC points (realistic
         # hand-written YAML; presets carry no pv section at all) must fail
         # fast instead of mixing in the legacy jinko defaults.
+        # 2026-11-02: huasun/longi presets are datasheet-complete now, so
+        # microquanta (make-to-order, no published points) is the
+        # remaining incomplete case.
         d = _preset_dict()
-        d["pv"] = {"module": "huasun_himalaya"}
+        d["pv"] = {"module": "microquanta_bipv"}
         with pytest.raises(ValueError, match="refusing to mix"):
             DesignProject.from_dict(d)
 
     def test_module_complete_override_combination_accepted(self):
-        # Explicit user-supplied STC points complete the huasun spec merge;
-        # spec-sourced fields materialize (compared against the library,
-        # not inline numbers), user-supplied points win.
+        # Explicit user-supplied STC points override the huasun spec;
+        # the remaining spec-sourced fields materialize (compared against
+        # the library, not inline numbers), user-supplied points win.
         from vfed.pvbes.modules import resolve_module
 
         spec = resolve_module("huasun_himalaya")
@@ -166,6 +169,30 @@ class TestWiredNonDefaultValues:
         assert p.pv.V_oc_stc == spec.V_oc_stc
         assert p.pv.I_mp_stc == 18.63  # explicit user value wins
         assert p.pv.V_mp_stc == 41.38
+
+    def test_module_datasheet_complete_preset_materializes_all_points(self):
+        # 2026-11-02 datasheet entry: naming the now-complete huasun
+        # preset with NO other pv keys materializes the full SDM point
+        # set from the library (no refusal, no jinko leftovers).
+        from vfed.pvbes.modules import resolve_module
+
+        spec = resolve_module("huasun_himalaya")
+        d = _preset_dict()
+        d["pv"] = {"module": "huasun_himalaya"}
+        p = DesignProject.from_dict(d)
+        for f in (
+            "eta_pv",
+            "area_to_power",
+            "N_s",
+            "I_sc_stc",
+            "V_oc_stc",
+            "I_mp_stc",
+            "V_mp_stc",
+            "gamma_pmp",
+            "NOCT",
+            "degradation",
+        ):
+            assert getattr(p.pv, f) == getattr(spec, f), f
 
     def test_module_swap_in_full_round_trip_dump_keeps_explicit_values(self):
         # to_dict() emits the full electrical field set as explicit values,

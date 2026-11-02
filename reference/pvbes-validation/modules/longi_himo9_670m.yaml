@@ -1,0 +1,59 @@
+name: longi_himo9_670m
+technology: bc_n_type
+p_mp_w: 670
+v_mp_v: 41.38
+i_mp_a: 16.19
+v_oc_v: 50.12
+i_sc_a: 16.86
+n_s: 132
+gamma_pmp_per_kelvin: -0.0026
+eta_stc: 0.248
+area_m2: 2.7012
+bifaciality: 0.75
+noct_c: 45
+degradation_first_year_pct: 1.0
+degradation_annual_pct: 0.35
+warranty_years: 30
+source:
+  url: reference/pvbes-validation/raw/datasheets/Hi_MO_9_Edge_LR_8_66_HYD_630_670_M_V4_0_EN.pdf
+  accessed: 2026-11-02
+  method: datasheet STC table page 2, 670 W tier, pymupdf text layer
+  note: >-
+    Official LONGi Hi-MO 9 LR8-66HYD 630-670 M datasheet (user-provided,
+    Edge variant; Edgeclear and Sea-Shield variants carry identical
+    electrical tables). Tier 670: self-consistency 41.38 V x 16.19 A =
+    669.9 W; 670 W / 2.7012 m2 = 24.8 % eta. Bifaciality 75 +/-5 %.
+    NOCT 45 +/-2 C. Temperature coefficients: alpha_Isc +0.050 %/C,
+    beta_Voc -0.200 %/C, gamma_Pmax -0.260 %/C. Degradation curve
+    100 / 99 (1 y) / 95.85 (10 y) / 92.35 (20 y) / 88.85 (30 y).
+    132 half-cells (6x22), 2382x1134x30 mm (Edgeclear 2381x1154x26).
+    area_to_power = 2.7012/0.670 = 4.031 m2/kWp. NOCT row 645 W tier:
+    491.5 W, 47.16 V, 13.22 A, 38.85 V, 12.65 A. Bifacial gain table
+    (645 W basis): 5-25 % gain -> 677-808 W, v_mp flat 40.88-40.98,
+    i_mp 16.57 -> 19.73. Full nine-tier table in context_from_source.
+    PRESET RENAMED from longi_himo_x10: Hi-MO 9 and Hi-MO X10 are
+    different generations on the same BC platform; the earlier entry
+    targeted X10 (fire-resistant 108 half-cell 580-630 W) whose STC
+    points were never published. Old X10 data preserved in
+    context_from_source.superseded_x10_entry.
+context_from_source:
+  nine_tier_table_stc:
+    # tier: p_mp_w, v_mp_v, i_mp_a, v_oc_v, i_sc_a, eta_pct
+    630W: [630, 40.58, 15.53, 49.32, 16.22, 23.3]
+    635W: [635, 40.65, 15.63, 49.42, 16.31, 23.5]
+    640W: [640, 40.72, 15.72, 49.52, 16.41, 23.7]
+    645W: [645, 40.81, 15.82, 49.61, 16.50, 23.9]
+    650W: [650, 40.90, 15.91, 49.71, 16.59, 24.1]
+    655W: [655, 40.98, 16.00, 49.81, 16.68, 24.3]
+    660W: [660, 41.08, 16.08, 49.91, 16.77, 24.4]
+    665W: [665, 41.23, 16.13, 50.01, 16.81, 24.6]
+    670W: [670, 41.38, 16.19, 50.12, 16.86, 24.8]
+  superseded_x10_entry:
+    note: >-
+      Previous preset longi_himo_x10 targeted Hi-MO X10 fire-resistant
+      (108 half-cell, 580-630 W, p_mp 630, v_oc null-set, n_s 108,
+      eta 0.248, first-year 1 % + 0.35 %/yr from the 640-670 W anti-dust
+      variant report 2025-03-06). X10 STC electrical points were never
+      published; datasheet at hand is Hi-MO 9. X10 tier data remains in
+      fetch_list.md (low priority).
+status: verified

@@ -54,10 +54,16 @@ LEGACY_FIELDS = (
 
 NON_DEFAULT_MODULES = (
     "huasun_himalaya",
-    "longi_himo_x10",
+    "longi_himo9_670m",
     "microquanta_bipv",
     "onyx_asi_glass",
 )
+
+# 2026-11-02 datasheet entry: huasun (HSN-210-B132 DS730) and longi
+# (Hi-MO 9 670 M) now carry complete SDM point sets; the remaining two
+# are still anchor-pending and must fail fast on construction.
+SDM_COMPLETE_NON_DEFAULT = ("huasun_himalaya", "longi_himo9_670m")
+SDM_INCOMPLETE_MODULES = ("microquanta_bipv", "onyx_asi_glass")
 
 
 def _ref_yaml(name: str) -> dict:
@@ -173,13 +179,22 @@ class TestRegistryMatchesReferenceYaml:
         else:
             assert spec.area_to_power == pytest.approx(1.0 / y["eta_stc"], rel=1e-9)
 
-        # NOCT: VFED modeling default everywhere (not a yaml datasheet point)
-        assert spec.NOCT == legacy_cfg.NOCT
+        # NOCT: datasheet value where the yaml publishes one (noct_c,
+        # e.g. huasun 44 +/-2 C); otherwise the VFED modeling default
+        # carried by the legacy PVConfig.
+        if y.get("noct_c") is not None:
+            assert spec.NOCT == pytest.approx(y["noct_c"], rel=1e-12), name
+        else:
+            assert spec.NOCT == legacy_cfg.NOCT
         # G4: no validated curve exists yet -> identity everywhere
         assert spec.eta_rel_nodes is None
-        # G5 reserved field: yaml leaves bifaciality null for all entries
-        assert y["bifaciality"] is None
-        assert spec.bifaciality is None
+        # G5 reserved field: spec mirrors the yaml (datasheet bifaciality
+        # for huasun 0.90 / longi 0.75; null = not published).
+        y_bif = y["bifaciality"]
+        if y_bif is None:
+            assert spec.bifaciality is None
+        else:
+            assert spec.bifaciality == pytest.approx(y_bif, rel=1e-12), name
 
 
 # ---------------------------------------------------------------------------
@@ -231,18 +246,32 @@ class TestPVSystemModuleResolution:
         b = PVSystem(module="jinko_jkm580n").calculate_pv_output(w, 100.0)
         assert np.array_equal(a, b)
 
-    @pytest.mark.parametrize("name", NON_DEFAULT_MODULES)
+    @pytest.mark.parametrize("name", SDM_INCOMPLETE_MODULES)
     def test_partial_reference_modules_fail_fast(self, name):
-        """The four non-default presets have null STC electrical points in
-        the reference YAMLs (v_mp/i_mp unpublished etc.), so constructing a
-        runnable PVSystem from them must fail fast instead of silently
-        mixing leftover values.  Update alongside the YAMLs when the
-        missing anchors land."""
+        """Modules whose reference YAML still has null STC electrical
+        points (microquanta make-to-order, onyx power-density-only) must
+        fail fast on construction instead of silently mixing leftover
+        values.  Update alongside the YAMLs when the missing anchors
+        land."""
         with pytest.raises(ValueError) as ei:
             PVSystem(module=name)
         msg = str(ei.value)
         assert msg.isascii()
         assert name in msg
+
+    @pytest.mark.parametrize("name", SDM_COMPLETE_NON_DEFAULT)
+    def test_complete_reference_modules_construct_and_produce(self, name):
+        """2026-11-02 datasheet entry: huasun / longi presets now carry a
+        full SDM point set and must construct and produce finite,
+        non-negative output over synthetic weather."""
+        pv = PVSystem(module=name)
+        spec = resolve_module(name)
+        assert pv.I_mp_stc == spec.I_mp_stc
+        assert pv.V_mp_stc == spec.V_mp_stc
+        out = pv.calculate_pv_output(_synthetic_weather(), 100.0)
+        assert np.all(np.isfinite(out))
+        assert np.all(out >= 0.0)
+        assert out.sum() > 0.0
 
 
 # ---------------------------------------------------------------------------

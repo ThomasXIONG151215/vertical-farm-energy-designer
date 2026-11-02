@@ -62,7 +62,8 @@ status: verified | partial | paywalled | inaccessible | to_follow
 | `keil2016_page4/6/7/8.png` | 论文图页 200 dpi 渲染（图 2 在 page4） | `anchors/battery_aging.yaml` figure2_digitized |
 | `cec_modules.csv`（git-ignored，6.3 MB） | NREL SAM CEC 组件库 develop 分支（版本 2026.7.3），URL https://raw.githubusercontent.com/NREL/SAM/develop/deploy/libraries/CEC%20Modules.csv | `modules/jinko_jkm580n.yaml` cec_72hl4_neighbor |
 | `sandia_modules.csv`（git-ignored，195 KB） | NREL SAM Sandia 组件库同源 | 备用组件参数来源 |
-| `fetch_list.md` | 需人工浏览器下载的 3 份 datasheet 清单（目标字段逐项列出） | modules/huasun、longi、jinko 的补齐路径 |
+| `fetch_list.md` | datasheet 取数清单（2026-11-02 更新：huasun/longi 已解决，jinko 仍待直接复核） | modules/huasun、longi、jinko 的补齐路径 |
+| `datasheets/`（git-ignored，8 文件） | 2026-11-02 用户人工提供：LONGi Hi-MO 9 三变体 PDF（Edge 2.8MB / Edgeclear 51.8MB / Sea-Shield 3.2MB）、Huasun HSN-210-B132 中文版 PDF + HSN-210R HTML 壳（无数据）、Jinko 三份邻档 PDF（66HL4M-BDV-Z4C1 / 48HL4M-DV / 48HL6M-T） | `modules/huasun_himalaya.yaml`（主条目 DS730）、`modules/longi_himo9_670m.yaml`（主条目 670 档）、`modules/jinko_jkm580n.yaml`（datasheet_66hl4m_neighbor 旁证） |
 
 ## 已知网络限制（2026-11-01 建库时）
 
@@ -74,4 +75,7 @@ Wayback Machine 对 PDF 抓取持续返回 429。因此 NREL/OSTI 托管的
 组件库即由此获得（2026-11-01）。
 
 Huasun / LONGi / Jinko 官网产品规格表为 JS 渲染页面，webfetch 只拿到
-空壳，datasheet 数值需人工下载（见 `raw/fetch_list.md`）。
+空壳。2026-11-02 用户人工下载放入 reference/ 根（后移入
+`raw/datasheets/`），7 份 PDF 全部可解析：huasun 与 longi 预设自此
+datasheet-complete（唯一带 datasheet NOCT 的预设是 huasun 44±2°C，
+其余 NOCT=45 仍是建模默认）。

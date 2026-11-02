@@ -48,3 +48,25 @@ context_from_source:
       72/78（52.5/57.34 = 0.915 vs 72/78 = 0.923，趋势一致），主条目数值
       因此获得旁证但仍非直接复核。78HL4-BDV 行在 CEC 库中不存在。gamma
       -0.295%/degC 与调研近似值 -0.30 %/K 一致（差 <2%）。
+  datasheet_66hl4m_neighbor:
+    file: raw/datasheets/JKM625-650N-66HL4M-BDV-Z4C1.pdf
+    accessed: "2026-11-02"
+    stc_table:
+      # tier: v_mp_v, i_mp_a, v_oc_v, i_sc_a, eta_pct
+      625W: [40.88, 15.29, 49.28, 16.14, 23.1]
+      650W: [41.58, 15.64, 50.28, 16.44, 24.1]
+    bnpi_650w: [41.59, 17.24, 50.26, 18.15]  # v_mp, i_mp, v_oc, i_sc; 717 W = 1.103x650
+    gamma_pmp_per_kelvin: -0.0029
+    beta_voc_per_kelvin: -0.0025
+    alpha_isc_per_kelvin: 0.00045
+    bifaciality_pmax: 0.80  # phi_Pmax 80% +/-5%
+    dimensions_mm: [2382, 1134, 30]
+    n_s: 132  # 66 half-cells x2
+    note: >-
+      2026-11-02 用户提供的官方 datasheet（同 BDV 平台 66HL4M 邻档，非主条目
+      78HL4）。串数交叉验证：66HL4M v_oc 49.28-50.28 V 对 CEC 72HL4 的 52.5 V
+      （66/72=0.917 vs 49.28/52.5=0.939 同向）；对主条目 78HL4 的 57.34 V：
+      78/66 x 49.28 = 58.25 vs 57.34（差 1.6%，同族量级）。gamma -0.29 %/degC、
+      alpha +0.045 %/degC、beta -0.25 %/degC 均与主条目调研值同量级。
+      BNPI 717/650 = 1.103 与 phi_Pmax 80% 增益一致。主条目 STC 点仍待
+      78HL4-BDV 官方规格表直接复核（见 fetch_list.md）。
