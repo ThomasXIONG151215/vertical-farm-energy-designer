@@ -14,6 +14,21 @@ noct_c: 45
 degradation_first_year_pct: 1.0
 degradation_annual_pct: 0.35
 warranty_years: 30
+# G4 low-irradiance relative efficiency nodes (eta(1000)=1 anchor).
+# Generated offline 2026-11-02 by scripts/generate_eta_rel.py: De Soto/CEC
+# single-diode fit to the datasheet STC five-point + alpha_sc +0.050 %/K,
+# beta_voc -0.200 %/K, gamma_pmp -0.0026 (all same datasheet). STC
+# reproduction -0.082 %. CAVEAT: no public BC/HPBC module-level eta(G)
+# measurement exists (anchors/low_irradiance.yaml
+# gap_bc_hpbc_no_public_data) -- this is a CEC-pipeline extrapolation,
+# cross-kernel validation pending. Accounting rule as huasun yaml.
+eta_rel_nodes:
+  - [100.0, 0.9144]
+  - [200.0, 0.9471]
+  - [400.0, 0.9758]
+  - [600.0, 0.9892]
+  - [800.0, 0.9963]
+  - [1000.0, 1.0]
 source:
   url: reference/pvbes-validation/raw/datasheets/Hi_MO_9_Edge_LR_8_66_HYD_630_670_M_V4_0_EN.pdf
   accessed: 2026-11-02

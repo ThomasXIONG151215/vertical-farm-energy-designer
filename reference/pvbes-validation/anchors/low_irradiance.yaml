@@ -60,3 +60,145 @@ entries:
         定性陈述（无数值），供弱光模型方向性校验：a-Si 的 eta(G) 低辐照段
         相对 c-Si 更平缓。
     status: verified
+  # ── 替代仿真/验证路径调研（2026-11-02，用户指令"看有没有别的仿真和验证路径"）──
+  sapm_excluded_frozen_library:
+    description: Sandia SAPM（King 2004）路径排除——模块库 2014 年冻结、系数不可反推
+    source:
+      url: https://github.com/NatLabRockies/SAM/commit/fd4d0fb9ec3c700bc108e46bed96614f7b0ae3f0
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        SAM Sandia Modules.csv 最后一次内容更新 = 2014-10-21（commit
+        fd4d0fb "Update sandia module library 10/17/2014"，此后仅
+        改名/重组/表头修复）。TOPCon（2019+ 量产）/HJT（2020+）/HPBC
+        （2022+）全部晚于冻结，不可能在库。本地实证：raw/sandia_modules.csv
+        525 行组件 vintage 1997-2009，jinko/huasun/longi/topcon/hjt/tiger
+        全部零命中。且 SAPM 30+ 系数须实验标定，无法从 datasheet STC
+        五点反推（pvlib sapm 文档明说 CEC 库不含这些参数）。
+    status: verified
+  cec_single_diode_offline_path:
+    description: CEC 单二极管（De Soto 2004 / pvlib calcparams_cec）离线生成 eta_rel 节点表——TOPCon/BC 首选增强路径
+    source:
+      url: https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.calcparams_cec.html
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        输入 = STC 五点 + 温度系数（VFED 三预设全已有）+ 晶硅默认
+        EgRef=1.121 eV / dEgdT=-0.0002677 1/K。管线：STC 五点反推
+        (I_L_ref, I_o_ref, a_ref, R_s, R_sh_ref)（Dobos 2012 反推算法，
+        SAM 即用此批量生成 CEC 系数，commit cba319d 2026 版改
+        Python+IPOPT）→ 25 degC 下扫 G=100-1000 采样 eta_rel → 写
+        eta_rel_nodes。运行时内核零改动。限制：恒定 Rsh 的单二极管对
+        高 Rsh 组件（HJT）低光端偏差偏大（见 pvsyst_v6_rsh_path）。
+    status: verified
+  pvsyst_v6_rsh_offline_path:
+    description: PVsyst v6 单二极管 Rsh(G)（pvlib calcparams_pvsyst）——HJT 首选内核
+    source:
+      url: https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.calcparams_pvsyst.html
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        Rsh(G) = Rsh_ref + (Rsh_0 - Rsh_ref)*exp(-5.5*G/G_ref)，Rsh 随
+        辐照降低而增大，正是修正 HJT 高 Rsh 低光行为的结构。源文献
+        Sauer/Roessler/Hansen 2015 IEEE JPV 5(1)、Mermoud 2013
+        （PV Performance Modeling Workshop）、Mermoud & Lejeune 2010
+        （25th EUPVSEC）。JPV 2025（DOI 10.1109/jphotov.2025.3554338，
+        OpenAlex 可达）给出 IEC 61853-1 矩阵→PVsyst 参数非迭代反推法，
+        说明"矩阵→PVsyst 参数→eta_rel 节点"是学界认可的正规化管线。
+    status: verified
+  adr_efficiency_model:
+    description: ADR 效率模型（Driesse 2021，pvlib fit_pvefficiency_adr）——填表友好的未来内核候选
+    source:
+      url: https://pvlib-python.readthedocs.io/en/stable/gallery/adr-pvarray/plot_simulate_fast.html
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        五参数（k_a, k_d, tc_d, k_rs, k_rsh）解析 eta(G,T) 模型，天然以
+        IEC 61853 矩阵为拟合输入。官方示例演示的正是 VFED 需要的模式：
+        calcparams_pvsyst 生成 100-1100 W/m2 x 0-75 degC P 矩阵 →
+        fit_pvefficiency_adr 拟合 → 闭式计算；对 PVsyst 模型输出拟合
+        RMS 0.00096、加速 8823 倍，差异"远小于实测典型不确定度"。
+        源文献 Driesse/Theristis/Stein 2021 IEEE JPV 11(2) DOI
+        10.1109/JPHOTOV.2020.3045677；SAND2020-3877 DOI 10.2172/1615179
+        （OSTI 本网不可达）。SAM 2023-10 commit 819b757 已在 UI 加
+        "IEC61853 module model" 选项。
+    status: verified
+  iec_61853_matrix_semantics:
+    description: IEC 61853-1 P(G,T) 矩阵是 eta_rel_nodes 的语义标准；公开数据零散
+    source:
+      url: https://doi.org/10.1051/epjpv/2022032
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        标准规定 100-1100 W/m2 x 多温度点 P 矩阵，25 degC 行归一化即
+        eta_rel(G)。标准文本收费。最贴近"商用晶硅新组件实测"的公开文献
+        = Monokroussos et al. 2023 EPJ PV 14（61853-1/-2 实测并量化对
+        年发电影响）：epj-pv.org 全文页本机 403，仅 doi.org 元数据可达，
+        数值待补。round-robin 比对：EUPVSEC 2021 DOI
+        10.4229/eupvsec20212021-6do.6.4。
+    status: partial
+  huld_jrc_log_polynomial:
+    description: Huld/JRC 对数多项式（PVGIS 内核）——备选解析形式，系数只按技术族公开
+    source:
+      url: https://re.jrc.ec.europa.eu/api/v5_3/PVcalc?lat=31.2&lon=121.5&peakpower=1&loss=14&outputformat=json
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        eta_rel = 1 + k1*ln(G') + k2*(ln(G'))^2 + k3*T'*ln(G')...（Huld
+        et al. 2011 Solar Energy 85, DOI 10.1016/j.solmat.2011.07.026，
+        正文闭源）。PVGIS API 本网可达：上海 1 kWp c-Si 年发电
+        1171.8 kWh，损失分解 l_aoi=-3.31% / l_spec≈0 / l_tg=-6.5%，
+        可作 VFED 损失账本的交叉核对参照系。缺点：无新型号级系数。
+    status: verified
+  accounting_rule_iam_spectral:
+    description: 会计准则——eta_rel_nodes 只含垂直入射 AM1.5 纯 G 依赖；IAM/光谱为未来正交项
+    source:
+      url: https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.iam.martin_ruiz.html
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        低辐照时段叠加大入射角（晨昏）与阴天光谱（散射富蓝）。若把室外
+        观测"弱光损失"整包塞进 eta_rel 会与未来 IAM/光谱模型重复扣账。
+        IEC 61853-1 矩阵在垂直入射、AM1.5 下测得，天然只含纯 G 依赖。
+        约定：eta_rel_nodes = 垂直入射 AM1.5 纯低光项；入射角用
+        pvlib.iam.martin_ruiz（a_r 0.08-0.25，默认 0.16）、光谱用
+        spectral_factor_sapm/pvspec/firstsolar，均留作未来正交项。
+        综述 Daxini & Wu 2023 DOI 10.1016/j.energy.2023.129461。
+    status: verified
+  validation_oedi_pvdaq_mirror:
+    description: NREL PVDAQ 电站实测数据——OEDI S3 镜像可达（绕开 NREL 主站断连）
+    source:
+      url: https://data.openei.org/s3_viewer?bucket=oedi-data-lake&prefix=pvdaq%2F2023-solar-data-prize%2F9068_OEDI%2F
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        NREL 主站/developer 站/OSTI/PVPMC 本网全部 Transport error。
+        PVDAQ 时序数据镜像在 OEDI S3（data.openei.org）；pvlib 官方
+        示例 noplot_oedi_9068 用 4.7 MW CdTe 电站做建模-实测对照
+        （5 分钟/小时/日三级散点），可照搬为 VFED 电站级验证流程。
+    status: verified
+  validation_siliconpv2026_topcon:
+    description: SiliconPV 2026 开放获取论文《PERC vs TOPCon 低辐照性能分析》——TOPCon 弱光直接文献锚点
+    source:
+      url: https://doi.org/10.52825/siliconpv.v3i.2684
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        Lv/Xi/Tie/Yu/Xu/Yang 2026，开放获取，doi.org 返回完整引用
+        （数值未转录，实现增强层时读取原文录入）。HJT 旁证：SolMat
+        2024《SHJ 电池弱光优秀候选》DOI 10.1016/j.solmat.2024.113001
+        （正文闭源，仅题录）。
+    status: to_follow
+  gap_bc_hpbc_no_public_data:
+    description: 数据空白——BC/HPBC 模块级实测 eta(G) 公开文献未找到
+    source:
+      url: https://api.openalex.org/works?search=back%20contact%20IBC%20photovoltaic%20module%20low%20irradiance%20efficiency
+      accessed: "2026-11-02"
+      method: table_value
+      note: >-
+        OpenAlex 多轮检索未命中 BC/HPBC 模块级实测 eta(G) 公开论文。
+        当前最大数据空白；只能 datasheet 或付费测量（Fraunhofer
+        CalLab 等）补位。longi_himo9_670m 的弱光曲线将以 CEC 单二极管
+        模型近似（BC 与 TOPCon 同为晶硅二极管结构，De Soto 管线适用
+        性待 CEC vs PVsyst 交叉验证评估）。
+    status: verified

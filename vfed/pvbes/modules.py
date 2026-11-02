@@ -169,7 +169,14 @@ MODULES: Dict[str, ModuleSpec] = {
     #   (annual warranty limit; the separate 1.0 % first-year loss is
     #   not representable in the single-coefficient (1-deg)**year model).
     #   area_to_power = 3.1068 / 0.730 = 4.256 m2/kWp.
-    #   G4: identity curve (TODO anchor).  G5: bifaciality reserved.
+    #   G4: eta_rel_nodes generated offline 2026-11-02 by
+    #   scripts/generate_eta_rel.py (De Soto/CEC single-diode fit to the
+    #   datasheet STC five-point + alpha/beta/gamma coefficients,
+    #   alpha_sc +0.04 %/K, beta_voc -0.22 %/K from the same datasheet;
+    #   STC reproduction +0.000 %, PVsyst-Rsh(G) sensitivity band at
+    #   200 W/m2 <= +0.46 %).  Cross-module low-G ordering is an
+    #   effective-parameter artifact, NOT a validated tech-family claim.
+    #   G5: bifaciality reserved.
     "huasun_himalaya": ModuleSpec(
         eta_pv=0.235,
         area_to_power=3.1068 / 0.730,
@@ -182,6 +189,14 @@ MODULES: Dict[str, ModuleSpec] = {
         NOCT=44.0,
         degradation=0.3 / 100.0,
         bifaciality=0.90,
+        eta_rel_nodes=(
+            (100.0, 0.9051),
+            (200.0, 0.9391),
+            (400.0, 0.9699),
+            (600.0, 0.9853),
+            (800.0, 0.9944),
+            (1000.0, 1.0),
+        ),
     ),
     # longi_himo9_670m -- BC anchor, RENAMED from longi_himo_x10
     #   (Hi-MO 9 and Hi-MO X10 are different generations on the same BC
@@ -196,7 +211,13 @@ MODULES: Dict[str, ModuleSpec] = {
     #   degradation = 0.35 %/yr (2-30 yr linear warranty limit; the
     #   1.0 % first-year loss not representable in the single-coefficient
     #   model).  area_to_power = 2.7012 / 0.670 = 4.031 m2/kWp.
-    #   G4: identity curve (TODO anchor).  G5: bifaciality reserved.
+    #   G4: eta_rel_nodes generated offline 2026-11-02 by
+    #   scripts/generate_eta_rel.py (De Soto/CEC single-diode fit,
+    #   alpha_sc +0.050 %/K, beta_voc -0.200 %/K from the same datasheet;
+    #   STC reproduction -0.082 %).  No public BC/HPBC module-level
+    #   eta(G) measurement exists (anchors/low_irradiance.yaml
+    #   gap_bc_hpbc_no_public_data) -- curve is a CEC-pipeline
+    #   extrapolation, cross-kernel validation pending.  G5: reserved.
     "longi_himo9_670m": ModuleSpec(
         eta_pv=0.248,
         area_to_power=2.7012 / 0.670,
@@ -209,6 +230,14 @@ MODULES: Dict[str, ModuleSpec] = {
         NOCT=45.0,
         degradation=0.35 / 100.0,
         bifaciality=0.75,
+        eta_rel_nodes=(
+            (100.0, 0.9144),
+            (200.0, 0.9471),
+            (400.0, 0.9758),
+            (600.0, 0.9892),
+            (800.0, 0.9963),
+            (1000.0, 1.0),
+        ),
     ),
     # microquanta_bipv -- perovskite-silicon tandem BIPV anchor.  YAML
     #   status: verified (pv-magazine 2026-06-24).  Make-to-order module:

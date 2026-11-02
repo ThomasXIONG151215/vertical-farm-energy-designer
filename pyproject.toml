@@ -52,6 +52,9 @@ dev = [
     "isort>=5.0",
     "flake8>=4.0",
     "mypy>=0.950",
+    # offline eta_rel node-table generation (scripts/generate_eta_rel.py);
+    # NOT a runtime dependency -- the runtime interpolates the stored nodes.
+    "pvlib>=0.10",
 ]
 
 [project.urls]

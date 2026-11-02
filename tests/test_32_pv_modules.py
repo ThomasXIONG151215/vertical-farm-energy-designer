@@ -186,8 +186,15 @@ class TestRegistryMatchesReferenceYaml:
             assert spec.NOCT == pytest.approx(y["noct_c"], rel=1e-12), name
         else:
             assert spec.NOCT == legacy_cfg.NOCT
-        # G4: no validated curve exists yet -> identity everywhere
-        assert spec.eta_rel_nodes is None
+        # G4: datasheet-derived node tables (huasun / longi, generated
+        # offline by scripts/generate_eta_rel.py) mirror the yaml; null or
+        # absent yaml field -> identity curve (spec None).
+        y_nodes = y.get("eta_rel_nodes")
+        if y_nodes is None:
+            assert spec.eta_rel_nodes is None, name
+        else:
+            assert spec.eta_rel_nodes is not None, name
+            assert tuple(map(tuple, y_nodes)) == tuple(spec.eta_rel_nodes), name
         # G5 reserved field: spec mirrors the yaml (datasheet bifaciality
         # for huasun 0.90 / longi 0.75; null = not published).
         y_bif = y["bifaciality"]
@@ -382,6 +389,39 @@ class TestG4SyntheticCurve:
         assert np.all(band >= 0.9)
         assert np.all(band <= 1.05)
         assert pv._eta_rel(np.array([1000.0]))[0] == 1.0
+
+
+class TestG4DatasheetCurves:
+    """Offline-generated eta_rel tables (scripts/generate_eta_rel.py,
+    2026-11-02) now ship with two presets.  The default jinko baseline
+    stays identity (golden zero-drift contract)."""
+
+    CURVED = ("huasun_himalaya", "longi_himo9_670m")
+
+    def test_default_module_keeps_identity_curve(self):
+        assert resolve_module("jinko_jkm580n").eta_rel_nodes is None
+
+    def test_curved_presets_pass_gate_band(self):
+        for name in self.CURVED:
+            nodes = resolve_module(name).eta_rel_nodes
+            assert nodes is not None, name
+            eta_200_600 = [e for g, e in nodes if 200.0 <= g <= 600.0]
+            assert 0.9 <= min(eta_200_600), name
+            assert max(eta_200_600) <= 1.05, name
+            assert nodes[-1] == (1000.0, 1.0), name  # STC anchor
+
+    def test_curve_scales_module_mpp_at_low_g(self):
+        for name in self.CURVED:
+            spec = resolve_module(name)
+            curved = PVSystem(module=name)
+            plain = PVSystem(module=name, eta_rel_nodes=None)
+            G = np.array([200.0, 1000.0])
+            T = np.array([25.0, 25.0])
+            ratio = curved._sd_mpp(G, T) / plain._sd_mpp(G, T)
+            assert ratio[0] == pytest.approx(
+                spec.eta_rel_nodes[1][1], rel=1e-9
+            ), name  # 200 W/m2 node value
+            assert ratio[1] == pytest.approx(1.0, abs=1e-12), name
 
 
 class TestG4NodeValidation:

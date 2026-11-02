@@ -14,6 +14,22 @@ noct_c: 44
 degradation_first_year_pct: 1.0
 degradation_annual_pct: 0.30
 warranty_years: 30
+# G4 low-irradiance relative efficiency nodes (eta(1000)=1 anchor).
+# Generated offline 2026-11-02 by scripts/generate_eta_rel.py: De Soto/CEC
+# single-diode fit to the datasheet STC five-point + alpha_sc +0.04 %/K,
+# beta_voc -0.22 %/K, gamma_pmp -0.0024 (all same datasheet). STC
+# reproduction +0.000 %. PVsyst-Rsh(G) sensitivity at 200 W/m2:
+# +0.16/+0.33/+0.46 % for Rsh0=2x/4x/8x Rsh_ref. Accounting rule
+# (anchors/low_irradiance.yaml accounting_rule_iam_spectral): pure G
+# dependence at normal incidence AM1.5 -- IAM and spectral effects are
+# separate future terms, never folded in here.
+eta_rel_nodes:
+  - [100.0, 0.9051]
+  - [200.0, 0.9391]
+  - [400.0, 0.9699]
+  - [600.0, 0.9853]
+  - [800.0, 0.9944]
+  - [1000.0, 1.0]
 source:
   url: reference/pvbes-validation/raw/datasheets/HSN-210-B132DS(700-730)_CN_20250814.pdf
   accessed: 2026-11-02

@@ -79,3 +79,12 @@ Huasun / LONGi / Jinko 官网产品规格表为 JS 渲染页面，webfetch 只�
 `raw/datasheets/`），7 份 PDF 全部可解析：huasun 与 longi 预设自此
 datasheet-complete（唯一带 datasheet NOCT 的预设是 huasun 44±2°C，
 其余 NOCT=45 仍是建模默认）。
+
+2026-11-02 弱光替代路径调研（详见 `anchors/low_irradiance.yaml` 新增
+9 条）：SAPM 排除（Sandia 库 2014 冻结+系数不可反推，本地 525 行实证
+零命中）；首选增强路径 = 离线 pvlib 单二极管反推采样 eta_rel 节点表
+（TOPCon/BC 用 calcparams_cec、HJT 用 calcparams_pvsyst，输入三预设
+已全有）；ADR 五参数模型是填表友好的未来内核；验证通道 = OEDI S3
+镜像的 PVDAQ 电站实测（NREL 主站仍不可达但镜像可达）+ SiliconPV 2026
+开放论文（TOPCon 弱光锚点）。已知数据空白：BC/HPBC 模块级实测 eta(G)
+无公开文献（gap_bc_hpbc_no_public_data）。
