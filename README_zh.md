@@ -8,6 +8,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 
+**目录：**[背景](#背景) · [快速开始](#快速开始) · [最新进展](#最新进展2026-10) · [工作原理](#vfed-工作原理) · [与其他仿真引擎的对比](#与其他仿真引擎的对比) · [天气数据](#天气数据--联网缓存与离线) · [DIY / 个人用户指南](#diy--个人用户指南) · [CLI 命令参考](#cli-命令参考) · [配置](#配置) · [输出结果解读](#输出结果解读) · [故障排除](#故障排除) · [引用](#引用)
+
 ## 背景
 
 人工光植物工厂 (PFALs) — 用 LED 替代阳光的封闭式多层种植设施 — 是能耗最高的农业系统之一，照明、空调和除湿的合计能耗高达 **200–500 kWh/m²/年**。电网电力在运营成本中占主导地位，往往超过总生产成本的 30%。
@@ -21,6 +23,53 @@
 > [DOI: 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
 
 `research/xiong-pvbes-photoperiod-2026/` 目录包含该论文的归档代码和实验数据。当前活跃代码库 (`vfed/`) 用纯 Python 第一性原理 ODE 求解器替代了基于 EnergyPlus 的负荷生成器，并增加了参数化设计扫描 — 详见 [research/xiong-pvbes-photoperiod-2026/](research/xiong-pvbes-photoperiod-2026/)。
+
+## 快速开始
+
+### 安装
+
+```bash
+git clone https://github.com/ThomasXIONG151215/vertical-farm-energy-designer.git
+cd vertical-farm-energy-designer
+pip install -e .
+# 或安装开发/测试依赖：
+pip install -e ".[dev]"
+```
+
+### 1. 创建设计
+
+```bash
+vfed design new my_farm --preset 609 --city Shanghai --year 2025
+```
+
+从奉贤生菜预设创建 `my_farm.yaml`。默认输出名为 `<name>.yaml` — 可用 `--out path.yaml` 更改。`--city` 会从内置城市表（`vfed design cities` 列出）填入纬度/经度/时区，并使用预下载的 `data/weather/Shanghai_2025.csv`，使整个快速体验**完全离线**。如需任意地点，改用 `--lat <度> --lon <度> [--year YYYY]`；此时首次运行需联网（见下文"天气数据"）。`--year` 默认 2025。没有预设的个人用户（prosumer）？默认预设就是一个可**完全离线**运行的 ~10 m² 小型种植间——见下方《DIY / 个人用户指南》。
+
+### 2. 校验配置
+
+```bash
+vfed validate my_farm.yaml
+```
+
+在不运行仿真的情况下，对照项目 schema 校验 YAML。
+
+### 3. 评估配置
+
+```bash
+vfed evaluate my_farm.yaml --cache weather_cache
+```
+
+对单一配置运行建筑仿真，报告年负荷、生物量与能耗强度（kWh/kg，即每千克鲜重的千瓦时）。`609` 预设自带 `pv_area_m2=0` / `battery_kwh=0`，因此此处能源系统为禁用状态 — 输出会显示 `Energy system = disabled`。若项目声明了 `pv` / `battery`（如 `example_lcoe_full.yaml`），本步骤还会报告光伏发电量与电网购电/售电量。单次全年仿真（8760 个逐时步长）在普通笔记本上约 10 秒（视机器而定）。
+
+### 4. 参数化扫描 — 寻找 LCOE 最优的光伏+电池装机
+
+`609` 预设未声明任何扫描范围，因此 `sweep my_farm.yaml` 只会重新评估这一组固定配置。为演示核心的光伏-电池容量优化，请使用仓库内已声明 `space.parameter_ranges` 的示例文件：
+
+```bash
+# 3 个参数（ppfd_target × pv_area × battery）= 100 组配置，约 6 秒（普通笔记本）
+vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
+```
+
+`--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `example_lcoe_full.yaml`。没有单独的 `optimize` 命令；容量优化通过 `sweep` 完成。
 
 ## 最新进展（2026-10）
 
@@ -126,54 +175,7 @@ PFAL 能耗建模分散在三个割裂的世界里：通用建筑引擎（Energy
 
 </details>
 
-## 快速开始
-
-### 安装
-
-```bash
-git clone https://github.com/ThomasXIONG151215/vertical-farm-energy-designer.git
-cd vertical-farm-energy-designer
-pip install -e .
-# 或安装开发/测试依赖：
-pip install -e ".[dev]"
-```
-
-### 1. 创建设计
-
-```bash
-vfed design new my_farm --preset 609 --city Shanghai --year 2025
-```
-
-从奉贤生菜预设创建 `my_farm.yaml`。默认输出名为 `<name>.yaml` — 可用 `--out path.yaml` 更改。`--city` 会从内置城市表（`vfed design cities` 列出）填入纬度/经度/时区，并使用预下载的 `data/weather/Shanghai_2025.csv`，使整个快速体验**完全离线**。如需任意地点，改用 `--lat <度> --lon <度> [--year YYYY]`；此时首次运行需联网（见下文"天气数据"）。`--year` 默认 2025。没有预设的个人用户（prosumer）？默认预设就是一个可**完全离线**运行的 ~10 m² 小型种植间——见下方《DIY / 个人用户指南》。
-
-### 2. 校验配置
-
-```bash
-vfed validate my_farm.yaml
-```
-
-在不运行仿真的情况下，对照项目 schema 校验 YAML。
-
-### 3. 评估配置
-
-```bash
-vfed evaluate my_farm.yaml --cache weather_cache
-```
-
-对单一配置运行建筑仿真，报告年负荷、生物量与能耗强度（kWh/kg，即每千克鲜重的千瓦时）。`609` 预设自带 `pv_area_m2=0` / `battery_kwh=0`，因此此处能源系统为禁用状态 — 输出会显示 `Energy system = disabled`。若项目声明了 `pv` / `battery`（如 `example_lcoe_full.yaml`），本步骤还会报告光伏发电量与电网购电/售电量。单次全年仿真（8760 个逐时步长）在普通笔记本上约 10 秒（视机器而定）。
-
-### 4. 参数化扫描 — 寻找 LCOE 最优的光伏+电池装机
-
-`609` 预设未声明任何扫描范围，因此 `sweep my_farm.yaml` 只会重新评估这一组固定配置。为演示核心的光伏-电池容量优化，请使用仓库内已声明 `space.parameter_ranges` 的示例文件：
-
-```bash
-# 3 个参数（ppfd_target × pv_area × battery）= 100 组配置，约 6 秒（普通笔记本）
-vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
-```
-
-`--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `example_lcoe_full.yaml`。没有单独的 `optimize` 命令；容量优化通过 `sweep` 完成。
-
-### 天气数据 — 联网、缓存与离线
+## 天气数据 — 联网、缓存与离线
 
 天气按 lat/lon/year 在首次使用时从 Open-Meteo 逐时拉取，并缓存为 CSV 到 `weather_cache/`（可用 `--cache <dir>` 指定其他目录）。数据来源按优先级：
 
@@ -193,6 +195,10 @@ vfed evaluate my_farm.yaml --provider nasa-power --ghi-scale 0.9
 ```
 
 两源在磁盘上永不混用：NASA POWER 缓存带 `_power` 后缀（`weather_..._z8.000_power.csv`），POWER 城市文件命名为 `{City}_{year}_power.csv`。订正在天气数据出口统一施加，缓存本身始终存未订正的原始值——改 `ghi_scale` 不会作废任何缓存。
+
+#### 预下载双源城市文件（round 23）
+
+51 城在 `data/weather/` 中同时内置两种数据源的 2025 逐时文件——`{City}_{year}.csv` 为 Open-Meteo/ERA5 再分析，`{City}_{year}_power.csv` 为 NASA POWER（MERRA-2 气象 + CERES 辐射卫星）。YAML 中设 `site.weather_provider: nasa-power` 后引擎自动命中 `_power` 文件：完全离线、零 API 调用、无需命令行旗标；`site.ghi_scale` 订正开关照常生效（见上节）。每个文件的来源、坐标、行数、GHI 年累计与生成日期见 `data/weather/MANIFEST.md`；可用 `python scripts/download_weather_db.py --provider nasa-power` 重新生成（不加旗标即 ERA5，行为不变）。POWER 仅提供逐时 GHI，故 `_power` 文件中 `direct_radiation`/`diffuse_radiation` 两列为 0 占位，引擎加载时按设计的倾角/方位角由 GHI 重建 POA 直散分量（Erbs 分解），文件本身与几何无关。使用 `_power` 文件的发表物须按 NASA POWER 的引用要求标注该服务及 MERRA-2/CERES 文献（完整引文清单见 MANIFEST.md）。
 
 **什么参数用哪个源？** 独立验证研究并不支持全面换源：
 
@@ -465,6 +471,19 @@ vertical-farm-energy-designer/
 
 - **site** — 纬度、经度、年份、时区
 - **envelope** — 传热系数、面积、太阳吸收率、透湿率
+  - 新增（R28）：**2R2C 墙体热质量网络**，叠加式设计，**默认关闭**：
+    `wall_rc_nodes: 0`（默认）保持传统单节点围护结构逐位不变；`wall_rc_nodes: 2`
+    增加集总质量节点 `T_m`，经 `g_im`（W/K）与空气节点耦合、经 `g_em`（W/K）与室外耦合，
+    热量储存于 `C_mass`（Wh/K）——白天蓄热、夜间放热的回热缓冲，削平空气节点日内摆幅。
+    估算：`C_mass = Σ A_i·d_i·ρ_i·c_i / 3600`（Wh/K，计入纯内部蓄热体，如保温层上的
+    楼板，其 `g_em` 计 0）；`g_im = Σ A_i/(R_si + d_i/(2k_i))`，`g_em = Σ A_i/R_i,ext`
+    （R_si ≈ 0.125 m²K/W）。开启 RC 后，`U_wall_A` 表示**直通通道**（窗户 + 绕过质量节点的
+    轻质表面）；HVAC 自动容量按稳态口径 `UA_dc = U_wall_A + g_em·g_im/(g_em+g_im)` 收敛。
+    若步长违反前向欧拉稳定域（闭式 λmax 守卫，0.8× 裕量），引擎在构建时即报错并给出
+    建议值——稳定域不足时快速失败。
+    **何时使用**：日内温度摆幅需要阻尼的重内蓄热房间（混凝土板、砌体墙），或对照
+    ASHRAE-140 类自由浮点数据做标定时；轻型预制房间可跳过。逐时 `T_m` 加入 timeseries，
+    `summary.wall_rc` 报告年末质量节点温度。
 - **hvac** — 额定制冷量、COP 模式（carnot / constant / linear / table）、设定点
 - **deh** — 除湿机额定容量、相对湿度设定点、效率模型
 - **led** — PPFD、光效、光周期计划
@@ -775,7 +794,7 @@ summary 中最常被问到的输出/警告键的白话解释：
   title = {Vertical Farm Energy Designer (VFED)},
   author = {Thomas XIONG},
   url = {https://github.com/ThomasXIONG151215/vertical-farm-energy-designer},
-  year = {2024}
+  year = {2026}
 }
 ```
 

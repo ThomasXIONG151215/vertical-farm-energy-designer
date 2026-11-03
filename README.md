@@ -8,6 +8,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 
+**Contents:** [Background](#background) · [Quick Start](#quick-start) · [What's New](#whats-new-2026-10) · [How VFED Works](#how-vfed-works) · [Comparison](#how-vfed-compares-to-other-simulators) · [Weather Data](#weather-data--network-cache-offline) · [DIY / Prosumer Guide](#diy--prosumer-guide) · [CLI Reference](#cli-reference) · [Configuration](#configuration) · [Interpreting Results](#interpreting-results) · [Troubleshooting](#troubleshooting) · [Citation](#citation)
+
 ## Background
 
 Plant Factories with Artificial Lighting (PFALs) — fully enclosed, multi-layer growing facilities that replace sunlight with LEDs — are among the most energy-intensive agricultural systems, consuming **200–500 kWh/m²/year** for lighting, HVAC, and dehumidification combined. Grid electricity dominates operating costs, often exceeding 30% of total production expense.
@@ -21,6 +23,53 @@ Integrating rooftop photovoltaics (PV) with battery energy storage (BES) can dra
 > [DOI: 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
 
 The `research/xiong-pvbes-photoperiod-2026/` directory contains the archived code and experimental data from the published paper. The current active codebase (`vfed/`) replaces the EnergyPlus-based load generator with a pure-Python first-principles ODE solver and adds a parametric design sweep — see [research/xiong-pvbes-photoperiod-2026/](research/xiong-pvbes-photoperiod-2026/) for details.
+
+## Quick Start
+
+### Install
+
+```bash
+git clone https://github.com/ThomasXIONG151215/vertical-farm-energy-designer.git
+cd vertical-farm-energy-designer
+pip install -e .
+# or with dev/test dependencies:
+pip install -e ".[dev]"
+```
+
+### 1. Create a Design
+
+```bash
+vfed design new my_farm --preset 609 --city Shanghai --year 2025
+```
+
+Creates `my_farm.yaml` from the Fengxian lettuce preset. The default output name is `<name>.yaml` — use `--out path.yaml` to change it. `--city` fills in latitude/longitude/timezone from the built-in city table (list with `vfed design cities`) and lets the whole quickstart run **fully offline** from the pre-downloaded `data/weather/Shanghai_2025.csv`. For an arbitrary site use `--lat <deg> --lon <deg> [--year YYYY]` instead; the first run then needs a network connection (see "Weather Data" below). `--year` defaults to 2025. A prosumer (no `--preset`)? The default preset is a small ~10 m² room that also runs fully offline — see the *DIY / Prosumer Guide* below.
+
+### 2. Validate the Configuration
+
+```bash
+vfed validate my_farm.yaml
+```
+
+Checks the YAML against the project schema without running the simulation.
+
+### 3. Evaluate a Configuration
+
+```bash
+vfed evaluate my_farm.yaml --cache weather_cache
+```
+
+Runs the building simulation for a single configuration and reports annual load, biomass, and energy intensity (kWh/kg of fresh biomass). The `609` preset ships with `pv_area_m2=0` / `battery_kwh=0`, so the energy system is disabled here — you will see `Energy system = disabled`. If a project declares `pv` / `battery` (e.g. `example_lcoe_full.yaml`), this step also reports PV generation and grid import/export. A single full-year run (8,760 hourly steps) takes ~10 s on a typical laptop (machine-dependent).
+
+### 4. Parametric Sweep — find the LCOE-optimal PV + battery
+
+The `609` preset declares no sweep ranges, so `vfed sweep my_farm.yaml` would only re-evaluate that single fixed configuration. To demonstrate the core PV-battery sizing, use the shipped example that declares `space.parameter_ranges`:
+
+```bash
+# 3 parameters (ppfd_target × pv_area × battery) = 100 configurations, ~6 s (typical laptop)
+vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
+```
+
+`--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `example_lcoe_full.yaml`. There is no separate `optimize` command; sizing is done via `sweep`.
 
 ## What's New (2026-10)
 
@@ -126,54 +175,7 @@ Engine and tool sources (verified 2026-10): EnergyPlus v26.1 Input Output Refere
 
 </details>
 
-## Quick Start
-
-### Install
-
-```bash
-git clone https://github.com/ThomasXIONG151215/vertical-farm-energy-designer.git
-cd vertical-farm-energy-designer
-pip install -e .
-# or with dev/test dependencies:
-pip install -e ".[dev]"
-```
-
-### 1. Create a Design
-
-```bash
-vfed design new my_farm --preset 609 --city Shanghai --year 2025
-```
-
-Creates `my_farm.yaml` from the Fengxian lettuce preset. The default output name is `<name>.yaml` — use `--out path.yaml` to change it. `--city` fills in latitude/longitude/timezone from the built-in city table (list with `vfed design cities`) and lets the whole quickstart run **fully offline** from the pre-downloaded `data/weather/Shanghai_2025.csv`. For an arbitrary site use `--lat <deg> --lon <deg> [--year YYYY]` instead; the first run then needs a network connection (see "Weather Data" below). `--year` defaults to 2025. A prosumer (no `--preset`)? The default preset is a small ~10 m² room that also runs fully offline — see the *DIY / Prosumer Guide* below.
-
-### 2. Validate the Configuration
-
-```bash
-vfed validate my_farm.yaml
-```
-
-Checks the YAML against the project schema without running the simulation.
-
-### 3. Evaluate a Configuration
-
-```bash
-vfed evaluate my_farm.yaml --cache weather_cache
-```
-
-Runs the building simulation for a single configuration and reports annual load, biomass, and energy intensity (kWh/kg of fresh biomass). The `609` preset ships with `pv_area_m2=0` / `battery_kwh=0`, so the energy system is disabled here — you will see `Energy system = disabled`. If a project declares `pv` / `battery` (e.g. `example_lcoe_full.yaml`), this step also reports PV generation and grid import/export. A single full-year run (8,760 hourly steps) takes ~10 s on a typical laptop (machine-dependent).
-
-### 4. Parametric Sweep — find the LCOE-optimal PV + battery
-
-The `609` preset declares no sweep ranges, so `vfed sweep my_farm.yaml` would only re-evaluate that single fixed configuration. To demonstrate the core PV-battery sizing, use the shipped example that declares `space.parameter_ranges`:
-
-```bash
-# 3 parameters (ppfd_target × pv_area × battery) = 100 configurations, ~6 s (typical laptop)
-vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
-```
-
-`--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `example_lcoe_full.yaml`. There is no separate `optimize` command; sizing is done via `sweep`.
-
-### Weather Data — network, cache, offline
+## Weather Data — network, cache, offline
 
 Weather is fetched hourly from Open-Meteo by lat/lon/year on first use and cached as CSV under `weather_cache/` (point `evaluate` / `sweep` at a different directory with `--cache <dir>`). Sources, in priority order:
 
@@ -194,11 +196,9 @@ vfed evaluate my_farm.yaml --provider nasa-power --ghi-scale 0.9
 
 The two sources never mix on disk: NASA POWER caches carry a `_power` suffix (`weather_..._z8.000_power.csv`) and a POWER city file would be named `{City}_{year}_power.csv`. The scale is applied at the weather-data exit, so the cache itself always stores unscaled provider values — changing `ghi_scale` never invalidates a cache.
 
-#### Pre-downloaded dual-source city files (round 23) 预下载双源城市文件
+#### Pre-downloaded dual-source city files (round 23)
 
 All 51 built-in cities ship **both** sources for 2025 in `data/weather/`: `{City}_{year}.csv` = Open-Meteo/ERA5, `{City}_{year}_power.csv` = NASA POWER (MERRA-2 meteorology + CERES radiation). Setting `site.weather_provider: nasa-power` in the YAML makes the engine load `{City}_{year}_power.csv` automatically — fully offline, no API call, no CLI flag needed. GHI bias correction still applies the same way (`site.ghi_scale`, see above). Per-file provenance (provider, city, lat/lon, rows, annual GHI, generation date) is tabulated in `data/weather/MANIFEST.md`; regenerate the POWER set with `python scripts/download_weather_db.py --provider nasa-power` (no flag = ERA5 set, behaviour unchanged). Because POWER provides hourly GHI only, the `_power` files carry `direct_radiation = diffuse_radiation = 0` placeholders — POA and its beam/diffuse split are re-derived from GHI (Erbs split) at load time with the design's tilt/azimuth, so the files stay geometry-neutral. Publications using the `_power` files must cite the NASA POWER service and its MERRA-2/CERES upstream datasets (<https://power.larc.nasa.gov/docs/methodology/citations/>; full citation list in MANIFEST.md).
-
-中文：51 城在 `data/weather/` 中同时内置两种数据源的 2025 逐时文件——`{City}_{year}.csv` 为 Open-Meteo/ERA5 再分析，`{City}_{year}_power.csv` 为 NASA POWER（MERRA-2 气象 + CERES 辐射卫星）。YAML 中设 `site.weather_provider: nasa-power` 后引擎自动命中 `_power` 文件：完全离线、零 API 调用、无需命令行旗标；`site.ghi_scale` 订正开关照常生效（见上节）。每个文件的来源、坐标、行数、GHI 年累计与生成日期见 `data/weather/MANIFEST.md`；可用 `python scripts/download_weather_db.py --provider nasa-power` 重新生成（不加旗标即 ERA5，行为不变）。POWER 仅提供逐时 GHI，故 `_power` 文件中 `direct_radiation`/`diffuse_radiation` 两列为 0 占位，引擎加载时按设计的倾角/方位角由 GHI 重建 POA 直散分量（Erbs 分解），文件本身与几何无关。使用 `_power` 文件的发表物须按 NASA POWER 的引用要求标注该服务及 MERRA-2/CERES 文献（完整引文清单见 MANIFEST.md）。
 
 **Which source for what?** Independent validation studies do not crown a single winner:
 
@@ -471,17 +471,17 @@ All design parameters live in a single YAML file generated by `vfed design new`.
 
 - **site** — latitude, longitude, year, timezone
 - **envelope** — U-values, area, solar absorptance, vapour permeance
-  - New (R28): **2R2C wall thermal-mass network** (2R2C 墙体热质量网络), additive and **off by default**:
+  - New (R28): **2R2C wall thermal-mass network**, additive and **off by default**:
     `wall_rc_nodes: 0` (default) keeps the legacy single-node envelope bit-for-bit; `wall_rc_nodes: 2`
     adds a lumped mass node `T_m` coupled to the air node through `g_im` (W/K) and to outdoors through
-    `g_em` (W/K), storing heat in `C_mass` (Wh/K) — 白天蓄热、夜间放热的回热缓冲，削平空气节点日内摆幅.
+    `g_em` (W/K), storing heat in     `C_mass` (Wh/K) — a regenerative buffer that stores heat by day and releases it by night, damping the air node's diurnal swing.
     Estimate: `C_mass = Σ A_i·d_i·ρ_i·c_i / 3600` (Wh/K, include pure internal mass such as a floor slab
-    on insulation, 其 `g_em` 计 0); `g_im = Σ A_i/(R_si + d_i/(2k_i))`, `g_em = Σ A_i/R_i,ext`
+    on insulation, count its `g_em` as 0); `g_im = Σ A_i/(R_si + d_i/(2k_i))`, `g_em = Σ A_i/R_i,ext`
     (R_si ≈ 0.125 m²K/W). With RC on, `U_wall_A` means the **direct channel only** (window + lightweight
     surfaces bypassing the mass node); HVAC auto-sizing closes the steady-state aperture as
     `UA_dc = U_wall_A + g_em·g_im/(g_em+g_im)`. The engine fails fast at build time if the timestep
-    violates the forward-Euler stability band (closed-form λmax guard, 0.8× margin) — 稳定域不足时直接报错并给出建议值.
-    **When to use** (何时使用): rooms with heavy internal mass (concrete slabs, masonry) whose day/night
+    violates the forward-Euler stability band (closed-form λmax guard, 0.8× margin) — it fails fast at build time with a suggested value when the band is insufficient.
+    **When to use**: rooms with heavy internal mass (concrete slabs, masonry) whose day/night
     temperature swing needs damping, or when calibrating against ASHRAE-140-style free-float data; skip it
     for lightweight prefabricated rooms. Hourly `T_m` is added to the timeseries and `summary.wall_rc`
     reports the year-end mass-node temperature.
@@ -812,7 +812,7 @@ If you use VFED in your research, please cite:
   title = {Vertical Farm Energy Designer (VFED)},
   author = {Thomas XIONG},
   url = {https://github.com/ThomasXIONG151215/vertical-farm-energy-designer},
-  year = {2024}
+  year = {2026}
 }
 ```
 
