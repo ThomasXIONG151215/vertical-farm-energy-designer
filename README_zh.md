@@ -58,7 +58,7 @@ vfed validate my_farm.yaml
 vfed evaluate my_farm.yaml --cache weather_cache
 ```
 
-对单一配置运行建筑仿真，报告年负荷、生物量与能耗强度（kWh/kg，即每千克鲜重的千瓦时）。`609` 预设自带 `pv_area_m2=0` / `battery_kwh=0`，因此此处能源系统为禁用状态 — 输出会显示 `Energy system = disabled`。若项目声明了 `pv` / `battery`（如 `example_lcoe_full.yaml`），本步骤还会报告光伏发电量与电网购电/售电量。单次全年仿真（8760 个逐时步长）在普通笔记本上约 10 秒（视机器而定）。
+对单一配置运行建筑仿真，报告年负荷、生物量与能耗强度（kWh/kg，即每千克鲜重的千瓦时）。`609` 预设自带 `pv_area_m2=0` / `battery_kwh=0`，因此此处能源系统为禁用状态 — 输出会显示 `Energy system = disabled`。若项目声明了 `pv` / `battery`（如 `examples/example_lcoe_full.yaml`），本步骤还会报告光伏发电量与电网购电/售电量。单次全年仿真（8760 个逐时步长）在普通笔记本上约 10 秒（视机器而定）。
 
 ### 4. 参数化扫描 — 寻找 LCOE 最优的光伏+电池装机
 
@@ -66,10 +66,10 @@ vfed evaluate my_farm.yaml --cache weather_cache
 
 ```bash
 # 3 个参数（ppfd_target × pv_area × battery）= 100 组配置，约 6 秒（普通笔记本）
-vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
+vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 ```
 
-`--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `example_lcoe_full.yaml`。没有单独的 `optimize` 命令；容量优化通过 `sweep` 完成。
+`--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `examples/example_lcoe_full.yaml`。没有单独的 `optimize` 命令；容量优化通过 `sweep` 完成。
 
 ## 最新进展（2026-10）
 
@@ -183,7 +183,7 @@ PFAL 能耗建模分散在三个割裂的世界里：通用建筑引擎（Energy
 2. **`weather_cache/`** — 之前拉取过的结果，按 lat/lon/year/tilt/azimuth/timezone 键复用。
 3. **Open-Meteo 在线** — 用于任意 (lat, lon, year) 组合。需要联网；失败时 CLI 以 `[ERROR E003]` 终止。断网时请使用已缓存的年份或 `--cache`。
 
-离线快速体验：使用内置城市 + `--year 2025` 即可。任意地点离线运行：先联网预取一次（`vfed evaluate <yaml> --cache weather_cache`），之后复用缓存。显式坐标优先于内置城市：`vfed design new --lat <度> --lon <度>` 会清除预设自带的 `site.city`（创建时打印 `[WARN] clearing preset city ...`）——lat/lon 缓存键与城市 CSV 描述的是两个不同地点，保留 city 会悄悄仿真错误的气候。生成的 YAML 随后以坐标作为天气缓存键（`weather_<lat>_<lon>_<year>_*.csv`），首次运行联网走 Open-Meteo 拉取（`tz_hours` 仍为预设值，除非自行修改）。反之，若在仍带 `site.city` 的 YAML 里手工修改 `lat`/`lon`，只要年份匹配，城市 CSV 依旧优先——想强制走 lat/lon（在线）路径，请在 YAML 中把 `site.city` 置为 null。示例扫描文件（`example_sweep.yaml` / `example_lcoe_full.yaml`）使用 2023 年 + 显式 lat/lon（不在预下载城市数据内），首次运行需联网（几秒，取决于网络），之后命中缓存即可离线。
+离线快速体验：使用内置城市 + `--year 2025` 即可。任意地点离线运行：先联网预取一次（`vfed evaluate <yaml> --cache weather_cache`），之后复用缓存。显式坐标优先于内置城市：`vfed design new --lat <度> --lon <度>` 会清除预设自带的 `site.city`（创建时打印 `[WARN] clearing preset city ...`）——lat/lon 缓存键与城市 CSV 描述的是两个不同地点，保留 city 会悄悄仿真错误的气候。生成的 YAML 随后以坐标作为天气缓存键（`weather_<lat>_<lon>_<year>_*.csv`），首次运行联网走 Open-Meteo 拉取（`tz_hours` 仍为预设值，除非自行修改）。反之，若在仍带 `site.city` 的 YAML 里手工修改 `lat`/`lon`，只要年份匹配，城市 CSV 依旧优先——想强制走 lat/lon（在线）路径，请在 YAML 中把 `site.city` 置为 null。示例扫描文件（`examples/example_sweep.yaml` / `examples/example_lcoe_full.yaml`）使用 2023 年 + 显式 lat/lon（不在预下载城市数据内），首次运行需联网（几秒，取决于网络），之后命中缓存即可离线。
 
 #### 天气数据源与 GHI 订正（round 22）
 
@@ -275,7 +275,7 @@ battery:  { capital: { mode: per_kwh,  rate_per_kwh: 500 } }     # 每 kWh
 
 在 `pv` 或 `battery` 上使用 `per_watt` 会在加载时被拒绝并给出迁移提示：在 P0-1 修复之前，这种写法会悄悄把 **kWp** 当瓦数计（字段名偏差 1000 倍——46.5 kWp 阵列按"3.5/W"算出 162 而非 162,000），电池则是 **kWh**。组件没有 `capital:` 块时套用 legacy 回退计价（`pv.C_pv` 每 kWp，默认 500 为市场锚定；`battery.c_energy` 每 kWh）。
 
-`evaluate` 与 `sweep` 都会为每个计价组件打印单价自检行（如 `PV unit cost = 162792 RMB / 46.5 kWp = 3500.00 RMB/kWp (3.50 RMB/Wp)`），可手工验算计价基准。（`example_lcoe_full.yaml` 是完整成本模型示例。）然后调 `opex`——尤其是 `labor_cost_per_year` 与 `misc_opex_per_year`，它们主导小规模场景的经济性。
+`evaluate` 与 `sweep` 都会为每个计价组件打印单价自检行（如 `PV unit cost = 162792 RMB / 46.5 kWp = 3500.00 RMB/kWp (3.50 RMB/Wp)`），可手工验算计价基准。（`examples/example_lcoe_full.yaml` 是完整成本模型示例。）然后调 `opex`——尤其是 `labor_cost_per_year` 与 `misc_opex_per_year`，它们主导小规模场景的经济性。
 
 ### 5. 为你的选址配置光伏 + 电池
 

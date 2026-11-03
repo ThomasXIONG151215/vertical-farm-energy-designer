@@ -58,7 +58,7 @@ Checks the YAML against the project schema without running the simulation.
 vfed evaluate my_farm.yaml --cache weather_cache
 ```
 
-Runs the building simulation for a single configuration and reports annual load, biomass, and energy intensity (kWh/kg of fresh biomass). The `609` preset ships with `pv_area_m2=0` / `battery_kwh=0`, so the energy system is disabled here — you will see `Energy system = disabled`. If a project declares `pv` / `battery` (e.g. `example_lcoe_full.yaml`), this step also reports PV generation and grid import/export. A single full-year run (8,760 hourly steps) takes ~10 s on a typical laptop (machine-dependent).
+Runs the building simulation for a single configuration and reports annual load, biomass, and energy intensity (kWh/kg of fresh biomass). The `609` preset ships with `pv_area_m2=0` / `battery_kwh=0`, so the energy system is disabled here — you will see `Energy system = disabled`. If a project declares `pv` / `battery` (e.g. `examples/example_lcoe_full.yaml`), this step also reports PV generation and grid import/export. A single full-year run (8,760 hourly steps) takes ~10 s on a typical laptop (machine-dependent).
 
 ### 4. Parametric Sweep — find the LCOE-optimal PV + battery
 
@@ -66,10 +66,10 @@ The `609` preset declares no sweep ranges, so `vfed sweep my_farm.yaml` would on
 
 ```bash
 # 3 parameters (ppfd_target × pv_area × battery) = 100 configurations, ~6 s (typical laptop)
-vfed sweep example_sweep.yaml --cache weather_cache --out results.csv
+vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 ```
 
-`--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `example_lcoe_full.yaml`. There is no separate `optimize` command; sizing is done via `sweep`.
+`--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `examples/example_lcoe_full.yaml`. There is no separate `optimize` command; sizing is done via `sweep`.
 
 ## What's New (2026-10)
 
@@ -183,7 +183,7 @@ Weather is fetched hourly from Open-Meteo by lat/lon/year on first use and cache
 2. **`weather_cache/`** — previously fetched results, reused keyed by lat/lon/year/tilt/azimuth/timezone.
 3. **Open-Meteo live** — for any other (lat, lon, year) combination. Requires internet; on failure the CLI aborts with `[ERROR E003]`. To stay offline, use a cached year or pass `--cache`.
 
-For an offline quickstart, stick with a built-in city and `--year 2025`. To run an arbitrary site offline, fetch once while online (`vfed evaluate <yaml> --cache weather_cache`), then reuse the cache. Explicit coordinates take priority over a bundled city: `vfed design new --lat <deg> --lon <deg>` clears the preset's `site.city` (a `[WARN] clearing preset city ...` line is printed at creation) because the lat/lon cache key and the city CSV describe two different sites — keeping the city would silently simulate the wrong climate. The generated YAML then uses the coordinates as the weather cache key (`weather_<lat>_<lon>_<year>_*.csv`) and for the live Open-Meteo fetch on first run (`tz_hours` stays at the preset value unless you edit it). Conversely, if you hand-edit `lat`/`lon` in a YAML that still carries `site.city`, the city CSV keeps winning whenever its year matches — set `site.city: null` to force the lat/lon path. The example sweep files (`example_sweep.yaml`, `example_lcoe_full.yaml`) use year 2023 with explicit lat/lon, so their first run fetches from Open-Meteo (a few seconds, network-dependent) and subsequent runs hit the cache.
+For an offline quickstart, stick with a built-in city and `--year 2025`. To run an arbitrary site offline, fetch once while online (`vfed evaluate <yaml> --cache weather_cache`), then reuse the cache. Explicit coordinates take priority over a bundled city: `vfed design new --lat <deg> --lon <deg>` clears the preset's `site.city` (a `[WARN] clearing preset city ...` line is printed at creation) because the lat/lon cache key and the city CSV describe two different sites — keeping the city would silently simulate the wrong climate. The generated YAML then uses the coordinates as the weather cache key (`weather_<lat>_<lon>_<year>_*.csv`) and for the live Open-Meteo fetch on first run (`tz_hours` stays at the preset value unless you edit it). Conversely, if you hand-edit `lat`/`lon` in a YAML that still carries `site.city`, the city CSV keeps winning whenever its year matches — set `site.city: null` to force the lat/lon path. The example sweep files (`examples/example_sweep.yaml`, `examples/example_lcoe_full.yaml`) use year 2023 with explicit lat/lon, so their first run fetches from Open-Meteo (a few seconds, network-dependent) and subsequent runs hit the cache.
 
 #### Weather providers & GHI bias correction (round 22)
 
@@ -275,7 +275,7 @@ battery:  { capital: { mode: per_kwh,  rate_per_kwh: 500 } }     # currency per 
 
 A `per_watt` mode on `pv` or `battery` is rejected at load time with a migration message: before the P0-1 fix that spelling silently multiplied **kWp** for PV (1000x off the field name — a 46.5 kWp array at "3.5/W" priced out at 162 instead of 162,000) and **kWh** for battery. When a component has no `capital:` block — or the block omits its `cost` key (`cost: null`) — legacy fallback pricing applies (`pv.C_pv` per kWp, default 500 = market-anchored; `battery.c_energy` per kWh). An **explicit `cost: 0.0`** in a `direct` block is a *literal zero-cost component* (round 21, F2): it never falls back, so a project whose capital blocks are all explicit zeros reports `capital_total = 0` and an OPEX-only LCOE — exactly what the template NOTE promises. Negative `cost` values are rejected at load time.
 
-Both `evaluate` and `sweep` print a unit-price self-check line per capitalised component (e.g. `PV unit cost = 162792 RMB / 46.5 kWp = 3500.00 RMB/kWp (3.50 RMB/Wp)`) so the pricing basis can be verified by hand. (`example_lcoe_full.yaml` shows a complete cost model.) Then tune `opex` — especially `labor_cost_per_year` and `misc_opex_per_year`, which dominate small-scale economics.
+Both `evaluate` and `sweep` print a unit-price self-check line per capitalised component (e.g. `PV unit cost = 162792 RMB / 46.5 kWp = 3500.00 RMB/kWp (3.50 RMB/Wp)`) so the pricing basis can be verified by hand. (`examples/example_lcoe_full.yaml` shows a complete cost model.) Then tune `opex` — especially `labor_cost_per_year` and `misc_opex_per_year`, which dominate small-scale economics.
 
 ### 5. Size PV + battery for your site
 

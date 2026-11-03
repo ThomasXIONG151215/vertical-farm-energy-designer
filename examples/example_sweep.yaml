@@ -1,4 +1,4 @@
-# 参数扫描示例 — 用法：vfed sweep example_sweep.yaml --out results.csv
+# 参数扫描示例 — 用法：vfed sweep examples/example_sweep.yaml --out results.csv
 # 顶层不设 pv_area_m2/battery_kwh，装机由下方 parameter_ranges 的 pv_area/battery 枚举决定
 name: example_sweep
 # 站点与气象（Open-Meteo 按 lat/lon/year 拉取，可缓存）

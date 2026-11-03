@@ -35,6 +35,7 @@ gadget/
 # IDE / tooling
 .pytest_cache/
 *.code-workspace
+_probe.png
 
 # research/: keep sources (.py/.ipynb/.idf/.json) tracked,
 # ignore heavy EnergyPlus outputs (local copies retained)

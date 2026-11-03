@@ -538,7 +538,7 @@ class TestCapitalUnitArithmetic:
         import yaml
 
         root = Path(__file__).resolve().parents[1]
-        with open(root / "example_lcoe_full.yaml", encoding="utf-8") as fh:
+        with open(root / "examples" / "example_lcoe_full.yaml", encoding="utf-8") as fh:
             cfg = yaml.safe_load(fh)
         assert cfg["pv"]["capital"]["mode"] == "per_kwp"
         assert cfg["pv"]["capital"]["rate_per_kwp"] == pytest.approx(3500.0)

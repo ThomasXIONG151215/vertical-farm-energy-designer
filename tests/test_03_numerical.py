@@ -454,8 +454,8 @@ def test_sample_yaml_transpiration_matches_code_default():
     root = Path(__file__).resolve().parents[1]
     fixtures = {
         "test_project.yaml": Path(__file__).resolve().parent,
-        "example_lcoe_full.yaml": root,
-        "example_sweep.yaml": root,
+        "example_lcoe_full.yaml": root / "examples",
+        "example_sweep.yaml": root / "examples",
     }
     for fname, base in fixtures.items():
         with open(base / fname, encoding="utf-8") as fh:
@@ -479,8 +479,8 @@ def test_sample_yaml_pv_params_match_code_default():
     root = Path(__file__).resolve().parents[1]
     fixtures = {
         "test_project.yaml": Path(__file__).resolve().parent,
-        "example_lcoe_full.yaml": root,
-        "example_sweep.yaml": root,
+        "example_lcoe_full.yaml": root / "examples",
+        "example_sweep.yaml": root / "examples",
     }
     for fname, base in fixtures.items():
         with open(base / fname, encoding="utf-8") as fh:
