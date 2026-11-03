@@ -74,6 +74,10 @@ pytest --cov=vfed
 - Commit `.env` or API keys
 - Hardcode weather data — always use `fetch_weather` or cache
 - Import from `research/` into `vfed/` — research is archived, vfed is the active codebase
+- Move `gadget/` or other large root folders on this machine — the G: volume is managed by a
+  bidirectional cloud-sync layer (FeRp reparse tags; Syncthing/Baidu sync suspected). Local moves
+  are reverted from peer state within minutes (verified by repeated tests). `gadget/` stays at
+  repo root; it is git-ignored and harmless there.
 - Modify `research/` code — it is preserved for reproducibility only.
   Exception (2026-10-23 cleanup, user-approved): byte-identical cross-city duplicate files
   (442 files) were removed; the original layout is recorded in
