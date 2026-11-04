@@ -2,7 +2,7 @@
 
 Tests whether the light-extinction anchor c_pl_d = 32.7 m2/kg (calibrated
 on the BJAAF Exp_c greenhouse LAI/X_d pairing, see
-scripts/benchmarks/bjaaf_growth/run_calibration.py) improves the UC Davis
+benchmarks/bjaaf_growth/run_calibration.py) improves the UC Davis
 PFAL fresh-weight fit reported by run_biomass.py (T4: RMSE 21.49 g/plant,
 5.4x near-linear growth vs measured 19.1x near-exponential).
 
@@ -18,7 +18,7 @@ scans c_rad_phot to show the remaining shape gap attributable to
 efficiency vs structure.
 
 Usage (from the repo root):
-    python scripts/benchmarks/uc_davis/run_biomass_stage2.py [--cache DIR]
+    python benchmarks/uc_davis/run_biomass_stage2.py [--cache DIR]
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.dirname(HERE)
-REPO = os.path.abspath(os.path.join(BENCH, "..", ".."))
+REPO = os.path.abspath(os.path.join(BENCH, ".."))
 sys.path.insert(0, BENCH)
 sys.path.insert(0, HERE)
 sys.path.insert(0, REPO)
@@ -212,7 +212,7 @@ def main() -> int:
         "\n## 结论\n",
         "- （见下方生成后人工核对填写）\n",
         "\n## 复现\n\n```bash\n"
-        "python scripts/benchmarks/uc_davis/run_biomass_stage2.py\n```\n",
+        "python benchmarks/uc_davis/run_biomass_stage2.py\n```\n",
     ]
     os.makedirs(os.path.dirname(REPORT), exist_ok=True)
     with open(REPORT, "w", encoding="utf-8") as f:

@@ -11,8 +11,8 @@ One-shot script: downloads **2025 hourly weather for every city** in the city DB
 ### Usage / 用法
 
 ```bash
-python scripts/download_weather_db.py           # skip cities whose CSV already exists（已存在则跳过）
-python scripts/download_weather_db.py --force   # re-download everything（全部重新下载）
+python tools/download_weather_db.py           # skip cities whose CSV already exists（已存在则跳过）
+python tools/download_weather_db.py --force   # re-download everything（全部重新下载）
 ```
 
 ### Notes / 说明

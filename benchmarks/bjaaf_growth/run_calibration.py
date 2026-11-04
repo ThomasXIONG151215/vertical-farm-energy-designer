@@ -34,7 +34,7 @@ growth-module parameters. Envelope/HVAC parameters are untouched. The
 climate series is a direct model input (no envelope coupling).
 
 Usage (from the repo root):
-    python scripts/benchmarks/bjaaf_growth/run_calibration.py [--no-report]
+    python benchmarks/bjaaf_growth/run_calibration.py [--no-report]
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ from scipy.optimize import minimize_scalar
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.dirname(HERE)
-REPO = os.path.abspath(os.path.join(BENCH, "..", ".."))
+REPO = os.path.abspath(os.path.join(BENCH, ".."))
 sys.path.insert(0, BENCH)
 sys.path.insert(0, REPO)
 
@@ -387,7 +387,7 @@ def render_report(now, sha, rho_c, A, fit, sim_obs, ref_obs, clim_stats):
         f"- 下一步（Stage 2）: c_pl_d={c_pl:.1f} 固定，迁移回 UC Davis "
         "run_biomass.py 重跑，观察形态差与 RMSE 变化",
         "\n## 复现\n\n```bash\n"
-        "python scripts/benchmarks/bjaaf_growth/run_calibration.py\n```\n",
+        "python benchmarks/bjaaf_growth/run_calibration.py\n```\n",
     ]
     return "\n".join(L)
 

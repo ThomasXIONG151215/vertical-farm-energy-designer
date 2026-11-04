@@ -162,7 +162,7 @@ MODULES: Dict[str, ModuleSpec] = {
     #   not representable in the single-coefficient (1-deg)**year model).
     #   area_to_power = 3.1068 / 0.730 = 4.256 m2/kWp.
     #   G4: eta_rel_nodes generated offline 2026-11-02 by
-    #   scripts/generate_eta_rel.py (De Soto/CEC single-diode fit to the
+    #   tools/generate_eta_rel.py (De Soto/CEC single-diode fit to the
     #   datasheet STC five-point + alpha/beta/gamma coefficients,
     #   alpha_sc +0.04 %/K, beta_voc -0.22 %/K from the same datasheet;
     #   STC reproduction +0.000 %, PVsyst-Rsh(G) sensitivity band at
@@ -204,7 +204,7 @@ MODULES: Dict[str, ModuleSpec] = {
     #   1.0 % first-year loss not representable in the single-coefficient
     #   model).  area_to_power = 2.7012 / 0.670 = 4.031 m2/kWp.
     #   G4: eta_rel_nodes generated offline 2026-11-02 by
-    #   scripts/generate_eta_rel.py (De Soto/CEC single-diode fit,
+    #   tools/generate_eta_rel.py (De Soto/CEC single-diode fit,
     #   alpha_sc +0.050 %/K, beta_voc -0.200 %/K from the same datasheet;
     #   STC reproduction -0.082 %).  No public BC/HPBC module-level
     #   eta(G) measurement exists (anchors/low_irradiance.yaml

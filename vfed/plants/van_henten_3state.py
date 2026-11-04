@@ -4,7 +4,7 @@ Ported from the MATLAB reference model shipped with the BJAAF lettuce-growth
 dataset (Beijing Academy of Agriculture and Forestry Sciences; Mendeley
 DOI 10.17632/r7z9ttvkyh.2, ``Lettuce growth model program`` folder:
 ``MainProgram.m`` + 8 ``.m`` files).  The same equations were validated in
-Python at script level (``scripts/benchmarks/bjaaf_growth/run_calibration.py``,
+Python at script level (``benchmarks/bjaaf_growth/run_calibration.py``,
 ``run_validation.py``) and numerically qualified for vfed's 600 s explicit
 Euler stepping in ``run_euler_check.py`` (max X_d deviation vs RK45
 < 0.5 % on four tracks).

@@ -27,11 +27,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-HERE = Path(__file__).resolve().parent            # scripts/benchmarks/bjaaf_growth
+HERE = Path(__file__).resolve().parent            # benchmarks/bjaaf_growth
 BJAAF = HERE
-BENCH = HERE.parent                               # scripts/benchmarks
+BENCH = HERE.parent                               # benchmarks
 UCD = BENCH / "uc_davis"
-REPO = BENCH.parent.parent                         # repo root
+REPO = BENCH.parent                         # repo root
 
 for _p in (BENCH, HERE, UCD, REPO):
     if str(_p) not in sys.path:

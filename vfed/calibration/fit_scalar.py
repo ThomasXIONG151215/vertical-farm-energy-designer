@@ -5,7 +5,7 @@
 对单峰目标函数数值等价（Stage 1 已证两个目标函数均单峰：
 截获分数 SSE 与效率拟合 RMSE）。
 
-数学出处: Stage 1 手工校准 ``scripts/benchmarks/bjaaf_growth/run_calibration.py``
+数学出处: Stage 1 手工校准 ``benchmarks/bjaaf_growth/run_calibration.py``
 （报告 ``user-gym/benchmarks/bjaaf_growth_calibration_report.md``）。
 """
 from __future__ import annotations

@@ -19,17 +19,17 @@ Outputs the verdict report to `user-gym/benchmarks/layerC_report.md`
 
 ```bash
 # full 4-case run + report
-python scripts/benchmarks/bestest/run_bestest.py
+python benchmarks/bestest/run_bestest.py
 
 # calibration probes (no report written)
-python scripts/benchmarks/bestest/run_bestest.py --only 600FF --cz 500 600 700
-python scripts/benchmarks/bestest/run_bestest.py --only 600 --eta 0.72 0.75 0.78
-python scripts/benchmarks/bestest/run_bestest.py --only 900 --ua 70 75 80
+python benchmarks/bestest/run_bestest.py --only 600FF --cz 500 600 700
+python benchmarks/bestest/run_bestest.py --only 600 --eta 0.72 0.75 0.78
+python benchmarks/bestest/run_bestest.py --only 900 --ua 70 75 80
 
 # R28: 2R2C wall thermal-mass mode (additive wall_rc_nodes=2, timestep 60 s)
-python scripts/benchmarks/bestest/run_bestest.py --rc
-python scripts/benchmarks/bestest/run_bestest.py --rc --only 600FF --gim 400 700 900
-python scripts/benchmarks/bestest/run_bestest.py --rc --only 900 --eta 0.78 --cmass 3966
+python benchmarks/bestest/run_bestest.py --rc
+python benchmarks/bestest/run_bestest.py --rc --only 600FF --gim 400 700 900
+python benchmarks/bestest/run_bestest.py --rc --only 900 --eta 0.78 --cmass 3966
 ```
 
 Each dual-year run simulates 17,520 h at dt=600 s (~1–2 min per case; the

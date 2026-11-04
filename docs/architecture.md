@@ -15,8 +15,8 @@
 | `examples/` | Example project YAMLs (`example_sweep.yaml`, `example_lcoe_full.yaml`) |
 | `data/` | `data/weather/` city CSVs (offline quickstart); `data/datasets/` public datasets (git-ignored except `*.md`) |
 | `docs/` | `architecture.md` (this file) · `reports/` (technical deliverables) · `references/` (PV/BES validation data — datasheets, measured curves; `battery.py`/`modules.py` load anchors from here at runtime) · `planning/` (dated session plans) |
-| `tools/` | Maintenance utilities — `download_weather_db.py` refreshes `data/weather/` *(split from `scripts/` pending, see §3)* |
-| `benchmarks/` | BESTEST (ASHRAE 140) harness + growth benchmarks (BJAAF, UC Davis, respiration) *(split from `scripts/benchmarks/` pending, see §3)* |
+| `tools/` | Maintenance utilities — `download_weather_db.py` refreshes `data/weather/` |
+| `benchmarks/` | BESTEST (ASHRAE 140) harness + growth benchmarks (BJAAF, UC Davis, respiration) |
 | `research/` | **Archived paper code** — frozen for reproducibility. Never imported by `vfed/`. |
 | Root files | `README.md` · `README_zh.md` · `AGENTS.md` · `REVIEW.md` · `CHANGELOG.md` · `CONTRIBUTING.md` · `LICENSE` · `pyproject.toml` |
 
@@ -102,5 +102,4 @@ graph TD
 
 ## 3. Pending reorganisation
 
-- **C2b** — `scripts/` splits into `tools/` (utilities) + `benchmarks/` (validation harnesses). Waiting on a parallel session's commits; reference updates already enumerated in `docs/planning/2026-11-03_repo-reorg-plan.md`.
 - **C5** — `design/engine.py` hourly-loop split, interface-preserving: `DesignEngine` / `run_project` / `full_load_warnings` / `SimulationResult` import paths and signatures stay frozen.

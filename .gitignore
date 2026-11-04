@@ -63,7 +63,7 @@ docs/references/pvbes-validation/raw/sandia_modules.csv
 data/Lettuce_growth.zip
 
 # EnergyPlus benchmark outputs (regeneratable: run_energyplus.py / build_idf.py)
-scripts/benchmarks/bestest/energyplus/out*/
+benchmarks/bestest/energyplus/out*/
 
 # Browser frontend (moved to local backups/ on 2026-10-23, removed from public repo)
 vfed-web/

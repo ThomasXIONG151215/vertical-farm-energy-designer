@@ -18,9 +18,9 @@ cached value is constant (weather is hourly); the first substep of each hour
 reads the previous hour's cache -> <=1 substep/hour (60 s) lag, negligible.
 
 Usage (repo root):
-    python scripts/benchmarks/bestest/solar_split_scan.py --case 600 \
+    python benchmarks/bestest/solar_split_scan.py --case 600 \
         --f 0 0.3 0.6 --gim 50 100 200 400
-    python scripts/benchmarks/bestest/solar_split_scan.py --case 600FF \
+    python benchmarks/bestest/solar_split_scan.py --case 600FF \
         --f 0.6 --gim 100 --eta 0.80 0.85
 """
 

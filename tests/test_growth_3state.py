@@ -4,7 +4,7 @@ Covers: lazy state initialisation, reset semantics, read-only fluxes(),
 synthetic non-negativity stress, the growth.model config selector, and a
 frozen regression of the 30-day PFAL proxy orbit (values computed with this
 exact class, cross-checked against the RK45 reference in
-scripts/benchmarks/bjaaf_growth/run_euler_check.py; agreement < 0.5%).
+benchmarks/bjaaf_growth/run_euler_check.py; agreement < 0.5%).
 """
 
 import math

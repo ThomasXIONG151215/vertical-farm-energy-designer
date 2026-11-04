@@ -39,7 +39,7 @@ climate series is a direct model input; no envelope coupling; envelope/
 HVAC parameters are untouched.
 
 Usage (from the repo root):
-    python scripts/benchmarks/bjaaf_growth/run_validation.py [--no-report]
+    python benchmarks/bjaaf_growth/run_validation.py [--no-report]
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.dirname(HERE)
-REPO = os.path.abspath(os.path.join(BENCH, "..", ".."))
+REPO = os.path.abspath(os.path.join(BENCH, ".."))
 sys.path.insert(0, HERE)
 sys.path.insert(0, BENCH)
 sys.path.insert(0, REPO)
@@ -292,7 +292,7 @@ def main() -> int:
         "- 与 Stage 1/2 相同的诚实口径: 不设 PASS/FAIL 门禁；残差形态"
         "（中期/末期偏差结构）比单一 RMSE 更有解释力",
         "\n## 复现\n\n```bash\n"
-        "python scripts/benchmarks/bjaaf_growth/run_validation.py\n```\n",
+        "python benchmarks/bjaaf_growth/run_validation.py\n```\n",
     ]
     os.makedirs(os.path.dirname(REPORT), exist_ok=True)
     with open(REPORT, "w", encoding="utf-8") as f:

@@ -38,7 +38,8 @@ vertical-farm-energy-designer/
 │   ├── agent/   # 评估器（agent-cli 契约）
 │   └── calibration/ # 可辨识性 + 拟合工具
 ├── tests/       # pytest 测试套件（866+ 用例，CI：Python 3.10–3.12）
-├── scripts/     # 工具 + 验证基准（计划拆分：tools/ + benchmarks/）
+├── tools/       # 维护工具（download_weather_db.py）
+├── benchmarks/  # 验证基准（BESTEST、生长模型）
 ├── examples/    # 示例项目 YAML（sweep / LCOE 演示）
 ├── data/        # 城市天气 CSV + 公开数据集
 ├── docs/        # architecture.md · reports/ · references/ · planning/
@@ -102,7 +103,7 @@ vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 - **最小 CO₂ 平衡（M1）** — `co2:` 配置块（`co2.enabled`，默认关）新增室内 CO₂ 状态与带容量限制的注入器设备。源汇包括注入、作物光合吸收、作物呼吸与渗风；注入器电耗计入建筑总电耗；输出 `co2_mean_ppm` / `annual_co2_injected_kg` 及钳制诊断。
 - **标定引擎**（`vfed/calibration/`）— 数据集适配器（适配器 A 以 BJAAF 配对 LAI/X_d 比值为锚）、参数可辨识性规则、黄金分割拟合。参考用例：复现 BJAAF Exp_c 标定（`c_pl_d` = 32.7，`c_rad_phot` = 5.17e-9）。
 - **验证与基准**
-  - `scripts/benchmarks/bestest/` — EnergyPlus BESTEST 验证台（ASHRAE 140 Cases 600/600FF/900/900FF，Denver TMY3）。2R2C 墙体湿路径在 Case 600 上 4/4 项指标通过 EnergyPlus 参考对照。
+  - `benchmarks/bestest/` — EnergyPlus BESTEST 验证台（ASHRAE 140 Cases 600/600FF/900/900FF，Denver TMY3）。2R2C 墙体湿路径在 Case 600 上 4/4 项指标通过 EnergyPlus 参考对照。
   - 公开数据生长基准：UC Davis 生菜（3 状态模型生物量 RMSE 21.49 g → 14.26 g）；BJAAF 分阶段留出集（3 状态 −1.6 %/+11.5 %，1 状态外推失败 +27 %）。
   - 866 个 pytest 用例全部通过。
 - **本地化的公开数据集**（`data/datasets/`）— AGC 2018/2019 温室（WUR，CC0）、UC Davis 生菜（30 分钟环境 + 逐日生物量 + 冠层 RGB）、BJAAF 北京生菜（配对 LAI/X_d）、CERTH 垂直农场能源（CC BY 4.0）、UniBo VF LCA、Frontiers 能耗强度基准表。
@@ -221,7 +222,7 @@ vfed evaluate my_farm.yaml --provider nasa-power --ghi-scale 0.9
 
 #### 预下载双源城市文件（round 23）
 
-51 城在 `data/weather/` 中同时内置两种数据源的 2025 逐时文件——`{City}_{year}.csv` 为 Open-Meteo/ERA5 再分析，`{City}_{year}_power.csv` 为 NASA POWER（MERRA-2 气象 + CERES 辐射卫星）。YAML 中设 `site.weather_provider: nasa-power` 后引擎自动命中 `_power` 文件：完全离线、零 API 调用、无需命令行旗标；`site.ghi_scale` 订正开关照常生效（见上节）。每个文件的来源、坐标、行数、GHI 年累计与生成日期见 `data/weather/MANIFEST.md`；可用 `python scripts/download_weather_db.py --provider nasa-power` 重新生成（不加旗标即 ERA5，行为不变）。POWER 仅提供逐时 GHI，故 `_power` 文件中 `direct_radiation`/`diffuse_radiation` 两列为 0 占位，引擎加载时按设计的倾角/方位角由 GHI 重建 POA 直散分量（Erbs 分解），文件本身与几何无关。使用 `_power` 文件的发表物须按 NASA POWER 的引用要求标注该服务及 MERRA-2/CERES 文献（完整引文清单见 MANIFEST.md）。
+51 城在 `data/weather/` 中同时内置两种数据源的 2025 逐时文件——`{City}_{year}.csv` 为 Open-Meteo/ERA5 再分析，`{City}_{year}_power.csv` 为 NASA POWER（MERRA-2 气象 + CERES 辐射卫星）。YAML 中设 `site.weather_provider: nasa-power` 后引擎自动命中 `_power` 文件：完全离线、零 API 调用、无需命令行旗标；`site.ghi_scale` 订正开关照常生效（见上节）。每个文件的来源、坐标、行数、GHI 年累计与生成日期见 `data/weather/MANIFEST.md`；可用 `python tools/download_weather_db.py --provider nasa-power` 重新生成（不加旗标即 ERA5，行为不变）。POWER 仅提供逐时 GHI，故 `_power` 文件中 `direct_radiation`/`diffuse_radiation` 两列为 0 占位，引擎加载时按设计的倾角/方位角由 GHI 重建 POA 直散分量（Erbs 分解），文件本身与几何无关。使用 `_power` 文件的发表物须按 NASA POWER 的引用要求标注该服务及 MERRA-2/CERES 文献（完整引文清单见 MANIFEST.md）。
 
 **什么参数用哪个源？** 独立验证研究并不支持全面换源：
 
@@ -458,7 +459,8 @@ vertical-farm-energy-designer/
 ├── research/               # 论文归档代码与数据（见下）
 ├── docs/references/       # 参考文献（pvbes-validation 锚点、van-henten 源码）
 ├── data/weather/           # 预下载城市天气 CSV（51 城 × 2025）
-├── scripts/                # 工具脚本（download_weather_db.py 刷新 data/weather/）
+├── tools/                  # 维护工具（download_weather_db.py 刷新 data/weather/）
+├── benchmarks/             # 验证基准（BESTEST/ASHRAE 140、生长模型）
 ├── tests/                  # Pytest 测试套件（含 test_project.yaml 最小夹具）
 ├── weather_cache/          # 缓存的天气 CSV（自动生成）
 ├── pyproject.toml          # 项目元数据与依赖

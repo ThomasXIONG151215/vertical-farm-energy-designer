@@ -19,7 +19,7 @@ Alignment model:
   0.03-0.06) converts dry -> fresh; reported, not fitted.
 
 Usage (from the repo root):
-    python scripts/benchmarks/uc_davis/run_biomass.py [--cache DIR]
+    python benchmarks/uc_davis/run_biomass.py [--cache DIR]
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.dirname(HERE)
-REPO = os.path.abspath(os.path.join(BENCH, "..", ".."))
+REPO = os.path.abspath(os.path.join(BENCH, ".."))
 sys.path.insert(0, BENCH)
 
 from _common import metrics  # noqa: E402
@@ -55,7 +55,7 @@ RHO_SWEEP = [12.07, 16.0, 20.0, 25.0]   # heads/m2 (12.07 = 70 / 5.8 m2 covered)
 RHO_MAIN = 20.0          # mid literature band for butterhead NFT
 
 DRIVE = {
-    "project": "scripts/benchmarks/uc_davis/project.yaml (same env-benchmark config) "
+    "project": "benchmarks/uc_davis/project.yaml (same env-benchmark config) "
                f"+ runtime override setpoints.crop_cycle_days={CYCLE_DAYS} "
                "(cycle-2 boundary lands 2024-02-22 00:00 ~= transplant 02-21)",
     "weather": "ERA5 hourly via engine-internal fetch (same as run_env.py)",
@@ -218,7 +218,7 @@ def render_report(obs: pd.DataFrame, sim: pd.DataFrame, j: pd.DataFrame,
         "（ρ, dry_frac, initial_dry_weight, c_rad_phot 联合辨识 + 形态残差"
         "明确归模型结构）",
         "\n## 复现\n\n```bash\n"
-        "python scripts/benchmarks/uc_davis/run_biomass.py\n```\n",
+        "python benchmarks/uc_davis/run_biomass.py\n```\n",
     ]
     return "\n".join(L)
 

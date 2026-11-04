@@ -12,7 +12,8 @@ Full map with layering rules and dependency graph: `docs/architecture.md`.
 |-------|------|------|
 | Tracked | `vfed/` | Active simulator code (see flat map below) |
 | Tracked | `tests/` | Pytest suite — CI-locked, do not move |
-| Tracked | `scripts/` | Utilities + benchmarks (split into `tools/` + `benchmarks/` planned) |
+| Tracked | `tools/` | Maintenance utilities (`download_weather_db.py` refreshes `data/weather/`) |
+| Tracked | `benchmarks/` | Validation benchmarks (BESTEST/ASHRAE 140, BJAAF growth, respiration, UC Davis) |
 | Tracked | `examples/` `data/` `docs/` | Example YAMLs · weather/datasets · architecture/reports/references/planning |
 | Tracked | `research/` | Archived paper code — frozen |
 | Local-only | `gadget/` `user-gym/` `backups/` | Git-ignored machine-local folders — never move (sync layer), never commit |
@@ -55,7 +56,8 @@ pytest --cov=vfed
 | `vfed/weather/` | Open-Meteo fetch, geocoding | `engine.py` calls `fetch_weather` |
 | `vfed/plants/` | Transpiration (5 methods: van_henten model-coupled; daily/per_plant/daily_per_period/per_plant_per_period direct-set), Van Henten growth | `engine.py` steps each hour |
 | `vfed/agent/` | Evaluator (agent-cli contract) | Entry point for CLI |
-| `scripts/` | Utility scripts | `download_weather_db.py` refreshes `data/weather/` city CSVs |
+| `tools/` | Maintenance utilities | `download_weather_db.py` refreshes `data/weather/` city CSVs |
+| `benchmarks/` | Validation benchmarks | BESTEST, BJAAF growth, respiration, UC Davis |
 | `tests/` | Pytest suite | run with `pytest` |
 
 ## Review Standard

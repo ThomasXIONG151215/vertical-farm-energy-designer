@@ -13,7 +13,7 @@ Method (see docs/references/pvbes-validation/anchors/low_irradiance.yaml):
      identify from datasheet data alone.
 
 Runtime vfed code never imports pvlib/scipy; this script is [dev] only.
-Usage:  python scripts/generate_eta_rel.py
+Usage:  python tools/generate_eta_rel.py
 """
 
 import sys

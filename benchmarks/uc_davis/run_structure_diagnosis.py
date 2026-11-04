@@ -22,7 +22,7 @@ vs the growth ODE itself.
 Diagnosis only -- no PASS/FAIL gates, no vfed/ source modified.
 
 Usage (from the repo root):
-    python scripts/benchmarks/uc_davis/run_structure_diagnosis.py
+    python benchmarks/uc_davis/run_structure_diagnosis.py
 """
 
 from __future__ import annotations
@@ -373,7 +373,7 @@ def main() -> int:
         "- LAI₀、RH、PPFD=250 均为假设；绝对水平可缩放，形状为主信号",
         "- 3-state 为自研 scipy 移植，官方无 UC Davis 基线\n",
         "## 复现\n\n```bash\n"
-        "python scripts/benchmarks/uc_davis/run_structure_diagnosis.py\n```\n",
+        "python benchmarks/uc_davis/run_structure_diagnosis.py\n```\n",
     ]
     os.makedirs(os.path.dirname(REPORT), exist_ok=True)
     with open(REPORT, "w", encoding="utf-8") as f:

@@ -187,7 +187,7 @@ class TestRegistryMatchesReferenceYaml:
         else:
             assert spec.NOCT == legacy_cfg.NOCT
         # G4: datasheet-derived node tables (huasun / longi, generated
-        # offline by scripts/generate_eta_rel.py) mirror the yaml; null or
+        # offline by tools/generate_eta_rel.py) mirror the yaml; null or
         # absent yaml field -> identity curve (spec None).
         y_nodes = y.get("eta_rel_nodes")
         if y_nodes is None:
@@ -392,7 +392,7 @@ class TestG4SyntheticCurve:
 
 
 class TestG4DatasheetCurves:
-    """Offline-generated eta_rel tables (scripts/generate_eta_rel.py,
+    """Offline-generated eta_rel tables (tools/generate_eta_rel.py,
     2026-11-02) now ship with two presets.  The default jinko baseline
     stays identity (golden zero-drift contract)."""
 

@@ -18,7 +18,7 @@
        per contracts.py).
 
  Usage (from the repo root):
-     python scripts/benchmarks/bjaaf_growth/run_engine_skeleton.py
+     python benchmarks/bjaaf_growth/run_engine_skeleton.py
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.dirname(HERE)
-REPO = os.path.abspath(os.path.join(BENCH, "..", ".."))
+REPO = os.path.abspath(os.path.join(BENCH, ".."))
 sys.path.insert(0, BENCH)
 sys.path.insert(0, REPO)
 
@@ -172,7 +172,7 @@ def main() -> int:
         L.append("| %s | %.5f | %.5f |" % (d, o, s))
     L += ["\n---\n", result.to_markdown(),
           "\n## 复现\n\n```bash\n"
-          "python scripts/benchmarks/bjaaf_growth/run_engine_skeleton.py\n```\n"]
+          "python benchmarks/bjaaf_growth/run_engine_skeleton.py\n```\n"]
     os.makedirs(os.path.dirname(REPORT), exist_ok=True)
     with open(REPORT, "w", encoding="utf-8") as f:
         f.write("\n".join(L))

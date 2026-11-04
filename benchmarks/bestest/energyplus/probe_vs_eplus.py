@@ -15,7 +15,7 @@ DIAGNOSTIC with self-declared bands:
                            carry the correspondence judgement
 
 Usage (repo root):
-    python scripts/benchmarks/bestest/energyplus/probe_vs_eplus.py
+    python benchmarks/bestest/energyplus/probe_vs_eplus.py
         [--report user-gym/benchmarks/energyplus_hourly_report.md]
 """
 import argparse

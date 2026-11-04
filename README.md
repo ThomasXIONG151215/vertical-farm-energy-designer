@@ -38,7 +38,8 @@ vertical-farm-energy-designer/
 │   ├── agent/   # evaluator (agent-cli contract)
 │   └── calibration/ # identifiability + fitting tools
 ├── tests/       # pytest suite (866+ tests, CI: Python 3.10–3.12)
-├── scripts/     # utilities + validation benchmarks (planned split: tools/ + benchmarks/)
+├── tools/       # maintenance utilities (download_weather_db.py)
+├── benchmarks/  # validation benchmarks (BESTEST, growth)
 ├── examples/    # example project YAMLs (sweep / LCOE demos)
 ├── data/        # city weather CSVs + public datasets
 ├── docs/        # architecture.md · reports/ · references/ · planning/
@@ -102,7 +103,7 @@ Since the paper, the engine has grown from a load generator into a validated, ca
 - **Minimal CO₂ balance (M1)** — a `co2:` config block (`co2.enabled`, default off) adds an indoor CO₂ state with a capacity-limited injector device. Sources and sinks are injection, crop photosynthesis uptake, crop respiration and infiltration; injector electricity joins the building totals; `co2_mean_ppm` / `annual_co2_injected_kg` and clamp diagnostics are reported.
 - **Calibration engine** (`vfed/calibration/`) — dataset adapters (adapter A anchors on BJAAF paired LAI/X_d ratios), parameter identifiability rules, and golden-section fitting. Reference case: it reproduces the BJAAF Exp_c calibration (`c_pl_d` = 32.7, `c_rad_phot` = 5.17e-9).
 - **Validation & benchmarks**
-  - `scripts/benchmarks/bestest/` — an EnergyPlus BESTEST harness (ASHRAE 140 Cases 600/600FF/900/900FF, Denver TMY3). The 2R2C-wall wet path passes 4/4 Case 600 metrics against the EnergyPlus reference.
+  - `benchmarks/bestest/` — an EnergyPlus BESTEST harness (ASHRAE 140 Cases 600/600FF/900/900FF, Denver TMY3). The 2R2C-wall wet path passes 4/4 Case 600 metrics against the EnergyPlus reference.
   - Growth benchmarks on public data: UC Davis lettuce (biomass RMSE 21.49 g → 14.26 g with the 3-state model) and BJAAF staged holdouts (3-state −1.6 %/+11.5 % vs 1-state +27 % extrapolation failure).
   - 866 pytest tests, all passing.
 - **Localized public datasets** under `data/datasets/` — AGC 2018/2019 greenhouse (WUR, CC0), UC Davis lettuce (30-min environment + daily biomass + canopy RGB), BJAAF Beijing lettuce (paired LAI/X_d), CERTH vertical-farm energy (CC BY 4.0), UniBo VF LCA, and the Frontiers energy-intensity benchmark table.
@@ -221,7 +222,7 @@ The two sources never mix on disk: NASA POWER caches carry a `_power` suffix (`w
 
 #### Pre-downloaded dual-source city files (round 23)
 
-All 51 built-in cities ship **both** sources for 2025 in `data/weather/`: `{City}_{year}.csv` = Open-Meteo/ERA5, `{City}_{year}_power.csv` = NASA POWER (MERRA-2 meteorology + CERES radiation). Setting `site.weather_provider: nasa-power` in the YAML makes the engine load `{City}_{year}_power.csv` automatically — fully offline, no API call, no CLI flag needed. GHI bias correction still applies the same way (`site.ghi_scale`, see above). Per-file provenance (provider, city, lat/lon, rows, annual GHI, generation date) is tabulated in `data/weather/MANIFEST.md`; regenerate the POWER set with `python scripts/download_weather_db.py --provider nasa-power` (no flag = ERA5 set, behaviour unchanged). Because POWER provides hourly GHI only, the `_power` files carry `direct_radiation = diffuse_radiation = 0` placeholders — POA and its beam/diffuse split are re-derived from GHI (Erbs split) at load time with the design's tilt/azimuth, so the files stay geometry-neutral. Publications using the `_power` files must cite the NASA POWER service and its MERRA-2/CERES upstream datasets (<https://power.larc.nasa.gov/docs/methodology/citations/>; full citation list in MANIFEST.md).
+All 51 built-in cities ship **both** sources for 2025 in `data/weather/`: `{City}_{year}.csv` = Open-Meteo/ERA5, `{City}_{year}_power.csv` = NASA POWER (MERRA-2 meteorology + CERES radiation). Setting `site.weather_provider: nasa-power` in the YAML makes the engine load `{City}_{year}_power.csv` automatically — fully offline, no API call, no CLI flag needed. GHI bias correction still applies the same way (`site.ghi_scale`, see above). Per-file provenance (provider, city, lat/lon, rows, annual GHI, generation date) is tabulated in `data/weather/MANIFEST.md`; regenerate the POWER set with `python tools/download_weather_db.py --provider nasa-power` (no flag = ERA5 set, behaviour unchanged). Because POWER provides hourly GHI only, the `_power` files carry `direct_radiation = diffuse_radiation = 0` placeholders — POA and its beam/diffuse split are re-derived from GHI (Erbs split) at load time with the design's tilt/azimuth, so the files stay geometry-neutral. Publications using the `_power` files must cite the NASA POWER service and its MERRA-2/CERES upstream datasets (<https://power.larc.nasa.gov/docs/methodology/citations/>; full citation list in MANIFEST.md).
 
 **Which source for what?** Independent validation studies do not crown a single winner:
 
@@ -458,7 +459,8 @@ vertical-farm-energy-designer/
 ├── research/               # Archived research paper code & data (see below)
 ├── docs/references/       # Reference literature (pvbes-validation anchors, van-henten sources)
 ├── data/weather/           # Pre-downloaded city weather CSVs (51 cities × 2025)
-├── scripts/                # Utility scripts (download_weather_db.py refreshes data/weather/)
+├── tools/                  # Maintenance utilities (download_weather_db.py refreshes data/weather/)
+├── benchmarks/             # Validation benchmarks (BESTEST/ASHRAE 140, growth harnesses)
 ├── tests/                  # Pytest suite (incl. test_project.yaml minimal fixture)
 ├── weather_cache/          # Cached weather CSVs (auto-generated)
 ├── pyproject.toml          # Project metadata & dependencies

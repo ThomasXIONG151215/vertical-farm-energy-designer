@@ -1,6 +1,6 @@
 """Shared benchmark helpers (metrics only, by design).
 
-Second consumer triggered extraction per the scripts/benchmarks contract
+Second consumer triggered extraction per the benchmarks contract
 (rule-of-three: 1st inline -> 2nd extract -> 3rd YAML spec + runner).
 Keep this file dependency-free (numpy only) so any benchmark can import.
 """

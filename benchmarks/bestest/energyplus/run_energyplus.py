@@ -14,7 +14,7 @@ this script's GJ conversion):
   * J -> GJ is /1e9 (NOT /3.6e9; kWh->GJ is the one with 3.6).
 
 Usage (repo root):
-    python scripts/benchmarks/bestest/energyplus/run_energyplus.py \
+    python benchmarks/bestest/energyplus/run_energyplus.py \
         [--epw PATH] [--eplus PATH] [--out user-gym/benchmarks] [--keep]
 """
 import argparse
@@ -26,7 +26,7 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 BESTEST = HERE.parent
-REPO = BESTEST.parents[2]
+REPO = BESTEST.parents[1]
 sys.path.insert(0, str(BESTEST))
 
 import bestest_lib as lib  # noqa: E402

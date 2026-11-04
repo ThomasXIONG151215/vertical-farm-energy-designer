@@ -11,8 +11,8 @@ Scope (what this benchmark does NOT validate, by dataset limitation):
 - single zone vs measured upper+lower tiers -> tiers are averaged.
 
 Usage (from the repo root):
-    python scripts/benchmarks/uc_davis/run_env.py            # full run + report
-    python scripts/benchmarks/uc_davis/run_env.py --no-report  # table only
+    python benchmarks/uc_davis/run_env.py            # full run + report
+    python benchmarks/uc_davis/run_env.py --no-report  # table only
 
 First run downloads Davis 2024 ERA5 hourly weather (~1 min) into the cache.
 """
@@ -28,7 +28,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 
 from vfed.design.engine import DesignEngine  # noqa: E402
@@ -45,7 +45,7 @@ REPORT = os.path.join(REPO, "user-gym", "benchmarks", "uc_davis_env_report.md")
 # report so the benchmark is self-describing. Not a framework.
 # ---------------------------------------------------------------------------
 DRIVE = {
-    "project": "scripts/benchmarks/uc_davis/project.yaml (preset-609 physics, "
+    "project": "benchmarks/uc_davis/project.yaml (preset-609 physics, "
                "assumed room/light/setpoints)",
     "weather": "ERA5 hourly via vfed fetch_weather(lat=38.545, lon=-121.74, "
                "year=2024, tz=-8) — engine-internal fetch, cache weather_cache/",
@@ -187,7 +187,7 @@ def render_report(rows: dict, diel: pd.DataFrame, sha: str) -> str:
         "(2) 与 run_biomass.py 鲜重通道联立（蒸腾参数可交叉验证）；"
         "(3) 待 Phase 3 校准引擎接管参数辨识，带宽收紧后升 PASS/FAIL",
         "\n## 复现\n\n```bash\n"
-        "python scripts/benchmarks/uc_davis/run_env.py\n```\n",
+        "python benchmarks/uc_davis/run_env.py\n```\n",
     ]
     return "\n".join(lines)
 

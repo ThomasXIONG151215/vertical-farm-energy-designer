@@ -1,9 +1,9 @@
 """Run the ASHRAE 140 BESTEST Layer-C comparison for vfed.
 
 Usage (from the repo root):
-    python scripts/benchmarks/bestest/run_bestest.py                # 4 cases, initial params
-    python scripts/benchmarks/bestest/run_bestest.py --only 600FF --cz 500 700 900
-    python scripts/benchmarks/bestest/run_bestest.py --eta 0.72 0.75 0.78 --only 600
+    python benchmarks/bestest/run_bestest.py                # 4 cases, initial params
+    python benchmarks/bestest/run_bestest.py --only 600FF --cz 500 700 900
+    python benchmarks/bestest/run_bestest.py --eta 0.72 0.75 0.78 --only 600
 
 Outputs the verdict table to stdout and (when not probing) rewrites
 ``user-gym/benchmarks/layerC_report.md``.
@@ -417,12 +417,12 @@ def render_report(results, df, epw_path) -> str:
             "- 参考区间为 LBNL 镜像单源（140-2020 版参数），原版 NREL/TP-472-6231 未核对（S10）。\n"
         )
     lines.append("\n## 复现\n\n```bash\n"
-                 "python scripts/benchmarks/bestest/run_bestest.py\n"
+                 "python benchmarks/bestest/run_bestest.py\n"
                  "```\n\n"
                  "标定探测：`--only 600FF --cz 500 700 900`；R28 2R2C 模式："
                  "`--rc`（可用 `--k 0.8 0.866 1.0` / `--cmass` / `--gim` / `--gem` 探针）；"
                  "R28 step-3 2R3C 模式：`--rc3`（`--cs` / `--gsa` / `--gsm` / `--fs` / "
-                 "`--modband` 探针）；详见 `scripts/benchmarks/bestest/README.md`。\n")
+                 "`--modband` 探针）；详见 `benchmarks/bestest/README.md`。\n")
     return "\n".join(lines)
 
 
