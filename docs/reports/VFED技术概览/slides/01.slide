@@ -1,0 +1,197 @@
+<Slide style={{ width: 1280, height: 720, background: '#F6F6F6', padding: 0, fontFamily: 'Microsoft YaHei', flexDirection: 'column' }}>
+
+  {/* 页眉 */}
+  <Box style={{ width: 1280, height: 62, background: '#CEE9E6', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #A9C6C2' }}>
+    <Text style={{ fontSize: 27, fontWeight: 'bold', color: '#123B38' }}>VFED 是什么：一套可扫参的植物工厂能源设计模型</Text>
+    <Text style={{ fontSize: 13, color: '#4E7C78' }}>01 / 04</Text>
+  </Box>
+
+  {/* 箭头色带 */}
+  <Box style={{ width: 1280, height: 92, padding: '8px 40px 0 40px' }}>
+    <Box style={{ width: 1200, height: 76, position: 'relative' }}>
+      <Image src="assets/ribbon.png" style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76 }} />
+      <Box style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76, alignItems: 'center', justifyContent: 'center', padding: '0 70px' }}>
+        <Text style={{ fontSize: 23, color: '#FFFFFF' }}>一份 YAML 进去，三组方程一年推 5.2 万步，四个指标一起出来</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  {/* 架构图 */}
+  <Box style={{ width: 1280, height: 500, padding: '0 44px', flexDirection: 'column', justifyContent: 'center' }}>
+
+    {/* 层 1 · 输入 */}
+    <Box style={{ width: 1192, height: 96, flexDirection: 'row' }}>
+
+      <Box style={{ width: 104, height: 96, flexDirection: 'column', justifyContent: 'center', gap: 3, paddingLeft: 18, borderLeft: '4px solid #16413E' }}>
+        <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#123B38' }}>输入</Text>
+        <Text style={{ fontSize: 12, color: '#5E6E6B' }}>一份 YAML</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 96, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, flexDirection: 'row', alignItems: 'center', padding: '0 14px' }}>
+
+        <Box style={{ flex: 1, height: 56, flexDirection: 'column', justifyContent: 'center', gap: 5, paddingLeft: 2 }}>
+          <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#16413E' }}>城市与气候</Text>
+          <Text style={{ fontSize: 12.5, color: '#5E6E6B' }}>纬度 · 温湿 · 辐照</Text>
+        </Box>
+
+        <Box style={{ flex: 1, height: 56, flexDirection: 'column', justifyContent: 'center', gap: 5, paddingLeft: 14, borderLeft: '1px solid #DCE7E5' }}>
+          <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#16413E' }}>围护构造</Text>
+          <Text style={{ fontSize: 12.5, color: '#5E6E6B' }}>UA · 得热 · 渗透</Text>
+        </Box>
+
+        <Box style={{ flex: 1, height: 56, flexDirection: 'column', justifyContent: 'center', gap: 5, paddingLeft: 14, borderLeft: '1px solid #DCE7E5' }}>
+          <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#16413E' }}>设备</Text>
+          <Text style={{ fontSize: 12.5, color: '#5E6E6B' }}>空调 · 除湿 · LED · PV</Text>
+        </Box>
+
+        <Box style={{ flex: 1, height: 56, flexDirection: 'column', justifyContent: 'center', gap: 5, paddingLeft: 14, borderLeft: '1px solid #DCE7E5' }}>
+          <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#16413E' }}>作物</Text>
+          <Text style={{ fontSize: 12.5, color: '#5E6E6B' }}>光合 · 呼吸 · 蒸腾</Text>
+        </Box>
+
+        <Box style={{ flex: 1, height: 56, flexDirection: 'column', justifyContent: 'center', gap: 5, paddingLeft: 14, borderLeft: '1px solid #DCE7E5' }}>
+          <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#16413E' }}>电价与投资</Text>
+          <Text style={{ fontSize: 12.5, color: '#5E6E6B' }}>分时电价 · 折旧</Text>
+        </Box>
+
+        <Box style={{ height: 34, padding: '0 12px', background: '#EDF4F3', border: '1px solid #CBD7D5', borderRadius: 2, alignItems: 'center', justifyContent: 'center', marginLeft: 14 }}>
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#16413E' }}>参数全部可扫</Text>
+        </Box>
+
+      </Box>
+
+    </Box>
+
+    {/* 连接 1 */}
+    <Box style={{ width: 1192, height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingLeft: 104 }}>
+      <Text style={{ fontSize: 11, color: '#9FBAB6' }}>▼</Text>
+      <Text style={{ fontSize: 13, color: '#5E6E6B' }}>积分步长 600 s（每小时内步 6 次）· 输出按小时聚合为 8760 点 · 三组方程在同一时间轴上互相取值</Text>
+    </Box>
+
+    {/* 层 2 · 模型 */}
+    <Box style={{ width: 1192, height: 200, flexDirection: 'row' }}>
+
+      <Box style={{ width: 104, height: 200, flexDirection: 'column', justifyContent: 'center', gap: 3, paddingLeft: 18, borderLeft: '4px solid #16413E' }}>
+        <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#123B38' }}>模型</Text>
+        <Text style={{ fontSize: 12, color: '#5E6E6B' }}>三组方程</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 200, flexDirection: 'row', gap: 14 }}>
+
+        <Box style={{ flex: 1, height: 200, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 18px', flexDirection: 'column', justifyContent: 'space-between' }}>
+
+          <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 7 }}>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>1</Text>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#123B38' }}>传热传质</Text>
+            <Text style={{ fontSize: 12, color: '#5E6E6B' }}>房间三态</Text>
+          </Box>
+
+          <Box style={{ flexDirection: 'column', gap: 7 }}>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>室温变化 ＝ 冷量 ＋ LED ＋ 围护</Text>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>含湿变化 ＝ 蒸腾 ＋ 渗透 − 除湿</Text>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>CO₂ 变化 ＝ 注入 ＋ 呼吸 − 光合</Text>
+          </Box>
+
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 7, height: 26, background: '#F5F9F8', borderRadius: 2, padding: '0 8px' }}>
+            <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: '#A03030' }}>产出</Text>
+            <Text style={{ fontSize: 13, color: '#46554F' }}>冷量 Q_c · 除湿量 M_w</Text>
+          </Box>
+
+        </Box>
+
+        <Box style={{ flex: 1, height: 200, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 18px', flexDirection: 'column', justifyContent: 'space-between' }}>
+
+          <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 7 }}>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>2</Text>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#123B38' }}>作物生长</Text>
+            <Text style={{ fontSize: 12, color: '#5E6E6B' }}>Van Henten</Text>
+          </Box>
+
+          <Box style={{ flexDirection: 'column', gap: 7 }}>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>干重 ＝ 光合 − 呼吸</Text>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>失水 ＝ 干重 × 饱和差 × 叶面积</Text>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>鲜重 ＝ 干重 ÷ 干物质率</Text>
+          </Box>
+
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 7, height: 26, background: '#F5F9F8', borderRadius: 2, padding: '0 8px' }}>
+            <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: '#A03030' }}>产出</Text>
+            <Text style={{ fontSize: 13, color: '#46554F' }}>年产量 · 蒸腾水量</Text>
+          </Box>
+
+        </Box>
+
+        <Box style={{ flex: 1, height: 200, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 18px', flexDirection: 'column', justifyContent: 'space-between' }}>
+
+          <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 7 }}>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>3</Text>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#123B38' }}>电能调度</Text>
+            <Text style={{ fontSize: 12, color: '#5E6E6B' }}>先负荷后供能</Text>
+          </Box>
+
+          <Box style={{ flexDirection: 'column', gap: 7 }}>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>P_LED ＝ PPFD × 面积 ÷ 光效</Text>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>P_冷 ＝ Q_c ÷ COP</Text>
+            <Text style={{ fontSize: 16.5, color: '#16413E' }}>P_除 ＝ M_w ÷ SMER</Text>
+          </Box>
+
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 7, height: 26, background: '#F5F9F8', borderRadius: 2, padding: '0 8px' }}>
+            <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: '#A03030' }}>产出</Text>
+            <Text style={{ fontSize: 13, color: '#46554F' }}>8760 h 功率 · 光电与购电</Text>
+          </Box>
+
+        </Box>
+
+      </Box>
+
+    </Box>
+
+    {/* 连接 2 */}
+    <Box style={{ width: 1192, height: 30, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingLeft: 104 }}>
+      <Text style={{ fontSize: 11, color: '#9FBAB6' }}>▼</Text>
+      <Text style={{ fontSize: 13, color: '#5E6E6B' }}>逐时序列按年累计得到四个指标；换一组参数重算，就是扫参</Text>
+    </Box>
+
+    {/* 层 3 · 四个指标 */}
+    <Box style={{ width: 1192, height: 116, flexDirection: 'row' }}>
+
+      <Box style={{ width: 104, height: 116, flexDirection: 'column', justifyContent: 'center', gap: 3, paddingLeft: 18, borderLeft: '4px solid #C00000' }}>
+        <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#123B38' }}>指标</Text>
+        <Text style={{ fontSize: 12, color: '#5E6E6B' }}>四个一起比</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 116, flexDirection: 'row', gap: 14 }}>
+
+        <Box style={{ flex: 1, height: 116, background: '#E4EFED', border: '1px solid #B9CFCB', borderRadius: 3, padding: '18px 16px', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#123B38' }}>总产量</Text>
+          <Text style={{ fontSize: 13.5, color: '#46554F', lineHeight: 1.45 }}>年收获鲜重 kg</Text>
+        </Box>
+
+        <Box style={{ flex: 1, height: 116, background: '#E4EFED', border: '1px solid #B9CFCB', borderRadius: 3, padding: '18px 16px', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#123B38' }}>总功率</Text>
+          <Text style={{ fontSize: 13.5, color: '#46554F', lineHeight: 1.45 }}>峰值负荷 kW，定配电与装机</Text>
+        </Box>
+
+        <Box style={{ flex: 1, height: 116, background: '#E4EFED', border: '1px solid #B9CFCB', borderRadius: 3, padding: '18px 16px', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#123B38' }}>kWh / kg</Text>
+          <Text style={{ fontSize: 13.5, color: '#46554F', lineHeight: 1.45 }}>年电量 ÷ 年鲜重，看电用得值不值</Text>
+        </Box>
+
+        <Box style={{ flex: 1, height: 116, background: '#E4EFED', border: '1px solid #123B38', borderRadius: 3, padding: '18px 16px', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#123B38' }}>单位用电成本</Text>
+          <Text style={{ fontSize: 13.5, color: '#46554F', lineHeight: 1.45 }}>每公斤鲜菜摊多少钱</Text>
+        </Box>
+
+      </Box>
+
+    </Box>
+
+  </Box>
+
+  {/* 结论条 */}
+  <Box style={{ width: 1280, height: 66, background: '#B2CECB', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111111' }}>作物、围护、设备都只是中间量，真正要比的是</Text>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#C00000' }}>产量、功率、kWh/kg 与单位成本</Text>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111111' }}>。</Text>
+  </Box>
+
+</Slide>

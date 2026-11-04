@@ -77,3 +77,5 @@ vfed-web/
 backups/
 # vendor datasheet PDFs (large, redistributable-on-request; extraction results live in modules/*.yaml)
 docs/references/pvbes-validation/raw/datasheets/
+docs/reports/VFED技术概览/.slidep/
+docs/reports/VFED技术概览/.cache/

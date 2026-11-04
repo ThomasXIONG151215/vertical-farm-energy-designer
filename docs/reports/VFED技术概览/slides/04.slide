@@ -1,0 +1,164 @@
+<Slide style={{ width: 1280, height: 720, background: '#F6F6F6', padding: 0, fontFamily: 'Microsoft YaHei', flexDirection: 'column' }}>
+
+  {/* 页眉 */}
+  <Box style={{ width: 1280, height: 62, background: '#CEE9E6', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #A9C6C2' }}>
+    <Text style={{ fontSize: 27, fontWeight: 'bold', color: '#123B38' }}>第三组：电能——负荷与光储怎么合成单位成本</Text>
+    <Text style={{ fontSize: 13, color: '#4E7C78' }}>04 / 04</Text>
+  </Box>
+
+  {/* 箭头色带 */}
+  <Box style={{ width: 1280, height: 92, padding: '8px 40px 0 40px' }}>
+    <Box style={{ width: 1200, height: 76, position: 'relative' }}>
+      <Image src="assets/ribbon.png" style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76 }} />
+      <Box style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76, alignItems: 'center', justifyContent: 'center', padding: '0 70px' }}>
+        <Text style={{ fontSize: 23, color: '#FFFFFF' }}>三股负荷先叠成一条曲线，再逐时与光储对齐，最后才能结算成元/kg</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  {/* 内容：三步链 */}
+  <Box style={{ width: 1280, height: 500, padding: '0 44px', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
+
+    {/* 第 1 步 · 负荷 */}
+    <Box style={{ width: 1192, height: 148, flexDirection: 'row' }}>
+
+      <Box style={{ width: 104, height: 148, flexDirection: 'column', justifyContent: 'center', gap: 3, paddingLeft: 18, borderLeft: '4px solid #16413E' }}>
+        <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#123B38' }}>第 1 步</Text>
+        <Text style={{ fontSize: 12, color: '#5E6E6B' }}>先算负荷</Text>
+        <Text style={{ fontSize: 11.5, color: '#9FBAB6' }}>电往哪里去</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 148, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+
+        <Box style={{ flex: 1, height: 148, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '14px 16px', flexDirection: 'column', justifyContent: 'center', gap: 7 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 7 }}>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>1</Text>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#123B38' }}>LED</Text>
+          </Box>
+          <Text style={{ fontSize: 15, color: '#16413E' }}>P ＝ PPFD × 面积 ÷ 光效</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>PAR 与光周期由策略给定</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>电全转显热，再进冷负荷</Text>
+        </Box>
+
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#9FBAB6' }}>＋</Text>
+
+        <Box style={{ flex: 1, height: 148, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '14px 16px', flexDirection: 'column', justifyContent: 'center', gap: 7 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 7 }}>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>2</Text>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#123B38' }}>空调</Text>
+          </Box>
+          <Text style={{ fontSize: 15, color: '#16413E' }}>P ＝ 冷量 ÷ COP</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>冷量来自传热方程；COP 随外温</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>容量不足截断，缺口变室温漂移</Text>
+        </Box>
+
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#9FBAB6' }}>＋</Text>
+
+        <Box style={{ flex: 1, height: 148, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '14px 16px', flexDirection: 'column', justifyContent: 'center', gap: 7 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 7 }}>
+            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>3</Text>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#123B38' }}>除湿</Text>
+          </Box>
+          <Text style={{ fontSize: 15, color: '#16413E' }}>P ＝ 除湿量 ÷ 有效 SMER</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>除湿量来自传质方程补偿</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>越干越费电；析水潜热回灌</Text>
+        </Box>
+
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#9FBAB6' }}>＝</Text>
+
+        <Box style={{ width: 214, height: 148, background: '#E4EFED', border: '1px solid #16413E', borderRadius: 3, padding: '14px 16px', flexDirection: 'column', justifyContent: 'center', gap: 7 }}>
+          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#A03030' }}>负荷曲线</Text>
+          <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#123B38' }}>P_load(t)</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>风机、水泵、CO₂ 注入也计入</Text>
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#16413E', lineHeight: 1.5 }}>8760 点，光储要对的就是它</Text>
+        </Box>
+
+      </Box>
+
+    </Box>
+
+    {/* 第 2 步 · 逐时匹配 */}
+    <Box style={{ width: 1192, height: 148, flexDirection: 'row' }}>
+
+      <Box style={{ width: 104, height: 148, flexDirection: 'column', justifyContent: 'center', gap: 3, paddingLeft: 18, borderLeft: '4px solid #16413E' }}>
+        <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#123B38' }}>第 2 步</Text>
+        <Text style={{ fontSize: 12, color: '#5E6E6B' }}>逐时匹配</Text>
+        <Text style={{ fontSize: 11.5, color: '#9FBAB6' }}>每小时做一次</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 148, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+
+        <Box style={{ flex: 1, height: 148, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '12px 14px', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#123B38' }}>光伏出力</Text>
+          <Text style={{ fontSize: 13.5, color: '#16413E' }}>P_PV(t) ＝ f(辐照, 板温)</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>单二极管；板温按 NOCT 折算</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>逆变后九成七，再逐年衰减</Text>
+        </Box>
+
+        <Text style={{ fontSize: 18, color: '#9FBAB6' }}>→</Text>
+
+        <Box style={{ flex: 1, height: 148, background: '#E4EFED', border: '1px solid #16413E', borderRadius: 3, padding: '12px 14px', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#123B38' }}>净负荷</Text>
+          <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#16413E' }}>net ＝ P_PV − P_load</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>正为余电、负为缺口</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>白天余电与夜里的补光错相</Text>
+          <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: '#A03030' }}>负荷与供能在这里接上</Text>
+        </Box>
+
+        <Text style={{ fontSize: 18, color: '#9FBAB6' }}>→</Text>
+
+        <Box style={{ flex: 1, height: 148, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '12px 14px', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#123B38' }}>电池吞吐</Text>
+          <Text style={{ fontSize: 13.5, color: '#16413E' }}>net ＞ 0 充；net ＜ 0 放</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>SOC 卡上下限，充放各乘效率</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>逐时规则匹配，不做全年寻优</Text>
+        </Box>
+
+        <Text style={{ fontSize: 18, color: '#9FBAB6' }}>→</Text>
+
+        <Box style={{ flex: 1, height: 148, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '12px 14px', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#123B38' }}>电网补缺</Text>
+          <Text style={{ fontSize: 13, color: '#16413E' }}>买 ＝ max(0, 负荷 − 光伏 − 放电)</Text>
+          <Text style={{ fontSize: 13, color: '#16413E' }}>卖 ＝ max(0, 光伏 − 充电 − 负荷)</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F', lineHeight: 1.5 }}>买卖按当时时段查电价表</Text>
+        </Box>
+
+      </Box>
+
+    </Box>
+
+    {/* 第 3 步 · 结算 */}
+    <Box style={{ width: 1192, height: 164, flexDirection: 'row' }}>
+
+      <Box style={{ width: 104, height: 164, flexDirection: 'column', justifyContent: 'center', gap: 3, paddingLeft: 18, borderLeft: '4px solid #C00000' }}>
+        <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#123B38' }}>第 3 步</Text>
+        <Text style={{ fontSize: 12, color: '#5E6E6B' }}>结算</Text>
+        <Text style={{ fontSize: 11.5, color: '#9FBAB6' }}>元 / kg 鲜重</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 164, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '14px 20px', flexDirection: 'column', justifyContent: 'center', gap: 7 }}>
+
+        <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#123B38' }}>单位用电成本 ＝ 年成本 ÷ 年鲜重（kg）</Text>
+
+        <Text style={{ fontSize: 15, color: '#16413E' }}>年成本 ＝ 年化投资 ＋ 年运维 ＋ （购电费 − 上网收益）</Text>
+
+        <Text style={{ fontSize: 12.5, color: '#5E6E6B', lineHeight: 1.5 }}>全系统投资按各部件折旧年限折成等年金；运维含维保、水与人工；购电按分时电价，上网按固定电价</Text>
+
+        <Box style={{ flexDirection: 'row', alignItems: 'center', height: 32, background: '#F7F1F1', borderLeft: '3px solid #C00000', padding: '0 12px' }}>
+          <Text style={{ fontSize: 13.5, fontWeight: 'bold', color: '#16413E' }}>光储只动分子（投资与净购电），产量在分母上由作物与气候定——所以两者必须在同一次逐时仿真里算完。</Text>
+        </Box>
+
+      </Box>
+
+    </Box>
+
+  </Box>
+
+  {/* 结论条 */}
+  <Box style={{ width: 1280, height: 66, background: '#B2CECB', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111111' }}>负荷决定用多少电，光储决定这些电的价，</Text>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#C00000' }}>单位成本只能在逐时仿真里合出来</Text>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111111' }}>。</Text>
+  </Box>
+
+</Slide>

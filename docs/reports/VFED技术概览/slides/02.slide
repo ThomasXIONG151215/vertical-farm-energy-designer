@@ -1,0 +1,104 @@
+<Slide style={{ width: 1280, height: 720, background: '#F6F6F6', padding: 0, fontFamily: 'Microsoft YaHei', flexDirection: 'column' }}>
+
+  {/* 页眉 */}
+  <Box style={{ width: 1280, height: 62, background: '#CEE9E6', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #A9C6C2' }}>
+    <Text style={{ fontSize: 27, fontWeight: 'bold', color: '#123B38' }}>第一组：传热传质——三个状态量，一套步内顺序</Text>
+    <Text style={{ fontSize: 13, color: '#4E7C78' }}>02 / 04</Text>
+  </Box>
+
+  {/* 箭头色带 */}
+  <Box style={{ width: 1280, height: 92, padding: '8px 40px 0 40px' }}>
+    <Box style={{ width: 1200, height: 76, position: 'relative' }}>
+      <Image src="assets/ribbon.png" style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76 }} />
+      <Box style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76, alignItems: 'center', justifyContent: 'center', padding: '0 70px' }}>
+        <Text style={{ fontSize: 23, color: '#FFFFFF' }}>先算通量、再推状态、最后记账——越界的水与热不许静默消失</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  {/* 内容 */}
+  <Box style={{ width: 1280, height: 500, padding: '0 44px', flexDirection: 'column', justifyContent: 'center', gap: 12 }}>
+
+    {/* 三条平衡式 */}
+    <Box style={{ width: 1192, height: 84, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '0 26px', flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+      <Box style={{ width: 112, flexDirection: 'column', gap: 3 }}>
+        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#123B38' }}>室温</Text>
+        <Text style={{ fontSize: 13, color: '#5E6E6B' }}>变化</Text>
+      </Box>
+      <Text style={{ fontSize: 21, color: '#16413E', flex: 1 }}>＝ 空调 ＋ 除湿冷凝 ＋ LED 发热 ＋ 围护传热 ＋ 太阳得热 ＋ 渗透新风</Text>
+      <Box style={{ height: 38, padding: '0 15px', background: '#EDF4F3', border: '1px solid #CBD7D5', borderRadius: 19, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14, color: '#16413E' }}>决定冷量</Text></Box>
+    </Box>
+
+    <Box style={{ width: 1192, height: 84, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '0 26px', flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+      <Box style={{ width: 112, flexDirection: 'column', gap: 3 }}>
+        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#123B38' }}>含湿量</Text>
+        <Text style={{ fontSize: 13, color: '#5E6E6B' }}>变化</Text>
+      </Box>
+      <Text style={{ fontSize: 21, color: '#16413E', flex: 1 }}>＝ 作物蒸腾 ＋ 新风带入 ＋ 围护渗透 − 除湿 − 空调析湿</Text>
+      <Box style={{ height: 38, padding: '0 15px', background: '#EDF4F3', border: '1px solid #CBD7D5', borderRadius: 19, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14, color: '#16413E' }}>决定除湿量</Text></Box>
+    </Box>
+
+    <Box style={{ width: 1192, height: 84, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '0 26px', flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+      <Box style={{ width: 112, flexDirection: 'column', gap: 3 }}>
+        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#123B38' }}>CO₂ 浓度</Text>
+        <Text style={{ fontSize: 13, color: '#5E6E6B' }}>变化</Text>
+      </Box>
+      <Text style={{ fontSize: 21, color: '#16413E', flex: 1 }}>＝ 注入 ＋ 呼吸释放 ＋ 新风带入 − 光合消耗</Text>
+      <Box style={{ height: 38, padding: '0 15px', background: '#EDF4F3', border: '1px solid #CBD7D5', borderRadius: 19, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14, color: '#16413E' }}>决定生长</Text></Box>
+    </Box>
+
+    {/* 计算细节 */}
+    <Box style={{ width: 1192, height: 208, flexDirection: 'row', gap: 14 }}>
+
+      <Box style={{ flex: 1, height: 208, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 18px', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
+
+        <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#123B38' }}>一步之内按这个顺序</Text>
+
+        <Box style={{ flexDirection: 'column', gap: 4 }}>
+          <Box style={{ flexDirection: 'row', gap: 7 }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>1</Text><Text style={{ fontSize: 14, color: '#16413E' }}>取气象、设定点、设备上一刻出力</Text></Box>
+          <Box style={{ flexDirection: 'row', gap: 7 }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>2</Text><Text style={{ fontSize: 14, color: '#16413E' }}>逐项算热流与湿流：围护、太阳、渗透、蒸腾</Text></Box>
+          <Box style={{ flexDirection: 'row', gap: 7 }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>3</Text><Text style={{ fontSize: 14, color: '#16413E' }}>合成总热流 Q 与总湿流 M</Text></Box>
+          <Box style={{ flexDirection: 'row', gap: 7 }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>4</Text><Text style={{ fontSize: 14, color: '#16413E' }}>先推温度，再用新温度封顶推进含湿量</Text></Box>
+          <Box style={{ flexDirection: 'row', gap: 7 }}><Text style={{ fontSize: 13, fontWeight: 'bold', color: '#C00000' }}>5</Text><Text style={{ fontSize: 14, color: '#16413E' }}>冷凝潜热回灌，温度再算一次</Text></Box>
+        </Box>
+
+      </Box>
+
+      <Box style={{ flex: 1, height: 208, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 18px', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
+
+        <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#123B38' }}>湿与热是同一笔账</Text>
+
+        <Box style={{ flexDirection: 'column', gap: 7 }}>
+          <Text style={{ fontSize: 14, color: '#16413E' }}>饱和压、相对湿度、露点都由 Magnus 式反算</Text>
+          <Text style={{ fontSize: 14, color: '#16413E' }}>蒸腾带走的水，按汽化潜热从冷负荷里扣一次</Text>
+          <Text style={{ fontSize: 14, color: '#16413E' }}>含湿量封顶在饱和值，溢出的那部分就是冷凝水</Text>
+          <Text style={{ fontSize: 14, color: '#16413E' }}>空调与除湿机低于露点才析水，析出的水把潜热放回来</Text>
+        </Box>
+
+      </Box>
+
+      <Box style={{ flex: 1, height: 208, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 18px', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
+
+        <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#123B38' }}>为什么敢用显式欧拉</Text>
+
+        <Box style={{ flexDirection: 'column', gap: 7 }}>
+          <Text style={{ fontSize: 14, color: '#16413E' }}>步长 600 s，远小于房间热容与空气含湿的时间常数</Text>
+          <Text style={{ fontSize: 14, color: '#16413E' }}>每个状态量都有物理上限，越界一律钳位而不放弃</Text>
+          <Text style={{ fontSize: 14, color: '#16413E' }}>越界量分三类记账：温度残差、触底水量、冷凝水量</Text>
+          <Text style={{ fontSize: 14, color: '#16413E' }}>步长减半结果不变——这是收敛性检验，不是调参</Text>
+        </Box>
+
+      </Box>
+
+    </Box>
+
+  </Box>
+
+  {/* 结论条 */}
+  <Box style={{ width: 1280, height: 66, background: '#B2CECB', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111111' }}>空调与除湿的容量不是估出来的，是</Text>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#C00000' }}>三个方程逐时解出的补偿量</Text>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111111' }}>。</Text>
+  </Box>
+
+</Slide>

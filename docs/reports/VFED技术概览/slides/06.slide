@@ -1,0 +1,109 @@
+<Slide style={{ width: 1280, height: 720, background: '#F6F6F6', padding: 0, fontFamily: 'Microsoft YaHei', flexDirection: 'column' }}>
+
+  <Box style={{ width: 1280, height: 62, background: '#CEE9E6', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #A9C6C2' }}>
+    <Text style={{ fontSize: 27, fontWeight: 'bold', color: '#123B38' }}>附录 B：作物——单状态碳平衡</Text>
+    <Text style={{ fontSize: 13, color: '#4E7C78' }}>附录 B</Text>
+  </Box>
+
+  <Box style={{ width: 1280, height: 92, padding: '8px 40px 0 40px' }}>
+    <Box style={{ width: 1200, height: 76, position: 'relative' }}>
+      <Image src="assets/ribbon.png" style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76 }} />
+      <Box style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76, alignItems: 'center', justifyContent: 'center', padding: '0 70px' }}>
+        <Text style={{ fontSize: 23, color: '#FFFFFF' }}>一个状态量、七个参数：光与碳按联合限制合成，失水反过来绑定气候</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ width: 1280, height: 500, padding: '0 44px', flexDirection: 'row', gap: 16 }}>
+
+    <Box style={{ width: 736, height: 500, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '28px 24px', flexDirection: 'column', justifyContent: 'flex-start' }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>碳平衡：光合、呼吸、生长</Text>
+        </Box>
+        <Box style={{ height: 28 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>1</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>光合 ＝ 冠层截光 × 光项 × 碳项 ÷ （光项 ＋ 碳项）</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>冠层截光 ＝ 1 − exp(−消光系数 × 干重)，随干重饱和</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>光项 ＝ 光响应 × 辐照；碳项 ＝ CO₂ 响应 × （空气 CO₂ − 补偿点）</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 28 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>2</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>CO₂ 响应 ＝ −c₁ × 温度² ＋ c₂ × 温度 − c₃</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>c₁ 到 c₃ 由文献拟合，响应在 25 ℃ 附近最强</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 28 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>3</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>呼吸 ＝ 25 ℃ 呼吸速率 × 干重 × 温度每升 10 ℃ 翻倍</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 28 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>4</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>生长 ＝ 碳转化率 × 光合 − 呼吸；鲜重 ＝ 干重 ÷ 干物质率</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 48 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>失水：把气候接回作物</Text>
+        </Box>
+        <Box style={{ height: 28 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>5</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>失水 ＝ 蒸腾系数 × 干重 × 饱和差 × 冠层面积 × 昼夜系数</Text>
+          </Box>
+        </Box>
+    </Box>
+
+    <Box style={{ width: 440, height: 500, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '20px 24px', flexDirection: 'column', justifyContent: 'center' }}>
+          <Box style={{ flexDirection: 'row', height: 28, alignItems: 'center', borderBottom: '1px solid #B9CFCB' }}>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', width: 160 }}>关键参数</Text>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', flex: 1 }}>典型取值</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>碳转化率</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>0.544（Van Henten 2003）</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>25 ℃ 暗呼吸</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>2.65e-7 /s（同源）</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>冠层消光系数</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>53 m²/kg</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>光响应系数</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>文献 1e-8；本项目 3.5e-9 kg/J</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>CO₂ 补偿点</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>5.2e-5 kg/m³ ≈ 29 ppm</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>蒸腾系数</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>1e-4 /(s·kPa)；夜间 ×0.15</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>干物质率</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>0.05；生菜 4–6 %</Text>
+          </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ width: 1280, height: 66, background: '#B2CECB', padding: '0 44px', flexDirection: 'row', alignItems: 'center' }}>
+    <Text style={{ fontSize: 13.5, color: '#1A2E2B', lineHeight: 1.45 }}>出处：Van Henten (2003) Biosystems Eng. 85(3):355–364 给出碳转化率、呼吸、消光、补偿点与光响应 1e-8 kg/J；本项目把光响应标定为 3.5e-9；夜间蒸腾折减见 transpiration.py。</Text>
+  </Box>
+
+</Slide>

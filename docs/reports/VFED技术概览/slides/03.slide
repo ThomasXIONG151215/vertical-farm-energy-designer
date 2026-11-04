@@ -1,0 +1,155 @@
+<Slide style={{ width: 1280, height: 720, background: '#F6F6F6', padding: 0, fontFamily: 'Microsoft YaHei', flexDirection: 'column' }}>
+
+  {/* 页眉 */}
+  <Box style={{ width: 1280, height: 62, background: '#CEE9E6', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #A9C6C2' }}>
+    <Text style={{ fontSize: 27, fontWeight: 'bold', color: '#123B38' }}>第二组：作物——一个状态量，同时管产量与失水</Text>
+    <Text style={{ fontSize: 13, color: '#4E7C78' }}>03 / 04</Text>
+  </Box>
+
+  {/* 箭头色带 */}
+  <Box style={{ width: 1280, height: 92, padding: '8px 40px 0 40px' }}>
+    <Box style={{ width: 1200, height: 76, position: 'relative' }}>
+      <Image src="assets/ribbon.png" style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76 }} />
+      <Box style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76, alignItems: 'center', justifyContent: 'center', padding: '0 70px' }}>
+        <Text style={{ fontSize: 23, color: '#FFFFFF' }}>只积分干重；光合、呼吸、蒸腾都挂在它上面，再回灌给气候</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  {/* 内容 */}
+  <Box style={{ width: 1280, height: 500, padding: '0 44px', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
+
+    {/* 两卡 */}
+    <Box style={{ width: 1192, height: 196, flexDirection: 'row', gap: 14 }}>
+
+      <Box style={{ flex: 1, height: 196, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 22px', flexDirection: 'column', justifyContent: 'space-between' }}>
+
+        <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+          <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#123B38' }}>干重</Text>
+          <Text style={{ fontSize: 13.5, color: '#5E6E6B' }}>唯一的状态量</Text>
+        </Box>
+
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#123B38' }}>干重变化 ＝</Text>
+          <Box style={{ height: 36, padding: '0 13px', background: '#F4F8F7', border: '1px solid #D6E3E0', borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14.5, color: '#16413E' }}>碳转化率 × 光合</Text></Box>
+          <Text style={{ fontSize: 17, color: '#8A9995' }}>−</Text>
+          <Box style={{ height: 36, padding: '0 13px', background: '#F4F8F7', border: '1px solid #D6E3E0', borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14.5, color: '#16413E' }}>暗呼吸</Text></Box>
+        </Box>
+
+        <Box style={{ flexDirection: 'column', gap: 5 }}>
+          <Text style={{ fontSize: 14, color: '#46554F' }}>光合 ＝ 冠层截光 × 光碳联合限制项，两项按积除以和合成：谁更紧，谁主导。</Text>
+          <Text style={{ fontSize: 14, color: '#46554F' }}>截光随干重饱和，长到一定量之后再加光也只能收一点点。</Text>
+          <Text style={{ fontSize: 14, color: '#46554F' }}>呼吸随温度指数上升，所以夜里也在掉重，高温夜班最亏。</Text>
+        </Box>
+
+      </Box>
+
+      <Box style={{ flex: 1, height: 196, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 22px', flexDirection: 'column', justifyContent: 'space-between' }}>
+
+        <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+          <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#123B38' }}>失水</Text>
+          <Text style={{ fontSize: 13.5, color: '#5E6E6B' }}>气候从这里进作物方程</Text>
+        </Box>
+
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+          <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#123B38' }}>蒸腾 ＝</Text>
+          <Box style={{ height: 36, padding: '0 11px', background: '#F4F8F7', border: '1px solid #D6E3E0', borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14.5, color: '#16413E' }}>干重</Text></Box>
+          <Text style={{ fontSize: 15.5, color: '#8A9995' }}>×</Text>
+          <Box style={{ height: 36, padding: '0 11px', background: '#F4F8F7', border: '1px solid #D6E3E0', borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14.5, color: '#16413E' }}>饱和差</Text></Box>
+          <Text style={{ fontSize: 15.5, color: '#8A9995' }}>×</Text>
+          <Box style={{ height: 36, padding: '0 11px', background: '#F4F8F7', border: '1px solid #D6E3E0', borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 14.5, color: '#16413E' }}>冠层面积</Text></Box>
+        </Box>
+
+        <Box style={{ flexDirection: 'column', gap: 5 }}>
+          <Text style={{ fontSize: 14, color: '#46554F' }}>饱和差由室内温度与含湿量算出：气候一变，失水立刻跟着变。</Text>
+          <Text style={{ fontSize: 14, color: '#46554F' }}>光期气孔开、暗期按比例折减，但不会完全关死。</Text>
+          <Text style={{ fontSize: 14, color: '#46554F' }}>这部分水同时是湿负荷与潜热源，一次进房间的两条方程。</Text>
+        </Box>
+
+      </Box>
+
+    </Box>
+
+    {/* 耦合闭环 */}
+    <Box style={{ width: 1192, height: 132, flexDirection: 'row' }}>
+
+      <Box style={{ width: 100, flexDirection: 'column', justifyContent: 'center', gap: 3, paddingLeft: 18, borderLeft: '4px solid #16413E' }}>
+        <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#123B38' }}>步内</Text>
+        <Text style={{ fontSize: 11.5, color: '#5E6E6B' }}>闭环</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 132, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, flexDirection: 'row', alignItems: 'center', padding: '0 12px' }}>
+
+        <Box style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+          <Text style={{ fontSize: 13.5, color: '#16413E' }}>上一步状态</Text>
+          <Text style={{ fontSize: 12, color: '#5E6E6B' }}>PAR · CO₂ · 室温</Text>
+        </Box>
+
+        <Text style={{ fontSize: 15, color: '#9FBAB6' }}>▶</Text>
+
+        <Box style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+          <Text style={{ fontSize: 13.5, color: '#16413E' }}>冠层截光</Text>
+          <Text style={{ fontSize: 12, color: '#5E6E6B' }}>× 光碳联合限制</Text>
+        </Box>
+
+        <Text style={{ fontSize: 15, color: '#9FBAB6' }}>▶</Text>
+
+        <Box style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+          <Text style={{ fontSize: 13.5, color: '#16413E' }}>光合 − 呼吸</Text>
+          <Text style={{ fontSize: 12, color: '#5E6E6B' }}>→ 干重增量</Text>
+        </Box>
+
+        <Text style={{ fontSize: 15, color: '#9FBAB6' }}>▶</Text>
+
+        <Box style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+          <Text style={{ fontSize: 13.5, color: '#16413E' }}>干重 × 饱和差</Text>
+          <Text style={{ fontSize: 12, color: '#5E6E6B' }}>→ 蒸腾水量</Text>
+        </Box>
+
+        <Text style={{ fontSize: 15, color: '#9FBAB6' }}>▶</Text>
+
+        <Box style={{ flex: 1, flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+          <Text style={{ fontSize: 13.5, color: '#16413E' }}>湿负荷与潜热</Text>
+          <Text style={{ fontSize: 12, color: '#5E6E6B' }}>→ 下几步的气候</Text>
+        </Box>
+
+      </Box>
+
+    </Box>
+
+    {/* 三栏：状态、参数、换算 */}
+    <Box style={{ width: 1192, height: 132, flexDirection: 'row', gap: 14 }}>
+
+      <Box style={{ flex: 1, height: 132, background: '#E4EFED', border: '1px solid #B9CFCB', borderRadius: 3, padding: '14px 18px', flexDirection: 'column', justifyContent: 'center', gap: 5 }}>
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#123B38' }}>状态与边界</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>只有一个状态量：干重</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>气候与设备出力都是边界条件</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>边界一换，长势整条曲线跟着变</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 132, background: '#E4EFED', border: '1px solid #B9CFCB', borderRadius: 3, padding: '14px 18px', flexDirection: 'column', justifyContent: 'center', gap: 5 }}>
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#123B38' }}>参数分三组</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>光利用 · 碳与呼吸 · CO₂ 响应</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>全部走 YAML，扫参只换这一组</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>换参数不动方程结构</Text>
+      </Box>
+
+      <Box style={{ flex: 1, height: 132, background: '#E4EFED', border: '1px solid #B9CFCB', borderRadius: 3, padding: '14px 18px', flexDirection: 'column', justifyContent: 'center', gap: 5 }}>
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#123B38' }}>输出怎么换算</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>干重 ÷ 干物质率 ＝ 鲜重</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>只有收获那一刻的干重算产量</Text>
+        <Text style={{ fontSize: 13, color: '#46554F' }}>中间过程只影响湿与热</Text>
+      </Box>
+
+    </Box>
+
+  </Box>
+
+  {/* 结论条 */}
+  <Box style={{ width: 1280, height: 66, background: '#B2CECB', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111111' }}>作物只有一个状态量——干重，它同时决定</Text>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#C00000' }}>产量与除湿电耗</Text>
+    <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#111111' }}>。</Text>
+  </Box>
+
+</Slide>

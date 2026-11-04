@@ -1,0 +1,127 @@
+<Slide style={{ width: 1280, height: 720, background: '#F6F6F6', padding: 0, fontFamily: 'Microsoft YaHei', flexDirection: 'column' }}>
+
+  <Box style={{ width: 1280, height: 62, background: '#CEE9E6', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #A9C6C2' }}>
+    <Text style={{ fontSize: 27, fontWeight: 'bold', color: '#123B38' }}>附录 D：数值实现——怎么推一步、怎么记账、怎么算指标</Text>
+    <Text style={{ fontSize: 13, color: '#4E7C78' }}>附录 D</Text>
+  </Box>
+
+  <Box style={{ width: 1280, height: 92, padding: '8px 40px 0 40px' }}>
+    <Box style={{ width: 1200, height: 76, position: 'relative' }}>
+      <Image src="assets/ribbon.png" style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76 }} />
+      <Box style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76, alignItems: 'center', justifyContent: 'center', padding: '0 70px' }}>
+        <Text style={{ fontSize: 23, color: '#FFFFFF' }}>前向欧拉、三处钳位、一份台账；指标定义与代码字段一一对应</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ width: 1280, height: 500, padding: '0 44px', flexDirection: 'row', gap: 16 }}>
+
+    <Box style={{ width: 736, height: 500, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '16px 24px', flexDirection: 'column', justifyContent: 'flex-start' }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>前向欧拉：三个状态量各推一步</Text>
+        </Box>
+        <Box style={{ height: 15 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>1</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>新温度 ＝ 旧温度 ＋ 总热流 × 步长 ÷ （3600 × 房间热容）</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 15 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>2</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>新含湿 ＝ 旧含湿 ＋ 总湿流 × 步长 ÷ （空气密度 × 体积）</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>再封顶到该温度下的饱和含湿，溢出量记为冷凝水</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 15 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>3</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>新浓度 ＝ 旧浓度 ＋ 总碳流 × 步长 ÷ （空气密度 × 体积）</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>再兜底到补偿点，低于补偿点就锁住不再下降</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 39 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>守恒修正与时间分辨率</Text>
+        </Box>
+        <Box style={{ height: 15 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>4</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>冷凝回灌 ＝ （封顶溢出 ＋ 触底溢出）× 汽化潜热</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 15 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>5</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>一步 600 s → 每小时 6 步 → 全年 52560 步</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 33 }} />
+        <Box style={{ flexDirection: 'column', gap: 8, marginTop: 2 }}>
+          <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#123B38' }}>三层时间分辨率（别混为一谈）</Text>
+          <Box style={{ flexDirection: 'row', gap: 10 }}>
+            <Text style={{ width: 132, fontSize: 13, color: '#46554F' }}>气象与电价边界</Text>
+            <Text style={{ flex: 1, fontSize: 13, color: '#46554F' }}>1 h · 8760 点，小时内零阶保持</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', gap: 10 }}>
+            <Text style={{ width: 132, fontSize: 13, color: '#46554F' }}>物理 / 作物 / 设备</Text>
+            <Text style={{ flex: 1, fontSize: 13, color: '#46554F' }}>600 s · 每小时 6 内步，全年 52560 步</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', gap: 10 }}>
+            <Text style={{ width: 132, fontSize: 13, color: '#46554F' }}>输出与光储调度</Text>
+            <Text style={{ flex: 1, fontSize: 13, color: '#46554F' }}>1 h · 8760 点，能量按内步累加后聚合</Text>
+          </Box>
+        </Box>
+    </Box>
+
+    <Box style={{ width: 440, height: 500, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '20px 24px', flexDirection: 'column', justifyContent: 'center' }}><Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>四个核心指标的算法</Text>
+        </Box>
+          <Box style={{ flexDirection: 'row', height: 28, alignItems: 'center', borderBottom: '1px solid #B9CFCB' }}>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', width: 62 }}>指标</Text>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', width: 150 }}>定义</Text>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', flex: 1 }}>代码字段</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 54, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', width: 62 }}>总产量</Text>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', width: 150 }}>Σ 收获干重 ÷ 干物质率</Text>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', flex: 1 }}>annual_harvest_fw_kg</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 54, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', width: 62 }}>总功率</Text>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', width: 150 }}>逐时负荷的最大值</Text>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', flex: 1 }}>max(load_kw)</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 54, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', width: 62 }}>kWh/kg</Text>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', width: 150 }}>年电量 ÷ 年鲜重</Text>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', flex: 1 }}>specific_energy_kwh_per_kg</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 54, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', width: 62 }}>单位成本</Text>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', width: 150 }}>年成本 ÷ 年鲜重</Text>
+            <Text style={{ height: 54, fontSize: 12, color: '#46554F', flex: 1 }}>specific_cost_per_kg</Text>
+          </Box>
+        <Box style={{ height: 18 }} />
+        <Box style={{ flexDirection: 'column', gap: 7 }}>
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#123B38' }}>钳位台账（不静默丢弃）</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F' }}>温度：回传 clipped_deg_c，越界量并入年度统计</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F' }}>湿度：floor_clipped_kg（触底）与 sat_clipped_kg（冷凝）</Text>
+          <Text style={{ fontSize: 12.5, color: '#46554F' }}>CO₂：floor_clipped_kg，下限锁在补偿点</Text>
+        </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ width: 1280, height: 66, background: '#B2CECB', padding: '0 44px', flexDirection: 'row', alignItems: 'center' }}>
+    <Text style={{ fontSize: 13.5, color: '#1A2E2B', lineHeight: 1.45 }}>出处：步长与钳位契约见 vfed/physics/ode.py；含湿封顶用当步新温度、冷凝潜热回灌重算见 design/engine.py；指标口径见 engine.py 的 summary 汇总段。</Text>
+  </Box>
+
+</Slide>

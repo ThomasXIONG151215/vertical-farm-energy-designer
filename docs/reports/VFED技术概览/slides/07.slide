@@ -1,0 +1,112 @@
+<Slide style={{ width: 1280, height: 720, background: '#F6F6F6', padding: 0, fontFamily: 'Microsoft YaHei', flexDirection: 'column' }}>
+
+  <Box style={{ width: 1280, height: 62, background: '#CEE9E6', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #A9C6C2' }}>
+    <Text style={{ fontSize: 27, fontWeight: 'bold', color: '#123B38' }}>附录 C：设备与能源——每台机器的效率模型</Text>
+    <Text style={{ fontSize: 13, color: '#4E7C78' }}>附录 C</Text>
+  </Box>
+
+  <Box style={{ width: 1280, height: 92, padding: '8px 40px 0 40px' }}>
+    <Box style={{ width: 1200, height: 76, position: 'relative' }}>
+      <Image src="assets/ribbon.png" style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76 }} />
+      <Box style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76, alignItems: 'center', justifyContent: 'center', padding: '0 70px' }}>
+        <Text style={{ fontSize: 23, color: '#FFFFFF' }}>效率不是常数：能效比随室外温度走，除湿能效随室内含湿量走</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ width: 1280, height: 500, padding: '0 44px', flexDirection: 'row', gap: 16 }}>
+
+    <Box style={{ width: 736, height: 500, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '17px 24px', flexDirection: 'column', justifyContent: 'flex-start' }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>负荷侧：三台机器的电功率</Text>
+        </Box>
+        <Box style={{ height: 19 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>1</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>空调功率 ＝ 冷量 ÷ 能效比</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>能效比 ＝ 二阶效率 × 蒸发温度 ÷ （冷凝 − 蒸发），封顶 4.5</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 19 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>2</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>除湿功率 ＝ 除湿水量 ÷ 有效除湿能效</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>室内越干，有效能效越低，最低只余额定的四分之一</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 19 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>3</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>LED 功率 ＝ PPFD × 覆盖面积 ÷ 灯具光效</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>这部分电几乎全变热，同一份电在冷负荷里再算一次</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 48 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>供能侧：发电、储电、结算</Text>
+        </Box>
+        <Box style={{ height: 19 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>4</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>光伏功率 ＝ 装机 × （辐照 ÷ 1000）× 温度修正 × 逆变效率</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>温度修正 ＝ 1 ＋ 功率系数 × （组件温度 − 25），组件温度随辐照升高</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 19 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>5</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>净负荷 ＝ 光伏 − 负荷</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>电池电量 ＝ 上一步 ＋ 充电量 × 充电效率 − 放电量 ÷ 放电效率</Text>
+            <Text style={{ fontSize: 13, color: '#5E6E6B', lineHeight: 1.5 }}>单位成本 ＝ （年化投资 ＋ 年运维 ＋ 净购电）÷ 年鲜重</Text>
+          </Box>
+        </Box>
+    </Box>
+
+    <Box style={{ width: 440, height: 500, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '20px 24px', flexDirection: 'column', justifyContent: 'center' }}>
+          <Box style={{ flexDirection: 'row', height: 28, alignItems: 'center', borderBottom: '1px solid #B9CFCB' }}>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', width: 160 }}>关键参数</Text>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', flex: 1 }}>典型取值</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>卡诺二阶效率</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>0.35；换热器品质 0.2–0.5</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>蒸发 / 冷凝逼近温差</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>8 K、15 K；常见 5–10、10–20</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>能效比上限</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>4.5；实测 2.5–4.5</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>除湿能效 SMER</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>2.0 kg/kWh；实测 1.5–3.0</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>灯具光效</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>2.5 µmol/J；商用 1.5–4.0</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>NOCT / 功率系数 / 逆变</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>45 ℃、−0.30 %/K、97 %</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>充放电效率</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>各 0.91，往返 83 %</Text>
+          </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ width: 1280, height: 66, background: '#B2CECB', padding: '0 44px', flexDirection: 'row', alignItems: 'center' }}>
+    <Text style={{ fontSize: 13.5, color: '#1A2E2B', lineHeight: 1.45 }}>出处：二阶效率与逼近温差区间取 ASHRAE 换热器经验值；SMER 1.5–3.0 kg/kWh 为 DOE 额定点；NOCT 45 ℃、−0.30 %/K、逆变 97 % 为铭牌值；电池 4000 循环属 LFP 区间。</Text>
+  </Box>
+
+</Slide>

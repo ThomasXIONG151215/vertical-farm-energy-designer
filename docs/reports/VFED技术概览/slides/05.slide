@@ -1,0 +1,110 @@
+<Slide style={{ width: 1280, height: 720, background: '#F6F6F6', padding: 0, fontFamily: 'Microsoft YaHei', flexDirection: 'column' }}>
+
+  <Box style={{ width: 1280, height: 62, background: '#CEE9E6', padding: '0 44px', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #A9C6C2' }}>
+    <Text style={{ fontSize: 27, fontWeight: 'bold', color: '#123B38' }}>附录 A：传热传质——三个状态量的平衡式</Text>
+    <Text style={{ fontSize: 13, color: '#4E7C78' }}>附录 A</Text>
+  </Box>
+
+  <Box style={{ width: 1280, height: 92, padding: '8px 40px 0 40px' }}>
+    <Box style={{ width: 1200, height: 76, position: 'relative' }}>
+      <Image src="assets/ribbon.png" style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76 }} />
+      <Box style={{ position: 'absolute', left: 0, top: 0, width: 1200, height: 76, alignItems: 'center', justifyContent: 'center', padding: '0 70px' }}>
+        <Text style={{ fontSize: 23, color: '#FFFFFF' }}>热、湿、碳各一条：右边每一项都是能指着机器说出来的东西</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ width: 1280, height: 500, padding: '0 44px', flexDirection: 'row', gap: 16 }}>
+
+    <Box style={{ width: 736, height: 500, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '18px 24px', flexDirection: 'column', justifyContent: 'flex-start' }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>三个状态量：热、湿、碳</Text>
+        </Box>
+        <Box style={{ height: 21 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>1</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>室温变化 ＝ （空调冷量 ＋ 除湿显热 ＋ LED 发热 ＋ 围护传热</Text>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>＋ 太阳得热 ＋ 渗透显热 ＋ 渗透潜热 − 蒸腾潜热）÷ 房间热容</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 21 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>2</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>含湿量变化 ＝ （蒸腾失水 − 除湿水量 − 空调析水</Text>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>＋ 渗透带入 ＋ 围护渗透）÷ 房间空气质量</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 21 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>3</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>CO₂ 变化 ＝ （注入 ＋ 呼吸 ＋ 渗透带入 − 光合固定）÷ 房间空气体积</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 48 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+          <Box style={{ width: 16, height: 2, background: '#16413E' }} />
+          <Text style={{ fontSize: 12.5, fontWeight: 'bold', color: '#5E6E6B' }}>分项怎么来</Text>
+        </Box>
+        <Box style={{ height: 21 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>4</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>围护 ＝ UA × （室外 − 室内）；太阳 ＝ 太阳得热系数 × 窗面积 × 辐照</Text>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>渗透 ＝ 换气量 × 空气比热 × （室外 − 室内）；LED 发热 ＝ LED 功率</Text>
+          </Box>
+        </Box>
+        <Box style={{ height: 21 }} />
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <Text style={{ width: 18, fontSize: 12, color: '#8AA09C', marginTop: 4 }}>5</Text>
+          <Box style={{ flexDirection: 'column', flex: 1 }}>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>饱和水汽压 ＝ 0.6108 × exp(17.27 × 温度 ÷ （温度 ＋ 237.3）)</Text>
+            <Text style={{ fontSize: 16, color: '#16413E', lineHeight: 1.5 }}>含湿量 ＝ 0.622 × 水汽压 ÷ （站压 − 水汽压）；潜热 ＝ 2501 − 2.36 × 温度</Text>
+          </Box>
+        </Box>
+    </Box>
+
+    <Box style={{ width: 440, height: 500, background: '#FFFFFF', border: '1px solid #CBD7D5', borderRadius: 3, padding: '20px 24px', flexDirection: 'column', justifyContent: 'center' }}>
+          <Box style={{ flexDirection: 'row', height: 28, alignItems: 'center', borderBottom: '1px solid #B9CFCB' }}>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', width: 160 }}>关键参数</Text>
+            <Text style={{ height: 28, fontSize: 12, color: '#123B38', fontWeight: 'bold', flex: 1 }}>典型取值</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>房间热容</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>80 kWh/K；厂房 30–200</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>围护 UA</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>50 W/K；夹芯板 0.2–0.45 W/(m²·K)</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>太阳得热系数</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>0.15；玻璃 0.1–0.6</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>换气次数</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>0.001 /h；密闭厂房 0.01–0.02</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>汽化潜热</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>2501 − 2.36T kJ/kg</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>围护湿渗透</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>0（气密围护可忽略）</Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', height: 50, alignItems: 'center', borderBottom: '1px solid #E3EDEB' }}>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', width: 160 }}>空气密度 / 比热</Text>
+            <Text style={{ height: 50, fontSize: 12, color: '#46554F', flex: 1 }}>1.2 kg/m³；1005 J/(kg·K)</Text>
+          </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ width: 1280, height: 66, background: '#B2CECB', padding: '0 44px', flexDirection: 'row', alignItems: 'center' }}>
+    <Text style={{ fontSize: 13.5, color: '#1A2E2B', lineHeight: 1.45 }}>出处：ASHRAE Fundamentals Ch.1（湿空气性质）；Magnus 式（WMO 推荐，水面）；密闭厂房换气 0.01–0.02 /h（Kozai 2013）；U 值取夹芯板与砌体常见区间。</Text>
+  </Box>
+
+</Slide>
