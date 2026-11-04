@@ -433,7 +433,7 @@ vertical-farm-energy-designer/
 │   ├── agent/              # 评估器（保留 agent-cli 错误码契约）
 │   └── cli.py              # CLI 入口：vfed
 ├── research/               # 论文归档代码与数据（见下）
-├── reference/              # 参考文献
+├── docs/references/       # 参考文献（pvbes-validation 锚点、van-henten 源码）
 ├── data/weather/           # 预下载城市天气 CSV（51 城 × 2025）
 ├── scripts/                # 工具脚本（download_weather_db.py 刷新 data/weather/）
 ├── tests/                  # Pytest 测试套件（含 test_project.yaml 最小夹具）

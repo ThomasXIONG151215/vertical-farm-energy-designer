@@ -141,7 +141,7 @@ class PVSystem:
             raise ValueError(
                 f"PV module {self.module!r} cannot run the SDM power chain: "
                 f"missing {', '.join(missing)} (reference data partial; see "
-                f"reference/pvbes-validation/modules/)"
+                f"docs/references/pvbes-validation/modules/)"
             )
 
     def spec(self) -> ModuleSpec:

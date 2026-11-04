@@ -1,7 +1,7 @@
 """
 Van Henten 2003 one-state carbon-balance plant growth model.
 
-Ported from :file:`reference/van-henten/grow_one_state2003.py`.
+Ported from :file:`docs/references/van-henten/grow_one_state2003.py`.
 State variable: ``X_d`` (dry weight, kg/m²).  Driven by temperature, CO₂
 concentration and light (binary photoperiod indicator).
 

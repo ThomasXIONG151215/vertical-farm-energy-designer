@@ -2,7 +2,7 @@
 
 背景：三家官网在建模网络不可达（JS 渲染页面 / TLS 断），webfetch 无法
 取到 datasheet PDF。2026-11-02 用户人工提供了 8 份文件，已移入
-`reference/pvbes-validation/raw/datasheets/`（git-ignored，提取结果在
+`docs/references/pvbes-validation/raw/datasheets/`（git-ignored，提取结果在
 `modules/*.yaml`）。录入结果：**huasun_himalaya 与 longi_himo9_670m
 两个预设已补全 STC 五点并可仿真**（Himalaya 用 HSN-210-B132 DS730
 邻档；LONGi 用 Hi-MO 9 670 档，预设由 X10 改名 himo9）。

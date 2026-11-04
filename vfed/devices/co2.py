@@ -1,6 +1,6 @@
 """CO2 enrichment injector device (M1) + CO2 unit conversions.
 
-Design proposal: .planning/2026-10-11_co2-model-supplement-proposal.md
+Design proposal: docs/planning/2026-10-11_co2-model-supplement-proposal.md
 (§2.2/§2.4).  Setpoint + deadband on/off injection control with a capacity
 cap, mirroring the ``DEHDevice`` interface contract (devices/dehumidifier.py):
 

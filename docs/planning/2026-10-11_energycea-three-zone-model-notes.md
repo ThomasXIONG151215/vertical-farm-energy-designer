@@ -110,7 +110,7 @@ EnergyCEA ↔ VFED 对应关系：
 
 ## 5. 获取全文的建议路径
 
-1. **人工浏览器**（零成本，即刻可行）：打开 https://www.sciencedirect.com/science/article/pii/S0306261926004769 → 免费在线阅读；下载 PDF 后放入 `.planning/references/energycea/energycea_apenergy_2026_127824.pdf`，再据 Section 2 补全本笔记 §3 的 ✗ 项（许可证 CC BY-NC-ND 允许下载共享）。
+1. **人工浏览器**（零成本，即刻可行）：打开 https://www.sciencedirect.com/science/article/pii/S0306261926004769 → 免费在线阅读；下载 PDF 后放入 `docs/planning/references/energycea/energycea_apenergy_2026_127824.pdf`，再据 Section 2 补全本笔记 §3 的 ✗ 项（许可证 CC BY-NC-ND 允许下载共享）。
 2. 浙大校园网/图书馆或馆际互借（CALIS）。
 3. 向通讯作者索取：Tao Lin（浙大生工食品学院）/ Xiaoshuai Wang，引用 PII S0306261926004769。
 4. Elsevier TDM API（若日后申请到 apiKey）：`GET api.elsevier.com/content/article/PII:S0306261926004769?httpAccept=text/plain`（Crossref 已登记该 vor 全文端点）。
@@ -120,4 +120,4 @@ EnergyCEA ↔ VFED 对应关系：
 经济-生物层框架（非物理层）：提出 SAI（Simultaneous Active Inflorescences）生殖负载指数，源-库竞争量化；三种管理策略（保守/中等/集约 SAI_max=1/2/3）；集约策略单位能耗最低 **83.7 kWh/kg**（固定成本稀释效应）；质量敏感市场净利润最高 1115.55 CNY/m²/年；对电价与市场波动做敏感性交叉点分析。→ 印证 EnergyCEA 能耗数字（60.9–70 kWh/kg 环境范围 vs 运营 83.7 含全过程）与"能源结构由气候×设备×扩建主导"结论。
 
 ---
-*存档：`.planning/references/energycea/energycea_sd_preview_2026-10-11.md`（公开预览全文+建模相关参考文献反推表）*
+*存档：`docs/planning/references/energycea/energycea_sd_preview_2026-10-11.md`（公开预览全文+建模相关参考文献反推表）*

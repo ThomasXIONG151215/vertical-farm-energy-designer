@@ -30,7 +30,7 @@ eta_rel_nodes:
   - [800.0, 0.9963]
   - [1000.0, 1.0]
 source:
-  url: reference/pvbes-validation/raw/datasheets/Hi_MO_9_Edge_LR_8_66_HYD_630_670_M_V4_0_EN.pdf
+  url: docs/references/pvbes-validation/raw/datasheets/Hi_MO_9_Edge_LR_8_66_HYD_630_670_M_V4_0_EN.pdf
   accessed: 2026-11-02
   method: datasheet STC table page 2, 670 W tier, pymupdf text layer
   note: >-

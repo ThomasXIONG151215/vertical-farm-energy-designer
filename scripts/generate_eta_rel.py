@@ -1,6 +1,6 @@
 """Offline generator for ModuleSpec.eta_rel_nodes (G4 enhancement layer).
 
-Method (see reference/pvbes-validation/anchors/low_irradiance.yaml):
+Method (see docs/references/pvbes-validation/anchors/low_irradiance.yaml):
   1. Fit the De Soto / CEC single-diode five reference parameters
      (I_L_ref, I_o_ref, a_ref, R_s, R_sh_ref) to each module's datasheet
      STC five-point plus temperature coefficients (least-squares on the

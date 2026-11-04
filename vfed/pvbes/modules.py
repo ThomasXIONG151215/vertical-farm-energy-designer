@@ -2,8 +2,8 @@
 degradation (G13).
 
 Every registry entry below is transcribed from the validation-anchor database
-``reference/pvbes-validation/modules/*.yaml`` (built 2026-11-01; provenance
-rules in ``reference/pvbes-validation/readme.md``):
+``docs/references/pvbes-validation/modules/*.yaml`` (built 2026-11-01; provenance
+rules in ``docs/references/pvbes-validation/readme.md``):
 
 * datasheet-derived numbers are copied verbatim from the YAML files and the
   YAML ``status`` is recorded next to each entry (verified / partial);
@@ -18,7 +18,7 @@ rules in ``reference/pvbes-validation/readme.md``):
   pending a per-module anchor;
 * G4 low-irradiance relative-efficiency curves: NO module has a validated
   curve yet -- the PVWatts v5 polynomial lives behind an unreachable
-  NREL/OSTI host (see ``reference/pvbes-validation/anchors/low_irradiance.yaml``,
+  NREL/OSTI host (see ``docs/references/pvbes-validation/anchors/low_irradiance.yaml``,
   status ``inaccessible``), so every preset ships the identity curve
   ``eta_rel_nodes = None`` (eta_rel == 1.0 everywhere).  TODO(G4): swap in
   node tables per module once anchor data lands (a-Si glass qualitatively
@@ -27,7 +27,7 @@ rules in ``reference/pvbes-validation/readme.md``):
 * ``bifaciality`` is reserved for G5 (bifacial gain); all YAML entries leave
   it ``null``, so it defaults to ``None`` here;
 * ``jinko_jkm580n`` is the legacy VFED baseline: its STC electrical points
-  equal ``reference/pvbes-validation/modules/jinko_jkm580n.yaml`` (status
+  equal ``docs/references/pvbes-validation/modules/jinko_jkm580n.yaml`` (status
   ``partial`` -- research-sourced, datasheet origin unconfirmed), while
   eta_pv / area_to_power / degradation / NOCT are VFED modeling defaults
   (not datasheet values), kept bit-identical to the pre-G3 ``PVSystem``

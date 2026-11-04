@@ -42,7 +42,7 @@ The sqrt-of-time law and its coefficients follow Keil et al. 2016,
 "Calendar Aging of Lithium-Ion Batteries I", J. Electrochem. Soc. 163(9)
 A1872-A1880, DOI 10.1149/2.0411609jes: calendar fade is SEI-growth driven
 and grows linearly with the square root of storage time.  The open-data
-anchor file ``reference/pvbes-validation/anchors/battery_aging.yaml`` (entry
+anchor file ``docs/references/pvbes-validation/anchors/battery_aging.yaml`` (entry
 ``keil2016_calendar_aging``, status verified) stores the LFP fade-rate
 derivatives measured after 9 months of storage -- ca. 0.2 percentage points
 per month at 25 degC and ca. 0.5 pp per month at 50 degC.  For
@@ -75,7 +75,7 @@ __all__ = ["BatterySystem", "CALENDAR_MONTH_HOURS"]
 # ── G11: calendar-aging anchor (open data, Keil 2016) ─────────────────────
 CALENDAR_MONTH_HOURS = 365.25 * 24.0 / 12.0  # hours per average month (730.5)
 
-_CAL_ANCHOR_RELPATH = ("reference", "pvbes-validation", "anchors", "battery_aging.yaml")
+_CAL_ANCHOR_RELPATH = ("docs", "references", "pvbes-validation", "anchors", "battery_aging.yaml")
 _CAL_DERIV_REF_MONTHS = 9.0  # Keil 2016 evaluated the LFP fade-rate
 # derivative after 9 months of storage (anchor note quotes the paper).
 _CAL_T_COLD_C = 25.0  # cold anchor temperature (degC)
@@ -85,7 +85,7 @@ _CAL_ANCHOR_CACHE: Dict[str, Dict[str, float]] = {}
 
 _NMC_TO_FOLLOW_MSG = (
     "battery chemistry 'nmc' needs anchor data: the calendar-aging anchor "
-    "file reference/pvbes-validation/anchors/battery_aging.yaml does not "
+    "file docs/references/pvbes-validation/anchors/battery_aging.yaml does not "
     "carry the 'nmc_fade_rate_25c_pp_per_month' / "
     "'nmc_fade_rate_50c_pp_per_month' keys (Keil 2016 Fig. 2b digitization, "
     "DOI 10.1149/2.0411609jes). Do not guess numbers."
@@ -104,7 +104,7 @@ def _load_calendar_coeffs() -> Dict[str, Dict[str, float]]:
 
     Only chemistries with verified anchor data are returned (currently lfp).
     Provenance rule: the numbers come exclusively from
-    ``reference/pvbes-validation/anchors/battery_aging.yaml`` entry
+    ``docs/references/pvbes-validation/anchors/battery_aging.yaml`` entry
     ``keil2016_calendar_aging`` (status verified).  The anchor stores the LFP
     fade-rate derivatives (percentage points per month) measured after 9
     months of storage at 25 degC and 50 degC; for SOH_cal(t) = k*sqrt(t)

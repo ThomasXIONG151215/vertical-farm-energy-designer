@@ -17,7 +17,7 @@
 ## 目录结构
 
 ```
-reference/pvbes-validation/
+docs/references/pvbes-validation/
 ├── readme.md          # 本文件：溯源规则与 schema
 ├── raw/               # 原始证据文件（PVGIS JSON 响应、论文 PDF、提取文本）
 ├── modules/           # 光伏组件数据表提取，每组件一个 YAML

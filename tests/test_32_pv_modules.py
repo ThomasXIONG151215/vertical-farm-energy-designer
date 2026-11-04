@@ -5,7 +5,7 @@ Scope of this file (numbering starts at 32 to avoid Wave-1 collisions):
 
 * G3 — ``vfed/pvbes/modules.py`` registry resolves the five presets; every
   registry number is cross-checked against the reference-anchor YAMLs in
-  ``reference/pvbes-validation/modules/`` (per readme.md, tests read the
+  ``docs/references/pvbes-validation/modules/`` (per readme.md, tests read the
   science values from there, never inline them); unknown names fail fast;
   default ``PVSystem`` construction is bit-identical to the legacy inline
   parameter set (cross-checked through ``PVConfig``, the config contract
@@ -34,7 +34,7 @@ from vfed.pvbes.modules import MODULES, ModuleSpec, resolve_module
 from vfed.pvbes.pv import PVSystem
 
 REF_MODULES = (
-    Path(__file__).resolve().parents[1] / "reference" / "pvbes-validation" / "modules"
+    Path(__file__).resolve().parents[1] / "docs" / "references" / "pvbes-validation" / "modules"
 )
 
 # The legacy pre-G3 PVSystem inline set, mirrored field-for-field by the

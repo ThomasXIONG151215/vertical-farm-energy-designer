@@ -2,7 +2,7 @@
 calendar aging).
 
 Provenance rule: every anchor number is read at test time from
-``reference/pvbes-validation/anchors/battery_aging.yaml`` (Keil et al. 2016,
+``docs/references/pvbes-validation/anchors/battery_aging.yaml`` (Keil et al. 2016,
 J. Electrochem. Soc. 163(9) A1872-A1880, DOI 10.1149/2.0411609jes); no
 anchor value is inlined in this file.  Synthetic pure-formula tests (bitwise
 legacy recomputation, G10 cap saturation) are exempt from the file rule per
@@ -31,7 +31,7 @@ import yaml
 from vfed.pvbes.battery import CALENDAR_MONTH_HOURS, BatterySystem
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ANCHOR_PATH = REPO_ROOT / "reference" / "pvbes-validation" / "anchors" / "battery_aging.yaml"
+ANCHOR_PATH = REPO_ROOT / "docs" / "references" / "pvbes-validation" / "anchors" / "battery_aging.yaml"
 KEIL_ENTRY = "keil2016_calendar_aging"
 
 # E_bat used by the pure-storage probes below (kWh, synthetic).

@@ -433,7 +433,7 @@ vertical-farm-energy-designer/
 │   ├── agent/              # Evaluator (preserves agent-cli error-code contract)
 │   └── cli.py              # CLI entry point: vfed
 ├── research/               # Archived research paper code & data (see below)
-├── reference/              # Reference literature
+├── docs/references/       # Reference literature (pvbes-validation anchors, van-henten sources)
 ├── data/weather/           # Pre-downloaded city weather CSVs (51 cities × 2025)
 ├── scripts/                # Utility scripts (download_weather_db.py refreshes data/weather/)
 ├── tests/                  # Pytest suite (incl. test_project.yaml minimal fixture)

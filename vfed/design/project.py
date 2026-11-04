@@ -737,7 +737,7 @@ class DEHConfig:
 class CO2Config:
     """CO2 enrichment device + indoor concentration-balance switch (M1).
 
-    Design proposal: .planning/2026-10-11_co2-model-supplement-proposal.md
+    Design proposal: docs/planning/2026-10-11_co2-model-supplement-proposal.md
     (§2.3).  ``enabled: false`` (default) is the pre-CO2 legacy path
     bit-for-bit: the engine integrates no concentration state, steps no
     injector and appends no output column.  ``enabled: true`` turns on the
