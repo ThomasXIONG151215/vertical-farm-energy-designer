@@ -89,8 +89,7 @@ def _validate_transposition_args(albedo: float, transposition: str) -> None:
     """
     if transposition not in TRANSPOSITION_MODELS:
         raise ValueError(
-            "transposition must be one of isotropic|hay_davies, got "
-            f"{transposition!r}."
+            "transposition must be one of isotropic|hay_davies, got " f"{transposition!r}."
         )
     if isinstance(albedo, bool) or not isinstance(albedo, (int, float)):
         raise ValueError(
@@ -98,9 +97,7 @@ def _validate_transposition_args(albedo: float, transposition: str) -> None:
             f"{type(albedo).__name__}: {albedo!r}"
         )
     if not (0.0 <= float(albedo) <= 1.0):
-        raise ValueError(
-            f"albedo must be within [0, 1] (ground reflectance), got {albedo}."
-        )
+        raise ValueError(f"albedo must be within [0, 1] (ground reflectance), got {albedo}.")
 
 
 class WeatherFetchError(Exception):
@@ -182,7 +179,8 @@ def _cache_path(
     if albedo != 0.2 or transposition != "isotropic":
         suffix += f"_r{albedo:.3f}_m{transposition}"
     return cache_dir / (
-        f"weather_{lat:.3f}_{lon:.3f}_{year}" f"_t{tilt:.3f}_a{azimuth:.3f}_z{tz_hours:.3f}{suffix}.csv"
+        f"weather_{lat:.3f}_{lon:.3f}_{year}"
+        f"_t{tilt:.3f}_a{azimuth:.3f}_z{tz_hours:.3f}{suffix}.csv"
     )
 
 
@@ -220,7 +218,7 @@ def _solar_geometry(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Return solar zenith and azimuth (degrees) for each timestamp."""
     lat_r = np.deg2rad(lat)
-    doy = dt.dayofyear.values
+    doy = dt.day_of_year.values
     # Local solar time = clock time + (standard meridian - local meridian)/15 h.
     # Standard meridian = 15 * tz_hours, so offset = tz_hours - lon/15.
     # (Simplified: no equation-of-time refinement.)
@@ -360,7 +358,7 @@ def add_poa(
         # direction (projection ratio Rb), the isotropic share (1 - AI)
         # from the sky dome.  AI is clipped to [0, 1]: DNI > D_on can only
         # happen from Erbs-split edge cases near the horizon.
-        d_on = _extraterrestrial_normal(out.index.dayofyear.values)
+        d_on = _extraterrestrial_normal(out.index.day_of_year.values)
         ai = np.clip(dni / d_on, 0.0, 1.0)
         rb = cos_inc / cos_z
         diffuse_poa = diffuse_h * ((1.0 - ai) * iso_view + ai * rb)
@@ -429,7 +427,8 @@ def _parse_power_csv(text: str) -> pd.DataFrame:
             "NASA POWER response has no '-END HEADER-' marker (unexpected "
             "format or an error page); refusing to guess the data block."
         ) from None
-    raw = pd.read_csv(io.StringIO("\n".join(lines[end_hdr + 1 :])))
+    data_start = end_hdr + 1
+    raw = pd.read_csv(io.StringIO("\n".join(lines[data_start:])))
     required = ["YEAR", "MO", "DY", "HR", "T2M", "RH2M", "WS10M", "ALLSKY_SFC_SW_DWN"]
     missing = [c for c in required if c not in raw.columns]
     if missing:
@@ -540,9 +539,7 @@ def fetch_weather(
     ``_cache_path``), so the two parameterisations never cross-hit.
     """
     if provider not in WEATHER_PROVIDERS:
-        raise WeatherFetchError(
-            f"provider must be one of {WEATHER_PROVIDERS}, got {provider!r}."
-        )
+        raise WeatherFetchError(f"provider must be one of {WEATHER_PROVIDERS}, got {provider!r}.")
     # G2: fail fast BEFORE any network fetch or cache bookkeeping (an
     # invalid model name found only inside add_poa would waste a
     # full-year API call first).
@@ -575,9 +572,7 @@ def fetch_weather(
             expected_n = (365 + int(calendar.isleap(year))) * 24
             first_ts = df.index[0] if len(df) > 0 else None
             strict_mono = bool(
-                len(df) > 0
-                and df.index.is_monotonic_increasing
-                and df.index.is_unique
+                len(df) > 0 and df.index.is_monotonic_increasing and df.index.is_unique
             )
             aligned = (
                 len(df) == expected_n

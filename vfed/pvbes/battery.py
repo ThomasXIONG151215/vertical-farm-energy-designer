@@ -123,9 +123,7 @@ def _load_calendar_coeffs() -> Dict[str, Dict[str, float]]:
         )
     import yaml  # core dependency, imported lazily: the legacy path never reads files
 
-    entry = yaml.safe_load(path.read_text(encoding="utf-8"))["entries"][
-        "keil2016_calendar_aging"
-    ]
+    entry = yaml.safe_load(path.read_text(encoding="utf-8"))["entries"]["keil2016_calendar_aging"]
     k_cold = (
         2.0
         * math.sqrt(_CAL_DERIV_REF_MONTHS)
@@ -150,21 +148,13 @@ def _load_calendar_coeffs() -> Dict[str, Dict[str, float]]:
     if entry.get("nmc_fade_rate_25c_pp_per_month") is not None:
         t_ref_nmc = float(entry.get("nmc_deriv_ref_months", 10.0))
         k_cold_nmc = (
-            2.0
-            * math.sqrt(t_ref_nmc)
-            * float(entry["nmc_fade_rate_25c_pp_per_month"])
-            / 100.0
+            2.0 * math.sqrt(t_ref_nmc) * float(entry["nmc_fade_rate_25c_pp_per_month"]) / 100.0
         )
         k_hot_nmc = (
-            2.0
-            * math.sqrt(t_ref_nmc)
-            * float(entry["nmc_fade_rate_50c_pp_per_month"])
-            / 100.0
+            2.0 * math.sqrt(t_ref_nmc) * float(entry["nmc_fade_rate_50c_pp_per_month"]) / 100.0
         )
         if not (
-            math.isfinite(k_cold_nmc)
-            and math.isfinite(k_hot_nmc)
-            and 0.0 < k_cold_nmc < k_hot_nmc
+            math.isfinite(k_cold_nmc) and math.isfinite(k_hot_nmc) and 0.0 < k_cold_nmc < k_hot_nmc
         ):
             raise ValueError(
                 "calendar-aging anchor data is inconsistent (expected "
@@ -244,17 +234,13 @@ class BatterySystem:
 
     def __post_init__(self) -> None:
         # G10/G11 fail-fast contract checks (pure ASCII messages).
-        if self.power_kw is not None and (
-            not math.isfinite(self.power_kw) or self.power_kw <= 0.0
-        ):
+        if self.power_kw is not None and (not math.isfinite(self.power_kw) or self.power_kw <= 0.0):
             raise ValueError(
-                "battery power_kw must be a positive finite number (kW), "
-                f"got {self.power_kw!r}"
+                "battery power_kw must be a positive finite number (kW), " f"got {self.power_kw!r}"
             )
         if self.chemistry not in ("legacy", "lfp", "nmc"):
             raise ValueError(
-                f"battery chemistry {self.chemistry!r} is not one of "
-                "'legacy', 'lfp', 'nmc'"
+                f"battery chemistry {self.chemistry!r} is not one of " "'legacy', 'lfp', 'nmc'"
             )
         if not math.isfinite(self.temperature_c) or self.temperature_c <= -_KELVIN:
             raise ValueError(
@@ -277,9 +263,7 @@ class BatterySystem:
         coeffs = _load_calendar_coeffs().get(self.chemistry)
         if coeffs is None:
             raise NotImplementedError(_NMC_TO_FOLLOW_MSG)
-        return _arrhenius_interp(
-            self.temperature_c, coeffs["k_cold"], coeffs["k_hot"]
-        )
+        return _arrhenius_interp(self.temperature_c, coeffs["k_cold"], coeffs["k_hot"])
 
     def calendar_fade(self, elapsed_hours: float) -> float:
         """Capacity fraction lost to calendar aging after ``elapsed_hours``
@@ -288,9 +272,7 @@ class BatterySystem:
         """
         if self.chemistry == "legacy" or elapsed_hours <= 0.0:
             return 0.0
-        return self.calendar_sqrt_coeff() * math.sqrt(
-            elapsed_hours / CALENDAR_MONTH_HOURS
-        )
+        return self.calendar_sqrt_coeff() * math.sqrt(elapsed_hours / CALENDAR_MONTH_HOURS)
 
     def calculate_battery_flows(
         self,
@@ -370,9 +352,7 @@ class BatterySystem:
             else:
                 p_crate_cap = min(self.c_rate * E_now, self.power_kw)
             p_charge_max = min(p_crate_cap, (self.soc_max - soc) * E_now / dt)
-            p_discharge_max = (
-                min(p_crate_cap, (soc - self.soc_min) * E_now / dt) * self.eta_dis
-            )
+            p_discharge_max = min(p_crate_cap, (soc - self.soc_min) * E_now / dt) * self.eta_dis
             if net >= 0:  # surplus -> charge
                 ch = min(net, max(0.0, p_charge_max))
                 soc += ch * self.eta_ch * dt / E_now
@@ -412,9 +392,10 @@ class BatterySystem:
             # existing 1e-3 clamp.  Legacy (k_cal == 0) never enters the
             # calendar branch — the fade expression stays bitwise identical.
             cycles_now += (
-                battery_charge[i] * self.eta_ch
-                + battery_discharge[i] / max(self.eta_dis, 0.01)
-            ) * dt / (2.0 * E_bat)
+                (battery_charge[i] * self.eta_ch + battery_discharge[i] / max(self.eta_dis, 0.01))
+                * dt
+                / (2.0 * E_bat)
+            )
             fade = soh_k * cycles_now
             if k_cal > 0.0:
                 fade += k_cal * math.sqrt((i + 1) * dt / CALENDAR_MONTH_HOURS)

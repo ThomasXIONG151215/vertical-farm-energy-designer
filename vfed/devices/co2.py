@@ -122,17 +122,14 @@ class CO2Device:
                 f"follow-up mode (M2)."
             )
         if capacity_g_per_h <= 0.0:
-            raise ValueError(
-                f"CO2 capacity_g_per_h must be > 0 g/h, got {capacity_g_per_h}"
-            )
+            raise ValueError(f"CO2 capacity_g_per_h must be > 0 g/h, got {capacity_g_per_h}")
         if band_ppm <= 0.0:
             raise ValueError(f"CO2 band_ppm must be > 0 ppm, got {band_ppm}")
         if tau_s <= 0.0:
             raise ValueError(f"CO2 tau_s must be > 0 s, got {tau_s}")
         if min_on_s < 0.0 or min_off_s < 0.0:
             raise ValueError(
-                f"CO2 min_on_s/min_off_s must be >= 0 s, got "
-                f"{min_on_s}/{min_off_s}"
+                f"CO2 min_on_s/min_off_s must be >= 0 s, got " f"{min_on_s}/{min_off_s}"
             )
         if power_w < 0.0:
             raise ValueError(f"CO2 power_w must be >= 0 W, got {power_w}")
@@ -180,9 +177,7 @@ class CO2Device:
         ``is_on`` and ``mod`` (commanded modulation, 0/1 for on_off).
         """
         demand = setpoint_ppm - co2_ppm_z
-        mod = self.comp.update(
-            demand, dt, on_threshold=self.band_ppm, off_threshold=-self.band_ppm
-        )
+        mod = self.comp.update(demand, dt, on_threshold=self.band_ppm, off_threshold=-self.band_ppm)
         if mod > 0.0 and not is_light and not self.inject_in_dark:
             mod = 0.0
         S_target = mod * self.capacity_kgs

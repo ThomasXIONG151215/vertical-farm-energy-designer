@@ -426,9 +426,7 @@ def _build_energy_system(project: DesignProject) -> EnergySystem:
         gamma_pmp=project.pv.gamma_pmp,  # P2-5
         NOCT=project.pv.NOCT,
         eta_inv=project.pv.eta_inv,
-        C_pv=resolve_unit_price(
-            project.pv.C_pv, USD_C_PV, project.currency, project.exchange_rate
-        ),
+        C_pv=resolve_unit_price(project.pv.C_pv, USD_C_PV, project.currency, project.exchange_rate),
         degradation=project.pv.degradation,
         eta_system=project.pv.eta_system,  # P6-7
     )
@@ -568,9 +566,7 @@ def _precheck_legacy_cache_notice(project: DesignProject, cache_dir) -> None:
         return
     if n_rows != expected_n:
         return
-    _notify_legacy_cache_once(
-        lp, project.site.tilt, project.site.azimuth, project.site.tz_hours
-    )
+    _notify_legacy_cache_once(lp, project.site.tilt, project.site.azimuth, project.site.tz_hours)
 
 
 def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Dict:
@@ -658,9 +654,7 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
         _cap_base = _total_capital(project, 0.0, 0.0)
         _dcap_base = _cap_base["PV"] + _cap_base["Battery"]
         best["annual_savings"] = _sav
-        best["payback_period"] = (
-            (_dcap - _dcap_base) / _sav if _sav > 0 else float("inf")
-        )
+        best["payback_period"] = (_dcap - _dcap_base) / _sav if _sav > 0 else float("inf")
         _dsav = (
             0.0
             if _grid_only
@@ -748,11 +742,7 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
             _load_arr,
             np.zeros_like(_load_arr),
             _hours_arr,
-            months=(
-                np.asarray(_months_arr, dtype=int)
-                if _months_arr is not None
-                else None
-            ),
+            months=(np.asarray(_months_arr, dtype=int) if _months_arr is not None else None),
         )["net_grid_cost"]
         # F1 (round 21): payback baseline capital for this building combo —
         # the same config priced at pv=0 / battery=0.  Pure config arithmetic

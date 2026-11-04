@@ -19,12 +19,13 @@ from vfed.plants.van_henten import VanHenten
 
 from .contracts import ClimateSeries
 
-_INVPHI = (math.sqrt(5.0) - 1.0) / 2.0   # 1/phi ~ 0.618
+_INVPHI = (math.sqrt(5.0) - 1.0) / 2.0  # 1/phi ~ 0.618
 
 
 # ------------------------------------------------------------- minimizer --
-def golden_section(func: Callable[[float], float], a: float, b: float,
-                   xatol: float = 1e-4) -> Tuple[float, float, int]:
+def golden_section(
+    func: Callable[[float], float], a: float, b: float, xatol: float = 1e-4
+) -> Tuple[float, float, int]:
     """Bounded golden-section minimization of a unimodal ``func`` on [a, b].
 
     Deterministic; tolerance is on x (interval width), matching the
@@ -54,9 +55,13 @@ def golden_section(func: Callable[[float], float], a: float, b: float,
 
 
 # ------------------------------------------------------- 1-state runner --
-def run_growth_series(climate: ClimateSeries, x_d0: float, c_pl_d: float,
-                      c_rad_phot: float,
-                      sample_indices: Sequence[int]) -> np.ndarray:
+def run_growth_series(
+    climate: ClimateSeries,
+    x_d0: float,
+    c_pl_d: float,
+    c_rad_phot: float,
+    sample_indices: Sequence[int],
+) -> np.ndarray:
     """Euler-step the one-state Van Henten model over ``climate``.
 
     Semantics identical to Stage 1 ``run_vfed``: CO2 updated per step
@@ -66,8 +71,7 @@ def run_growth_series(climate: ClimateSeries, x_d0: float, c_pl_d: float,
     Sampling is row-index based (never exact-timestamp matching)——
     Stage 3 教训: 实测时间戳可能带毫秒尾数。
     """
-    grow = VanHenten(co2_ppm=float(climate.co2_ppm[0]),
-                     c_pl_d=c_pl_d, c_rad_phot=c_rad_phot)
+    grow = VanHenten(co2_ppm=float(climate.co2_ppm[0]), c_pl_d=c_pl_d, c_rad_phot=c_rad_phot)
     temp = np.asarray(climate.temp_c, dtype=float)
     co2 = np.asarray(climate.co2_ppm, dtype=float)
     par = np.asarray(climate.par_w, dtype=float)
@@ -86,10 +90,15 @@ def run_growth_series(climate: ClimateSeries, x_d0: float, c_pl_d: float,
 
 
 # ------------------------------------------------------------- fitting --
-def fit_c_rad_phot(climate: ClimateSeries, x_d0: float, c_pl_d: float,
-                   sample_indices: Sequence[int], obs_x_d: np.ndarray,
-                   log10_bounds: Tuple[float, float] = (-10.0, -7.0),
-                   xatol: float = 1e-4) -> Tuple[float, float, int]:
+def fit_c_rad_phot(
+    climate: ClimateSeries,
+    x_d0: float,
+    c_pl_d: float,
+    sample_indices: Sequence[int],
+    obs_x_d: np.ndarray,
+    log10_bounds: Tuple[float, float] = (-10.0, -7.0),
+    xatol: float = 1e-4,
+) -> Tuple[float, float, int]:
     """1-parameter LSQ fit of c_rad_phot on in-window X_d samples.
 
     Objective minimized on log10(c_rad_phot) over ``log10_bounds``
@@ -102,10 +111,8 @@ def fit_c_rad_phot(climate: ClimateSeries, x_d0: float, c_pl_d: float,
         raise ValueError("obs_x_d/sample_indices length mismatch")
 
     def rmse(log10c: float) -> float:
-        sim = run_growth_series(climate, x_d0, c_pl_d, 10.0 ** log10c,
-                                sample_indices)
+        sim = run_growth_series(climate, x_d0, c_pl_d, 10.0**log10c, sample_indices)
         return float(np.sqrt(np.mean((sim - obs) ** 2)))
 
-    x, f, n = golden_section(rmse, log10_bounds[0], log10_bounds[1],
-                             xatol=xatol)
-    return 10.0 ** x, f, n
+    x, f, n = golden_section(rmse, log10_bounds[0], log10_bounds[1], xatol=xatol)
+    return 10.0**x, f, n

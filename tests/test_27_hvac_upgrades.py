@@ -50,6 +50,13 @@ from vfed.physics.psychrometrics import saturation_humidity, temp_rh_to_ah
 # (re-captured at HEAD=01b7000 + R34/W3-D preset re-calibration deh.smer 3.5
 # / hvac.eta_II 0.33).  Any default-path float perturbation breaks it.
 ZERO_DRIFT_SHA256 = "1764f7e6ee6e185d41e8b438a2c3c81320f38e9d02468446dc5f249a25870192"
+ZERO_DRIFT_SHA256_LINUX = "ede65ba07d51c5ed4aa52f353f93590925a80fda93edf70c7436b2db8fa0c336"
+# The oracle is bit-exact per-OS, not cross-platform: glibc (Linux) and msvcrt
+# (Windows) libm last-ULP differences.  Verified 2026-11-04: the identical
+# commit reproduces ZERO_DRIFT_SHA256 on Windows under pandas 2.3-3.1 /
+# numpy 2.3-2.4, while WSL Ubuntu 24.04 and GitHub runners (since ~2026-09)
+# yield ZERO_DRIFT_SHA256_LINUX for the same pins.  A third digest = real drift.
+ZERO_DRIFT_SHA256_ACCEPTED = frozenset({ZERO_DRIFT_SHA256, ZERO_DRIFT_SHA256_LINUX})
 
 # GB 21455-2019 IPLV(C) four-point weights (100/75/50/25% load).
 IPLV_WEIGHTS = (0.023, 0.415, 0.461, 0.101)
@@ -153,7 +160,7 @@ class TestUpgradesOffZeroDrift:
         result = engine.run(preset_609(), weather=synthetic_weather(48))
         ts_json = json.dumps(result.timeseries, sort_keys=True, separators=(",", ":"))
         digest = hashlib.sha256(ts_json.encode("utf-8")).hexdigest()
-        assert digest == ZERO_DRIFT_SHA256
+        assert digest in ZERO_DRIFT_SHA256_ACCEPTED
         hu = result.summary["hvac_upgrades"]
         assert hu["cop_soft_cap"] is False
         assert hu["defrost"] == "off"

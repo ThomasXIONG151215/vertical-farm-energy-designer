@@ -174,8 +174,7 @@ def validate_ghi_scale(value, where: str = "site.ghi_scale") -> float:
     """Round 22: GHI bias-correction band (0.5, 1.5] (E001 at load time)."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(
-            f"{where} must be a number (GHI multiplier), got "
-            f"{type(value).__name__}: {value!r}"
+            f"{where} must be a number (GHI multiplier), got " f"{type(value).__name__}: {value!r}"
         )
     lo, hi = GHI_SCALE_LIMITS
     if not (lo < float(value) <= hi):
@@ -569,7 +568,9 @@ class HVACConfig:
     # ── legacy (kept for backward compat) ──
     P_rated_w: float = 3000.0  # rated electrical power (W), used if Q_cool_nom == 0
     #   Rated ELECTRICAL input; cooling capacity = P_rated_w × COP(T_ext). Typical 0.5-10 kW.
-    cop_value: float = 4.0  # COP at rated condition (feeds constant/linear/table modes); air-cooled DX 3-6
+    cop_value: float = (
+        4.0  # COP at rated condition (feeds constant/linear/table modes); air-cooled DX 3-6
+    )
     cop_mode: str = "carnot"  # carnot | constant | linear | table
     cop_k: float = 0.02  # linear-mode slope (1/K): COP = cop_value×(1−k×(T_ext−cop_T_ref)), clamp [1,10]; typical 0.01-0.04
     cop_T_ref: float = 25.0  # linear-mode reference outdoor temperature (°C)
@@ -577,8 +578,12 @@ class HVACConfig:
     #   table mode: piecewise-linear between sorted edges (flat outside), COP floor 0.5;
     #   e.g. {20: 3.0, 35: 2.5}
     cop_heat: float = 3.0  # heating COP at EN 14511 A7/W35 (7°C ext / 20°C int); Carnot-scaled vs T_ext, clamp [1.5, 5]
-    heat_mode: str = "heat_pump"  # heat_pump (COP-scaled) | resistive (COP = 1, power ∝ modulation m)
-    P_rated_heat_w: float = 3000.0  # rated electrical input in heating mode (W); 0 → falls back to P_rated_w
+    heat_mode: str = (
+        "heat_pump"  # heat_pump (COP-scaled) | resistive (COP = 1, power ∝ modulation m)
+    )
+    P_rated_heat_w: float = (
+        3000.0  # rated electrical input in heating mode (W); 0 → falls back to P_rated_w
+    )
     deadband_c: float = 1.0  # °C thermostat hysteresis deadband
     #   ON when T_z > T_setpoint, OFF when T_z < T_setpoint − deadband. Typical 0.5-2 °C.
     min_on_s: float = 180.0  # anti-short-cycle min compressor run time (s); typical 120-300
@@ -590,7 +595,9 @@ class HVACConfig:
     #   less latent removed by the coil. 0.10-0.20 for a 4-row DX coil.
     t_coil_drop: float = 9.0  # supply-air temperature depression T_supply = T_setpoint - t_coil_drop (real ACs ~8-12°C)
     tau_q: float = 90.0  # first-order lag of heat output (s, coil thermal inertia); typical 30-120
-    tau_m: float = 60.0  # first-order lag of moisture removal (s, condensate retention); typical 30-120
+    tau_m: float = (
+        60.0  # first-order lag of moisture removal (s, condensate retention); typical 30-120
+    )
     shr_rh_guard: float = 65.0  # % RH; below this the AC stops latent removal (P4-1a)
     #   Humidity-protection guard: SHR → 1.0 (sensible-only) at/below the guard,
     #   blended linearly up to guard + rh_guard_band. Keep near/below setpoints.RH.
@@ -633,15 +640,21 @@ class HVACConfig:
     #   1/(1+0.01446/d_omega), capacity x 0.875*(1-t_frac), power x
     #   0.954*(1-t_frac), averaged reverse-cycle load
     #   0.01*t_frac*(7.222-T_ext)*(Q_rated/1.01667).
-    defrost_threshold_c: float = 4.0  # outdoor temp below which frost applies (°C); DOE-2.1E timed threshold
+    defrost_threshold_c: float = (
+        4.0  # outdoor temp below which frost applies (°C); DOE-2.1E timed threshold
+    )
     defrost_interval_min: float = 90.0  # timed defrost cycle interval (min); typical 60-120
     defrost_duration_min: float = 5.0  # timed defrost event duration (min); typical 3-10
     eta_II: float = 0.35  # carnot-mode 2nd-law efficiency (−); typical 0.2-0.5
     delta_T_evap: float = 8.0  # evaporator approach (K): T_evap = T_indoor − ΔT_evap; typical 5-10
     delta_T_cond: float = 15.0  # condenser approach (K): T_cond = T_ext + ΔT_cond; typical 10-20
     auto_size: bool = False  # true = size P_rated_w from the design-day load via size_hvac
-    design_T_ext: float = 35.0  # sizing design outdoor temperature (°C); also seeds DEH auto-size (@80% RH outdoor)
-    shr_design: float = 0.80  # design SHR for sizing: total capacity = sensible load / shr_design; PFAL 0.6-0.8
+    design_T_ext: float = (
+        35.0  # sizing design outdoor temperature (°C); also seeds DEH auto-size (@80% RH outdoor)
+    )
+    shr_design: float = (
+        0.80  # design SHR for sizing: total capacity = sensible load / shr_design; PFAL 0.6-0.8
+    )
     safety_factor: float = 1.2  # sizing margin multiplier on the computed P_rated; typical 1.1-1.3
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
@@ -663,7 +676,9 @@ class DEHConfig:
     T_std: float = 5.0  # °C std dev (T normalisation scale)
     W_mean: float = 0.012  # kg/kg mean humidity ratio (W normalisation)
     W_std: float = 0.003  # kg/kg std dev
-    smer: float = 2.0  # rated SMER (kg water / kWh COMPRESSOR input, fan excluded — P2-5); realistic 1.5-3.0
+    smer: float = (
+        2.0  # rated SMER (kg water / kWh COMPRESSOR input, fan excluded — P2-5); realistic 1.5-3.0
+    )
     smer_curve: bool = False
     #   R33/B10: operating-condition SMER correction.  true = each step applies
     #   SMER_eff = smer × clamp(0.25 + 0.75×(W_z/W_nom)^0.7, 0.25, 1.0), with
@@ -725,10 +740,16 @@ class DEHConfig:
     floor_w: float = 0.0  # min electrical power while ON (W); commissioning floor for high-floor inverter units; 0 = off
     min_on_s: float = 180.0  # anti-short-cycle min compressor run time (s); typical 120-300
     min_off_s: float = 180.0  # anti-short-cycle min compressor stop time (s); typical 120-300
-    fan_power_w: float = 40.0  # fan power (W); metered OUTSIDE smer (P2-5), fan heat stays in room; ≈2% of full load
-    tau_q: float = 90.0  # first-order lag of sensible heat output (s, coil thermal inertia); typical 30-120
+    fan_power_w: float = (
+        40.0  # fan power (W); metered OUTSIDE smer (P2-5), fan heat stays in room; ≈2% of full load
+    )
+    tau_q: float = (
+        90.0  # first-order lag of sensible heat output (s, coil thermal inertia); typical 30-120
+    )
     tau_m: float = 120.0  # first-order lag of moisture removal (s, retained-condensate inertia); typical 60-180
-    auto_size: bool = False  # true = size P_ref_w from the peak design moisture load (transp + infil + permeance)
+    auto_size: bool = (
+        False  # true = size P_ref_w from the peak design moisture load (transp + infil + permeance)
+    )
     safety_factor: float = 1.2  # sizing margin multiplier on the computed P_ref_w; typical 1.1-1.3
     capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
 
@@ -972,9 +993,7 @@ class VanHentenConfig:
             known = set(VanHenten3Config.__dataclass_fields__)
             unknown = set(self.three_state) - known
             if unknown:
-                raise ValueError(
-                    "growth.three_state: unknown keys %s" % sorted(unknown)
-                )
+                raise ValueError("growth.three_state: unknown keys %s" % sorted(unknown))
             self.three_state = VanHenten3Config(**self.three_state)
         elif not isinstance(self.three_state, VanHenten3Config):
             raise ValueError(
@@ -1642,8 +1661,7 @@ class DesignProject:
                 )
             if not (0.0 < _ppm2 <= 200.0):
                 raise ValueError(
-                    f"transpiration.plants_per_m2 must be in (0, 200] "
-                    f"plants/m2, got {_ppm2}"
+                    f"transpiration.plants_per_m2 must be in (0, 200] " f"plants/m2, got {_ppm2}"
                 )
         _require_nonnegative(
             ["smer", "M_deh_nom", "P_ref_w", "P_rated_max", "comp_mod_band_rh"],
@@ -1686,11 +1704,11 @@ class DesignProject:
             )
         if _smer_map is True and _smer_curve is True:
             raise ValueError(
-                f"deh.smer_map and deh.smer_curve are mutually exclusive "
-                f"(both are DOE rating-point air-side SMER corrections; "
-                f"enabling both would double-count the dry-air penalty). "
-                f"Enable exactly one -- smer_map is the EnergyPlus "
-                f"Dehumidifier:DX (T, RH) biquadratic upgrade."
+                "deh.smer_map and deh.smer_curve are mutually exclusive "
+                "(both are DOE rating-point air-side SMER corrections; "
+                "enabling both would double-count the dry-air penalty). "
+                "Enable exactly one -- smer_map is the EnergyPlus "
+                "Dehumidifier:DX (T, RH) biquadratic upgrade."
             )
         rh_sp = sp_cfg.get("RH")
         if rh_sp is not None and not (0.0 <= rh_sp <= 100.0):
@@ -1700,8 +1718,7 @@ class DesignProject:
         _rh_thr = sp_cfg.get("rh_disease_risk_threshold")
         if _rh_thr is not None and not (0.0 < _rh_thr <= 100.0):
             raise ValueError(
-                f"setpoints.rh_disease_risk_threshold must be in (0, 100] %, "
-                f"got {_rh_thr}"
+                f"setpoints.rh_disease_risk_threshold must be in (0, 100] %, " f"got {_rh_thr}"
             )
 
         # ── PV temperature-coefficient dimension guards ──
@@ -1760,9 +1777,7 @@ class DesignProject:
         # percent-form or wrong-sign value (e.g. -0.30 or +0.003) at load.
         _pv_gamma = pv_cfg.get("gamma_pmp")
         if _pv_gamma is not None and not (-0.01 < _pv_gamma < 0.0):
-            raise ValueError(
-                f"pv.gamma_pmp must be in (-0.01, 0) /K (relative), got {_pv_gamma}"
-            )
+            raise ValueError(f"pv.gamma_pmp must be in (-0.01, 0) /K (relative), got {_pv_gamma}")
 
         # ── HVAC COP / coil guards (fail-fast) ──
         # A negative COP silently flips the cooling cycle into a heater+humidifier
@@ -1872,13 +1887,9 @@ class DesignProject:
                     f"{type(_fval).__name__}: {_fval!r}"
                 )
         if _df_int is not None and float(_df_int) <= 0.0:
-            raise ValueError(
-                f"hvac.defrost_interval_min must be > 0 min, got {_df_int}"
-            )
+            raise ValueError(f"hvac.defrost_interval_min must be > 0 min, got {_df_int}")
         if _df_dur is not None and float(_df_dur) <= 0.0:
-            raise ValueError(
-                f"hvac.defrost_duration_min must be > 0 min, got {_df_dur}"
-            )
+            raise ValueError(f"hvac.defrost_duration_min must be > 0 min, got {_df_dur}")
         _df_int_eff = float(_df_int) if _df_int is not None else HVACConfig.defrost_interval_min
         _df_dur_eff = float(_df_dur) if _df_dur is not None else HVACConfig.defrost_duration_min
         if _df_dur_eff >= _df_int_eff:
@@ -2150,7 +2161,11 @@ class DesignProject:
         _alb = site_cfg.get("albedo")
         if _alb is not None:
             _alb_lo, _alb_hi = HARD_LIMITS["albedo"]
-            if not (isinstance(_alb, (int, float)) and not isinstance(_alb, bool) and _alb_lo <= _alb <= _alb_hi):
+            if not (
+                isinstance(_alb, (int, float))
+                and not isinstance(_alb, bool)
+                and _alb_lo <= _alb <= _alb_hi
+            ):
                 raise ValueError(
                     f"site.albedo = {_alb!r} is outside the hard limit "
                     f"[{_alb_lo}, {_alb_hi}] -- clamp it to the valid band."
@@ -2198,14 +2213,10 @@ class DesignProject:
         _bpk = battery_cfg.get("power_kw")
         if _bpk is not None:
             if isinstance(_bpk, bool) or not isinstance(_bpk, (int, float)) or _bpk <= 0:
-                raise ValueError(
-                    f"battery.power_kw must be a positive number (kW), got {_bpk!r}"
-                )
+                raise ValueError(f"battery.power_kw must be a positive number (kW), got {_bpk!r}")
         _chem = battery_cfg.get("chemistry")
         if _chem is not None and _chem not in ("legacy", "lfp", "nmc"):
-            raise ValueError(
-                f"battery.chemistry must be one of legacy | lfp | nmc, got {_chem!r}"
-            )
+            raise ValueError(f"battery.chemistry must be one of legacy | lfp | nmc, got {_chem!r}")
         # Tariff (G12, Wave 1): validated on the raw dict because _tariff()
         # has a legacy peak/normal/valley branch with its own key handling.
         # export_limit_kw / demand_charge_per_kw are consumed downstream by
@@ -2226,11 +2237,7 @@ class DesignProject:
                     )
             _dc = _tariff_raw.get("demand_charge_per_kw")
             if _dc is not None:
-                if (
-                    isinstance(_dc, bool)
-                    or not isinstance(_dc, (int, float))
-                    or _dc < 0
-                ):
+                if isinstance(_dc, bool) or not isinstance(_dc, (int, float)) or _dc < 0:
                     raise ValueError(
                         f"tariff.demand_charge_per_kw must be a non-negative "
                         f"number (currency/kW-month), got {_dc!r}"
@@ -2330,8 +2337,7 @@ class DesignProject:
                 )
             if _env_cfg.g_im <= 0.0:
                 raise ValueError(
-                    "envelope.g_im must be > 0 W/K when wall_rc_nodes=2 "
-                    f"(got {_env_cfg.g_im})."
+                    "envelope.g_im must be > 0 W/K when wall_rc_nodes=2 " f"(got {_env_cfg.g_im})."
                 )
             if _env_cfg.g_em < 0.0:
                 raise ValueError(
@@ -2356,13 +2362,11 @@ class DesignProject:
                 )
             if _env_cfg.g_sa <= 0.0:
                 raise ValueError(
-                    "envelope.g_sa must be > 0 W/K when wall_rc_nodes=3 "
-                    f"(got {_env_cfg.g_sa})."
+                    "envelope.g_sa must be > 0 W/K when wall_rc_nodes=3 " f"(got {_env_cfg.g_sa})."
                 )
             if _env_cfg.g_sm <= 0.0:
                 raise ValueError(
-                    "envelope.g_sm must be > 0 W/K when wall_rc_nodes=3 "
-                    f"(got {_env_cfg.g_sm})."
+                    "envelope.g_sm must be > 0 W/K when wall_rc_nodes=3 " f"(got {_env_cfg.g_sm})."
                 )
 
         # ── R28 step 6: 1-D finite-difference wall -- fail-fast config
@@ -2409,8 +2413,7 @@ class DesignProject:
                 ):
                     if not (v > 0.0):
                         raise ValueError(
-                            f"envelope.wall_layers[{li}].{name} must be > 0 "
-                            f"(got {v})."
+                            f"envelope.wall_layers[{li}].{name} must be > 0 " f"(got {v})."
                         )
             if not (_env_cfg.wall_area_m2 > 0.0):
                 raise ValueError(
@@ -2489,9 +2492,7 @@ class DesignProject:
                 f"{type(_erv_flow).__name__}: {_erv_flow!r}"
             )
         if float(_erv_flow) < 0.0:
-            raise ValueError(
-                f"envelope.erv_flow_m3h must be >= 0 m3/h, got {_erv_flow}"
-            )
+            raise ValueError(f"envelope.erv_flow_m3h must be >= 0 m3/h, got {_erv_flow}")
         for _eff_name in ("erv_sensible_eff", "erv_latent_eff"):
             _eff_val = getattr(_env_cfg, _eff_name)
             if isinstance(_eff_val, bool) or not isinstance(_eff_val, (int, float)):
@@ -2535,9 +2536,7 @@ class DesignProject:
                 f"got {type(_econ_flow).__name__}: {_econ_flow!r}"
             )
         if float(_econ_flow) < 0.0:
-            raise ValueError(
-                f"envelope.economizer_flow_m3h must be >= 0 m3/h, got {_econ_flow}"
-            )
+            raise ValueError(f"envelope.economizer_flow_m3h must be >= 0 m3/h, got {_econ_flow}")
         _econ_dt = _env_cfg.economizer_delta_t_k
         if isinstance(_econ_dt, bool) or not isinstance(_econ_dt, (int, float)):
             raise ValueError(
@@ -2556,9 +2555,7 @@ class DesignProject:
                 f"{type(_fan_w).__name__}: {_fan_w!r}"
             )
         if float(_fan_w) < 0.0:
-            raise ValueError(
-                f"envelope.erv_fan_power_w must be >= 0 W, got {_fan_w}"
-            )
+            raise ValueError(f"envelope.erv_fan_power_w must be >= 0 W, got {_fan_w}")
         if _econ_enabled and not (float(_econ_flow) > 0.0):
             raise ValueError(
                 f"envelope.economizer_enabled=true requires "
@@ -2610,9 +2607,7 @@ class DesignProject:
         for _f, _unit in (("band_ppm", "ppm"), ("capacity_g_per_h", "g/h"), ("tau_s", "s")):
             _v = co2_cfg.get(_f)
             if _v is not None and not (_v > 0.0):
-                raise ValueError(
-                    f"co2.{_f} must be > 0 {_unit}, got {_v}"
-                )
+                raise ValueError(f"co2.{_f} must be > 0 {_unit}, got {_v}")
         # Setpoint / initial concentration: optional overrides of the
         # setpoints.co2_ppm family -- same 300-2000 ppm band applies (the
         # enrichment setpoint and the growth-model ambient share one
@@ -2623,8 +2618,7 @@ class DesignProject:
                 continue
             if isinstance(_v, bool) or not isinstance(_v, (int, float)):
                 raise ValueError(
-                    f"co2.{_f} must be a number (ppm), got "
-                    f"{type(_v).__name__}: {_v!r}"
+                    f"co2.{_f} must be a number (ppm), got " f"{type(_v).__name__}: {_v!r}"
                 )
             if not (300.0 <= float(_v) <= 2000.0):
                 raise ValueError(
@@ -2650,9 +2644,7 @@ class DesignProject:
         _pv_arrays = []
         for _i, _a in enumerate(_pv_arrays_raw):
             if not isinstance(_a, dict):
-                raise ValueError(
-                    f"pv_arrays[{_i}] must be a mapping, got {type(_a).__name__}"
-                )
+                raise ValueError(f"pv_arrays[{_i}] must be a mapping, got {type(_a).__name__}")
             _unknown_a = set(_a) - {"name", "tilt", "azimuth", "area_m2", "module"}
             if _unknown_a:
                 raise ValueError(
@@ -2665,17 +2657,12 @@ class DesignProject:
             _area = _a.get("area_m2")
             _mod = _a.get("module")
             if not (0.0 <= _tilt <= 90.0):
-                raise ValueError(
-                    f"pv_arrays[{_i}].tilt must be in [0, 90] deg, got {_tilt}"
-                )
+                raise ValueError(f"pv_arrays[{_i}].tilt must be in [0, 90] deg, got {_tilt}")
             if not (0.0 <= _az <= 360.0):
-                raise ValueError(
-                    f"pv_arrays[{_i}].azimuth must be in [0, 360] deg, got {_az}"
-                )
+                raise ValueError(f"pv_arrays[{_i}].azimuth must be in [0, 360] deg, got {_az}")
             if _area is None or not (0.0 < float(_area) <= 1000.0):
                 raise ValueError(
-                    f"pv_arrays[{_i}].area_m2 must be in (0, 1000] m2, "
-                    f"got {_area}"
+                    f"pv_arrays[{_i}].area_m2 must be in (0, 1000] m2, " f"got {_area}"
                 )
             if _mod is not None:
                 from ..pvbes.modules import resolve_module

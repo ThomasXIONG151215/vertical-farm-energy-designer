@@ -12,9 +12,15 @@
  适配器 B（图像型，UC Davis 727 张冠层 RGB）待实现（2026-10-16 决策
  保留为 Phase 3 图像输入适配测试用例）。
 """
-from .contracts import (AssessmentStatus, ClimateSeries, DataSignature,
-                        GrowthObservations, IdentifiabilityReport,
-                        ParameterAssessment, ParameterLabel)
+from .contracts import (
+    AssessmentStatus,
+    ClimateSeries,
+    DataSignature,
+    GrowthObservations,
+    IdentifiabilityReport,
+    ParameterAssessment,
+    ParameterLabel,
+)
 from .adapter_ratio import K_PAR_DEFAULT, InterceptAnchor, anchor_c_pl_d
 from .identifiability import analyze_signature
 from .fit_scalar import fit_c_rad_phot, golden_section, run_growth_series

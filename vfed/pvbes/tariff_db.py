@@ -329,6 +329,5 @@ def lookup_tariff(region: str) -> Optional[TariffRecord]:
 
 def list_regions() -> List[Dict[str, object]]:
     return [
-        {"id": k, "label": v["label"], "currency": v.get("currency")}
-        for k, v in TARIFF_DB.items()
+        {"id": k, "label": v["label"], "currency": v.get("currency")} for k, v in TARIFF_DB.items()
     ]

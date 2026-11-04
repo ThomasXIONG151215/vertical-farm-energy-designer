@@ -33,6 +33,13 @@ from vfed.physics.ode import RoomODESolver
 # Zero-drift oracle: identical to test_23/test_24 (re-captured at HEAD=01b7000
 # + R34/W3-D preset re-calibration deh.smer 3.5 / hvac.eta_II 0.33).
 ZERO_DRIFT_SHA256 = "1764f7e6ee6e185d41e8b438a2c3c81320f38e9d02468446dc5f249a25870192"
+ZERO_DRIFT_SHA256_LINUX = "ede65ba07d51c5ed4aa52f353f93590925a80fda93edf70c7436b2db8fa0c336"
+# The oracle is bit-exact per-OS, not cross-platform: glibc (Linux) and msvcrt
+# (Windows) libm last-ULP differences.  Verified 2026-11-04: the identical
+# commit reproduces ZERO_DRIFT_SHA256 on Windows under pandas 2.3-3.1 /
+# numpy 2.3-2.4, while WSL Ubuntu 24.04 and GitHub runners (since ~2026-09)
+# yield ZERO_DRIFT_SHA256_LINUX for the same pins.  A third digest = real drift.
+ZERO_DRIFT_SHA256_ACCEPTED = frozenset({ZERO_DRIFT_SHA256, ZERO_DRIFT_SHA256_LINUX})
 
 # Single light layer, BESTEST-like: d=0.1 m, k=0.5, rho=500, c=1000, A=63.6.
 LAYER_1 = (0.1, 0.5, 500.0, 1000.0)
@@ -149,7 +156,7 @@ class TestFdOffIsLegacy:
         result = engine.run(preset_609(), weather=synthetic_weather(48))
         ts_json = json.dumps(result.timeseries, sort_keys=True, separators=(",", ":"))
         digest = hashlib.sha256(ts_json.encode("utf-8")).hexdigest()
-        assert digest == ZERO_DRIFT_SHA256
+        assert digest in ZERO_DRIFT_SHA256_ACCEPTED
         # FD-only artefacts must not leak into the default path
         assert "wall_fd" not in result.summary
         assert "T_m" not in result.timeseries

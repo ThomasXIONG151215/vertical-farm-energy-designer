@@ -109,9 +109,7 @@ def usd_base_to_project(usd_value: float, currency: str, exchange_rate: float) -
     return usd_value * exchange_rate
 
 
-def resolve_unit_price(
-    value, usd_base: float, currency: str, exchange_rate: float
-) -> float:
+def resolve_unit_price(value, usd_base: float, currency: str, exchange_rate: float) -> float:
     """Materialize a possibly-still-``None`` legacy unit price.
 
     ``from_dict`` materializes the sentinel unit prices (``pv.C_pv``,

@@ -447,9 +447,7 @@ def _wall_fd_stability_guard(p) -> None:
             "solve is unconditionally stable but needs a positive dt."
         )
     if not (10 <= int(e.wall_fd_nodes) <= 100):
-        raise RuntimeError(
-            f"wall_fd_nodes must be in [10, 100] (got {e.wall_fd_nodes!r})."
-        )
+        raise RuntimeError(f"wall_fd_nodes must be in [10, 100] (got {e.wall_fd_nodes!r}).")
 
 
 def _build_devices(p, P_atm: float = 101.325):
@@ -705,24 +703,20 @@ def _build_devices(p, P_atm: float = 101.325):
     # series g_sa/g_sm/g_em chain.  Default path (RC off): unchanged.
     _ua_env = p.envelope.U_wall_A
     if p.envelope.wall_rc_nodes == 2:
-        _ua_env += (p.envelope.g_em * p.envelope.g_im) / (
-            p.envelope.g_em + p.envelope.g_im
-        )
+        _ua_env += (p.envelope.g_em * p.envelope.g_im) / (p.envelope.g_em + p.envelope.g_im)
     elif p.envelope.wall_rc_nodes == 3:
         if p.envelope.g_em > 0.0:
             _ua_env += 1.0 / (
-                1.0 / p.envelope.g_sa
-                + 1.0 / p.envelope.g_sm
-                + 1.0 / p.envelope.g_em
+                1.0 / p.envelope.g_sa + 1.0 / p.envelope.g_sm + 1.0 / p.envelope.g_em
             )  # g_em = 0 (pure internal mass): no DC path, adds nothing
     elif p.envelope.wall_fd_nodes > 0:
         # R28 step 6: the FD wall's DC aperture is the series
         # exterior-film -> layer stack -> interior-convective-film path
         # (the radiative share feeds the internal mass node, not the air).
         _layers = p.envelope.wall_layers
-        _r_lay = sum(
-            lay[0] / lay[1] for lay in _layers
-        ) / p.envelope.wall_area_m2  # K/W through the full stack
+        _r_lay = (
+            sum(lay[0] / lay[1] for lay in _layers) / p.envelope.wall_area_m2
+        )  # K/W through the full stack
         _ua_env += 1.0 / (
             1.0 / (p.envelope.h_ext_wm2 * p.envelope.wall_area_m2)
             + _r_lay
@@ -741,9 +735,7 @@ def _build_devices(p, P_atm: float = 101.325):
         _ach_sizing = p.envelope.ach
         if p.envelope.erv_enabled:
             _ach_sizing += (
-                (1.0 - p.envelope.erv_sensible_eff)
-                * p.envelope.erv_flow_m3h
-                / p.envelope.V_room
+                (1.0 - p.envelope.erv_sensible_eff) * p.envelope.erv_flow_m3h / p.envelope.V_room
             )
         P_rated = size_hvac(
             U_wall_A=_ua_env,
@@ -948,17 +940,13 @@ class DesignEngine:
         # Zero drift: every float below sits behind the co2_on guard; the
         # disabled default path initialises nothing and never reads these.
         co2_on = p.co2.enabled
-        co2_sp_ppm = (
-            p.co2.setpoint_ppm if p.co2.setpoint_ppm is not None else p.setpoints.co2_ppm
-        )
+        co2_sp_ppm = p.co2.setpoint_ppm if p.co2.setpoint_ppm is not None else p.setpoints.co2_ppm
         if co2_on:
             # Initial concentration at the setpoint (avoids a start-up
             # transient -- same convention as T_z init at T_light), unless
             # the user pins co2_initial_ppm.
             c_z = ppm_to_mixing_ratio(
-                p.co2.co2_initial_ppm
-                if p.co2.co2_initial_ppm is not None
-                else co2_sp_ppm
+                p.co2.co2_initial_ppm if p.co2.co2_initial_ppm is not None else co2_sp_ppm
             )
             c_out = ppm_to_mixing_ratio(p.envelope.outdoor_co2_ppm)
             # Gamma (growth CO2 compensation point, kg/m3) in mixing-ratio
@@ -966,9 +954,7 @@ class DesignEngine:
             co2_gamma = p.growth.c_Gamma / p.envelope.rho_air
             # ach infiltration mass flow (envelope.py:812 same expression);
             # the ERV fresh-air CO2 channel is an M3 deliverable.
-            m_dot_ach_co2 = (
-                p.envelope.ach * p.envelope.V_room * p.envelope.rho_air / 3600.0
-            )
+            m_dot_ach_co2 = p.envelope.ach * p.envelope.V_room * p.envelope.rho_air / 3600.0
             air_mass_co2 = p.envelope.V_room * p.envelope.rho_air
         # R28: 2R2C wall mass node starts consistent with the air node
         # (T_m init == T_z init; same warm-up caveat as the air node).
@@ -1122,9 +1108,7 @@ class DesignEngine:
                     T_heat_setpoint=p.setpoints.T_dark,
                     W_ext=W_ext,
                 )
-                dh = deh.step(
-                    T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH, is_light=is_light_h
-                )
+                dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH, is_light=is_light_h)
                 # P0-4 full-load observation (read-only on device outputs).
                 if hv["mode"] == "cool" and hv["P_elec_W"] >= hvac_cool_full_w:
                     cool_full_s += 1
@@ -1175,9 +1159,7 @@ class DesignEngine:
                 # floor then reports any residual clamp, never silently.
                 if co2_on:
                     phi_c, resp_c = grow.fluxes(T_z, light_wm2, X_d)
-                    inj = co2_dev.step(
-                        mixing_ratio_to_ppm(c_z), dt, co2_sp_ppm, is_light_h
-                    )
+                    inj = co2_dev.step(mixing_ratio_to_ppm(c_z), dt, co2_sp_ppm, is_light_h)
                     S_inj_co2 = inj["S_inj_kgs"]
                     S_resp_co2 = resp_c * DM_TO_CO2 * crop_area
                     S_phot_co2 = phi_c * crop_area
@@ -1243,9 +1225,7 @@ class DesignEngine:
                         # skips the branch entirely: bit-for-bit the pre-
                         # step-3 rc path.
                         q_sol_full = env.eta_solar * env.A_window * GHI[h]
-                        T_rc = env.step_mass(
-                            T_ext[h], T_z, dt, Q_source_w=f_m * q_sol_full
-                        )
+                        T_rc = env.step_mass(T_ext[h], T_z, dt, Q_source_w=f_m * q_sol_full)
                         Q_solar = (1.0 - f_m) * q_sol_full
                     else:
                         T_rc = env.step_mass(T_ext[h], T_z, dt)
@@ -1271,11 +1251,7 @@ class DesignEngine:
                 # active airflow and is metered for the electric total.
                 Q_erv = M_erv = Q_lat_erv = 0.0
                 P_erv_fan_s = 0.0
-                econ_active = (
-                    econ_on
-                    and hv["mode"] == "cool"
-                    and T_ext[h] <= T_z - econ_dt_k
-                )
+                econ_active = econ_on and hv["mode"] == "cool" and T_ext[h] <= T_z - econ_dt_k
                 if econ_active:
                     Q_erv, M_erv, Q_lat_erv = env.economizer_ventilation(
                         T_ext[h], T_z, W_ext, W_z, econ_flow
@@ -1664,20 +1640,14 @@ class DesignEngine:
                     "flow_m3h": p.envelope.erv_flow_m3h,
                     "sensible_eff": p.envelope.erv_sensible_eff,
                     "latent_eff": p.envelope.erv_latent_eff,
-                    "annual_recovered_sensible_kwh": round(
-                        float(erv_rec_sens_j) / 3.6e6, 2
-                    ),
-                    "annual_recovered_latent_kwh": round(
-                        float(erv_rec_lat_j) / 3.6e6, 2
-                    ),
+                    "annual_recovered_sensible_kwh": round(float(erv_rec_sens_j) / 3.6e6, 2),
+                    "annual_recovered_latent_kwh": round(float(erv_rec_lat_j) / 3.6e6, 2),
                 }
             if env.economizer_enabled:
                 _erv_summary["economizer_flow_m3h"] = p.envelope.economizer_flow_m3h
                 _erv_summary["economizer_delta_t_k"] = p.envelope.economizer_delta_t_k
                 _erv_summary["economizer_hours"] = round(econ_active_s / 3600.0, 1)
-                _erv_summary["annual_free_cooling_kwh"] = round(
-                    float(econ_free_cool_j) / 3.6e6, 2
-                )
+                _erv_summary["annual_free_cooling_kwh"] = round(float(econ_free_cool_j) / 3.6e6, 2)
             if p.envelope.erv_fan_power_w > 0.0:
                 _erv_summary["fan_power_w"] = p.envelope.erv_fan_power_w
                 _erv_summary["annual_fan_kwh"] = round(float(erv_fan_j) / 3.6e6, 2)
@@ -1758,9 +1728,7 @@ class DesignEngine:
             summary["co2_min_ppm"] = round(float(np.min(CO2_z_out)), 1)
             summary["co2_max_ppm"] = round(float(np.max(CO2_z_out)), 1)
             summary["co2_energy_kwh"] = round(float(np.sum(E_co2_Wh)) / 1000.0, 3)
-            summary["co2_below_setpoint_hours"] = int(
-                np.count_nonzero(CO2_z_out < co2_sp_ppm)
-            )
+            summary["co2_below_setpoint_hours"] = int(np.count_nonzero(CO2_z_out < co2_sp_ppm))
             summary["co2_setpoint_ppm"] = co2_sp_ppm
             summary["co2_clamp_stats"] = {
                 "floor_clip_events": co2_clamp_stats["floor_clip_events"],
@@ -1851,11 +1819,7 @@ class DesignEngine:
             # light model is active, following the T_m/T_s convention that
             # additive columns must not leak into the default path (the
             # shared zero-drift sha256 oracle stays intact).
-            **(
-                {"PPFD_mean": ppfd_out, "Q_led_W": qled_out}
-                if led.ppfd_layers
-                else {}
-            ),
+            **({"PPFD_mean": ppfd_out, "Q_led_W": qled_out} if led.ppfd_layers else {}),
             "E_misc_Wh": P_misc.tolist(),
             "X_d": X_d_arr.tolist(),
             # CO2 M1: enrichment columns, emitted ONLY when co2.enabled --
@@ -2017,15 +1981,9 @@ class DesignEngine:
                                 )
                         _w = _orient_weather[_key]
                         _arr_weather = {
-                            "direct_radiation": np.asarray(
-                                _w["direct_radiation"], dtype=float
-                            ),
-                            "diffuse_radiation": np.asarray(
-                                _w["diffuse_radiation"], dtype=float
-                            ),
-                            "temperature_2m": np.asarray(
-                                _w["temperature_2m"], dtype=float
-                            ),
+                            "direct_radiation": np.asarray(_w["direct_radiation"], dtype=float),
+                            "diffuse_radiation": np.asarray(_w["diffuse_radiation"], dtype=float),
+                            "temperature_2m": np.asarray(_w["temperature_2m"], dtype=float),
                         }
                         if a.module is None or a.module == p.pv.module:
                             _arr_sys = pv_sys
@@ -2222,9 +2180,7 @@ class DesignEngine:
             )
             annual_load = float(np.sum(load_kw))
             # grid_import == load, grid_export == 0 (no PV, no battery)
-            tcost = tariff.annual_cost(
-                load_kw, np.zeros_like(load_kw), hours, months=months
-            )
+            tcost = tariff.annual_cost(load_kw, np.zeros_like(load_kw), hours, months=months)
             net_grid_cost = tcost["net_grid_cost"]
 
             # ── P1-3a: monthly grid / cost columns (additive) ──────────────

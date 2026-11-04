@@ -26,21 +26,21 @@ import pandas as pd
 from .contracts import GrowthObservations
 from .fit_scalar import golden_section
 
-K_PAR_DEFAULT = 0.9   # m2/m2 leaf; BJAAF PhotosynthesisLightResponse.m
+K_PAR_DEFAULT = 0.9  # m2/m2 leaf; BJAAF PhotosynthesisLightResponse.m
 
 
 @dataclass
 class InterceptAnchor:
     """Anchoring result for c_pl_d (adapter A output)."""
 
-    value: float               # 取用锚定值 = 截获分数 LSQ (b)
-    c_regression: float        # 过原点回归估计 (a)，交叉验证
+    value: float  # 取用锚定值 = 截获分数 LSQ (b)
+    c_regression: float  # 过原点回归估计 (a)，交叉验证
     k_par: float
     n_points: int
-    ratio_mean: float          # mean(LAI/X_d)
+    ratio_mean: float  # mean(LAI/X_d)
     ratio_min: float
     ratio_max: float
-    table: pd.DataFrame        # 逐点诊断（times/xd/lai/ratio/f_true/f_fit）
+    table: pd.DataFrame  # 逐点诊断（times/xd/lai/ratio/f_true/f_fit）
     method_note: str
 
     @property
@@ -52,10 +52,12 @@ class InterceptAnchor:
         return self.ratio_max / self.ratio_min
 
 
-def anchor_c_pl_d(obs: GrowthObservations,
-                  k_par: float = K_PAR_DEFAULT,
-                  bounds: Tuple[float, float] = (5.0, 200.0),
-                  xatol: float = 1e-3) -> InterceptAnchor:
+def anchor_c_pl_d(
+    obs: GrowthObservations,
+    k_par: float = K_PAR_DEFAULT,
+    bounds: Tuple[float, float] = (5.0, 200.0),
+    xatol: float = 1e-3,
+) -> InterceptAnchor:
     """Estimate the light-extinction anchor c_pl_d [m2/kg].
 
     Raises ``ValueError`` when the observations lack the paired LAI column
@@ -65,7 +67,8 @@ def anchor_c_pl_d(obs: GrowthObservations,
     if obs.lai is None:
         raise ValueError(
             "adapter A requires paired LAI/X_d observations; "
-            "got x_d only (dataset signature lacks paired_lai_xd)")
+            "got x_d only (dataset signature lacks paired_lai_xd)"
+        )
     xd = np.asarray(obs.x_d, dtype=float)
     lai = np.asarray(obs.lai, dtype=float)
     if np.any(xd <= 0.0) or np.any(lai <= 0.0):
@@ -85,25 +88,35 @@ def anchor_c_pl_d(obs: GrowthObservations,
 
     c_int, _, _ = golden_section(sse, bounds[0], bounds[1], xatol=xatol)
 
-    table = pd.DataFrame({
-        "xd_kg_m2": xd,
-        "lai": lai,
-        "lai_over_xd": ratio,
-        "f_int_true": f_true,
-        "f_int_fit": 1.0 - np.exp(-c_int * xd),
-    })
+    table = pd.DataFrame(
+        {
+            "xd_kg_m2": xd,
+            "lai": lai,
+            "lai_over_xd": ratio,
+            "f_int_true": f_true,
+            "f_int_fit": 1.0 - np.exp(-c_int * xd),
+        }
+    )
     times: Optional[pd.Series] = None
     try:
         times = pd.Series(pd.to_datetime(list(obs.times)))
         table.insert(0, "time", times.dt.strftime("%Y-%m-%d"))
     except (TypeError, ValueError):
-        pass   # engine stays date-agnostic when times are not datetimes
+        pass  # engine stays date-agnostic when times are not datetimes
 
-    note = ("c_pl_d = k_PAR*(LAI/X_d); LSQ on interception fraction "
-            "(take value %.2f), through-origin regression cross-check "
-            "%.2f (k_PAR=%.2f, n=%d)" % (c_int, c_reg, k_par, len(xd)))
+    note = (
+        "c_pl_d = k_PAR*(LAI/X_d); LSQ on interception fraction "
+        "(take value %.2f), through-origin regression cross-check "
+        "%.2f (k_PAR=%.2f, n=%d)" % (c_int, c_reg, k_par, len(xd))
+    )
     return InterceptAnchor(
-        value=float(c_int), c_regression=float(c_reg), k_par=float(k_par),
+        value=float(c_int),
+        c_regression=float(c_reg),
+        k_par=float(k_par),
         n_points=int(len(xd)),
-        ratio_mean=float(np.mean(ratio)), ratio_min=float(np.min(ratio)),
-        ratio_max=float(np.max(ratio)), table=table, method_note=note)
+        ratio_mean=float(np.mean(ratio)),
+        ratio_min=float(np.min(ratio)),
+        ratio_max=float(np.max(ratio)),
+        table=table,
+        method_note=note,
+    )

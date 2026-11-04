@@ -162,9 +162,7 @@ class VanHenten3State:
         self.params = dict(self._defaults)
         unknown = set(overrides) - set(self._defaults)
         if unknown:
-            raise ValueError(
-                "Unknown VanHenten3State parameters: %s" % sorted(unknown)
-            )
+            raise ValueError("Unknown VanHenten3State parameters: %s" % sorted(unknown))
         self.params.update(overrides)
         self.co2_ppm = float(co2_ppm)
         self.rho_c = float(rho_c)
@@ -209,31 +207,34 @@ class VanHenten3State:
         lai_s = max(lai, 1e-9)
         xd_s = max(X_d, 1e-9)
 
-        # Shortwave-equivalent for the I-based terms (vfed passes canopy PAR)
-        I = light / p["sigma_PAR"]
+        # Shortwave-equivalent I_sw for the I-based terms (vfed passes canopy
+        # PAR); model notation I = shortwave radiation (Van Henten 1994).
+        I_sw = light / p["sigma_PAR"]
 
         # shoot/root fraction & maintenance respiration
         sigmar = p["c_sigmar_1"] * math.log(xd_s / self.rho_c) + p["c_sigmar_2"]
         R_d = (
-            p["c_Rd_25_s"] * (1.0 - sigmar) + p["c_Rd_25_r"] * sigmar
-        ) * X_d * p["Q_10_Rd"] ** ((T_z - 25.0) / 10.0)
+            (p["c_Rd_25_s"] * (1.0 - sigmar) + p["c_Rd_25_r"] * sigmar)
+            * X_d
+            * p["Q_10_Rd"] ** ((T_z - 25.0) / 10.0)
+        )
 
         # --- leaf resistance (CO₂ pathway) ------------------------------
-        I_a = (1.0 - p["c_r_I"]) * I * (1.0 - math.exp(-p["k_I"] * lai_s))
+        I_a = (1.0 - p["c_r_I"]) * I_sw * (1.0 - math.exp(-p["k_I"] * lai_s))
         q = 0.5 * I_a / lai_s
         f_I_s = (q + 4.3) / (q + 0.54)
-        sig_I = _sig(p["s_f_Tc_s"] * (I - 3.0))
+        sig_I = _sig(p["s_f_Tc_s"] * (I_sw - 3.0))
         f_Tc_s = sig_I * (1.0 + 2.3e-2 * (T_z - 24.5) ** 2) + (1.0 - sig_I) * (
             1.0 + 0.5e-2 * (T_z - 33.6) ** 2
         )
         sig_Xc = _sig(p["s_f_Xc_s_2"] * (C - 1100.0))
-        f_Xc_s = sig_I * (
-            sig_Xc * 1.5 + (1.0 - sig_Xc) * (1.0 + 6.1e-7 * (C - 200.0) ** 2)
-        ) + (1.0 - sig_I)
+        f_Xc_s = sig_I * (sig_Xc * 1.5 + (1.0 - sig_Xc) * (1.0 + 6.1e-7 * (C - 200.0) ** 2)) + (
+            1.0 - sig_I
+        )
         sig_T = _sig(p["s_e_s_air"] * T_z)
-        e_star = sig_T * 10.0 ** (2.7857 + 7.5 * T_z / (237.3 + T_z)) + (
-            1.0 - sig_T
-        ) * 10.0 ** (2.7857 + 9.5 * T_z / (265.5 + T_z))
+        e_star = sig_T * 10.0 ** (2.7857 + 7.5 * T_z / (237.3 + T_z)) + (1.0 - sig_T) * 10.0 ** (
+            2.7857 + 9.5 * T_z / (265.5 + T_z)
+        )
         e_c_a = e_star * (1.0 - H)
         f_Xh_s = 4.0 / (1.0 + 255.0 * math.exp(-0.54e-2 * e_c_a)) ** 0.25
         r_s = 1.6 * p["r_H2O_min"] * f_I_s * f_Tc_s * f_Xc_s * f_Xh_s
@@ -243,7 +244,7 @@ class VanHenten3State:
             * p["l_f"] ** 0.5
             / (p["l_f"] * p["z_r_b"] + 207.0 * p["v_a"] ** 2) ** 0.25
         )
-        r_c = p["c_rc_1"] * T_z ** 2 + p["c_rc_2"] * T_z + p["c_rc_3"]
+        r_c = p["c_rc_1"] * T_z**2 + p["c_rc_2"] * T_z + p["c_rc_3"]
         r_CO2 = r_s + r_b + r_c + p["r_t"]
 
         # --- biochemical light response ---------------------------------
@@ -268,12 +269,7 @@ class VanHenten3State:
         root15 = math.sqrt(0.15)
         for w, frac in ((1.0, 0.5 - root15), (1.6, 0.5), (1.0, 0.5 + root15)):
             l_i = frac * lai
-            PAR_a = (
-                p["k_PAR"]
-                * (1.0 - p["c_r_PAR"])
-                * light
-                * math.exp(-p["k_PAR"] * l_i)
-            )
+            PAR_a = p["k_PAR"] * (1.0 - p["c_r_PAR"]) * light * math.exp(-p["k_PAR"] * l_i)
             if A_L_sat > 0.0:
                 A_L_sum += w * A_L_sat * (1.0 - math.exp(-eps * PAR_a / A_L_sat))
         A_C = A_L_sum / 3.6 * lai  # kg CO₂/(m²·s)
@@ -282,14 +278,11 @@ class VanHenten3State:
         C_buf = self.C_buf if self.C_buf is not None else 0.0
         C_buf_max = p["sigmar_buf"] * X_d
         sig_r = _sig(p["s_RGR_max"] * (T_z - p["T_c_RGR"]))
-        RGR_max = (
-            sig_r * p["RGR_max_20"] * p["Q10_gr"] ** ((20.0 - T_z) / 10.0)
-            + (1.0 - sig_r) * p["RGR_max_20"] * p["Q10_gr"] ** ((T_z - 20.0) / 10.0)
-        )
+        RGR_max = sig_r * p["RGR_max_20"] * p["Q10_gr"] ** ((20.0 - T_z) / 10.0) + (
+            1.0 - sig_r
+        ) * p["RGR_max_20"] * p["Q10_gr"] ** ((T_z - 20.0) / 10.0)
         w_buf = _sig(p["s_h_buf_1"] * (C_buf / C_buf_max - 0.99))
-        u = (R_d + RGR_max * X_d / p["c_beta"]) / (
-            p["c_alpha"] * (A_C + p["z_h_buf"])
-        )
+        u = (R_d + RGR_max * X_d / p["c_beta"]) / (p["c_alpha"] * (A_C + p["z_h_buf"]))
         h_buf = w_buf * (-1.0 / p["s_h_buf_2"]) * math.log(
             math.exp(-p["s_h_buf_2"] * u) + math.exp(-p["s_h_buf_2"])
         ) + (1.0 - w_buf)
@@ -303,9 +296,7 @@ class VanHenten3State:
         phi = A_C * h_buf  # kg CO₂/(m²·s) — M1 contract
         resp = R_d  # kg DM/(m²·s) — M1 contract (DM_TO_CO2 upstream)
         d_xd = p["c_beta"] * (p["c_alpha"] * phi - resp)
-        d_buf = (
-            p["c_alpha"] * phi - resp - RGR_max * X_d / p["c_beta"]
-        )
+        d_buf = p["c_alpha"] * phi - resp - RGR_max * X_d / p["c_beta"]
         if C_buf < 0.0:
             d_buf = abs(d_buf)  # MATLAB guard, preserved verbatim
         d_lai = d_xd * (1.0 - sigmar) * SLA
@@ -314,9 +305,7 @@ class VanHenten3State:
     # ------------------------------------------------------------------
     # public interface (1-state compatible)
     # ------------------------------------------------------------------
-    def fluxes(
-        self, T_z: float, light: float, X_d: float
-    ) -> tuple[float, float]:
+    def fluxes(self, T_z: float, light: float, X_d: float) -> tuple[float, float]:
         """Read-only fluxes at current state — M1 CO₂ contract.
 
         Returns (phi, resp):
@@ -327,9 +316,7 @@ class VanHenten3State:
         _, _, _, phi, resp = self._derivs(T_z, light, X_d)
         return phi, resp
 
-    def step(
-        self, T_z: float, light: float, X_d: float, dt: float = 60.0
-    ) -> tuple[float, float]:
+    def step(self, T_z: float, light: float, X_d: float, dt: float = 60.0) -> tuple[float, float]:
         """Advance C_buf/LAI in lockstep and return (rate, X_d_new).
 
         Returns

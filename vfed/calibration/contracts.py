@@ -32,10 +32,10 @@ class ParameterLabel(Enum):
     每个校准参数必须标注来源四类之一——「开放校准」主张的前提。
     """
 
-    ANCHORED = "直接锚定"        # 独立比值型/图像型观测量直接定参
-    FITTED = "拟合"              # 在锚定/已知条件下由目标曲线拟合
-    TRANSFERRED = "迁移"         # 从另一数据集的校准结果迁移（条件值）
-    ASSUMED = "假设"             # 文献值/默认值，未经本数据约束
+    ANCHORED = "直接锚定"  # 独立比值型/图像型观测量直接定参
+    FITTED = "拟合"  # 在锚定/已知条件下由目标曲线拟合
+    TRANSFERRED = "迁移"  # 从另一数据集的校准结果迁移（条件值）
+    ASSUMED = "假设"  # 文献值/默认值，未经本数据约束
 
     @property
     def zh(self) -> str:
@@ -65,18 +65,16 @@ class GrowthObservations:
     （UC Davis 型）走适配器 B 或迁移路径。
     """
 
-    times: Sequence          # sample timestamps (any datetime-like)
-    x_d: Sequence            # [kg/m2] dry weight on ground-area basis
-    lai: Optional[Sequence] = None   # [-] paired leaf area index
+    times: Sequence  # sample timestamps (any datetime-like)
+    x_d: Sequence  # [kg/m2] dry weight on ground-area basis
+    lai: Optional[Sequence] = None  # [-] paired leaf area index
 
     def __post_init__(self) -> None:
         n = len(self.x_d)
         if len(self.times) != n:
-            raise ValueError("times/x_d length mismatch: %d vs %d"
-                             % (len(self.times), n))
+            raise ValueError("times/x_d length mismatch: %d vs %d" % (len(self.times), n))
         if self.lai is not None and len(self.lai) != n:
-            raise ValueError("lai/x_d length mismatch: %d vs %d"
-                             % (len(self.lai), n))
+            raise ValueError("lai/x_d length mismatch: %d vs %d" % (len(self.lai), n))
 
 
 @dataclass
@@ -87,17 +85,18 @@ class ClimateSeries:
     """
 
     times: Sequence
-    temp_c: Sequence         # [deg C]
-    co2_ppm: Sequence        # [ppm]
-    par_w: Sequence          # [W/m2] PAR at canopy
-    dt_s: float              # [s] sampling interval (Euler step)
+    temp_c: Sequence  # [deg C]
+    co2_ppm: Sequence  # [ppm]
+    par_w: Sequence  # [W/m2] PAR at canopy
+    dt_s: float  # [s] sampling interval (Euler step)
 
     def __post_init__(self) -> None:
         n = len(self.times)
         for name in ("temp_c", "co2_ppm", "par_w"):
             if len(getattr(self, name)) != n:
-                raise ValueError("%s/times length mismatch: %d vs %d"
-                                 % (name, len(getattr(self, name)), n))
+                raise ValueError(
+                    "%s/times length mismatch: %d vs %d" % (name, len(getattr(self, name)), n)
+                )
         if self.dt_s <= 0.0:
             raise ValueError("dt_s must be positive")
 
@@ -127,8 +126,9 @@ class DataSignature:
     @classmethod
     def bjaaf_like(cls) -> "DataSignature":
         """BJAAF Exp_c 型签名（Stage 1 校准路径，全锚定+拟合）。"""
-        return cls(paired_lai_xd=True, par_series=True, area_biomass=True,
-                   plant_biomass=True, density=True)
+        return cls(
+            paired_lai_xd=True, par_series=True, area_biomass=True, plant_biomass=True, density=True
+        )
 
     @classmethod
     def uc_davis_like(cls) -> "DataSignature":
@@ -146,10 +146,10 @@ class DataSignature:
 class ParameterAssessment:
     """Identifiability conclusion for a single parameter."""
 
-    name: str                        # e.g. "c_pl_d"
+    name: str  # e.g. "c_pl_d"
     status: AssessmentStatus
-    label: ParameterLabel            # 该参数在本数据集上的来源标签
-    note: str                        # 依据/边界说明（一句话）
+    label: ParameterLabel  # 该参数在本数据集上的来源标签
+    note: str  # 依据/边界说明（一句话）
 
 
 @dataclass
@@ -168,6 +168,5 @@ class IdentifiabilityReport:
     def lines(self) -> List[str]:
         out = []
         for a in self.assessments:
-            out.append("- %s: %s（来源标签: %s）—— %s"
-                       % (a.name, a.status.zh, a.label.zh, a.note))
+            out.append("- %s: %s（来源标签: %s）—— %s" % (a.name, a.status.zh, a.label.zh, a.note))
         return out

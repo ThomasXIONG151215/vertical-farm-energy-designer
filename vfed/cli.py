@@ -240,22 +240,22 @@ _YAML_SECTION_COMMENTS = {
         "#                         # mass->outdoor conductances (W/K)\n"
         "#   wall_rc_nodes: 3   # 2R3C: adds surface node (C_surface Wh/K,\n"
         "#                      # g_sa surface->air, g_sm surface->mass, W/K)\n"
-         "#   solar_mass_fraction  # [0,1] window solar fed into the RC network\n"
-         "#                        # (1.0 = LBNL rule: solar lands on surfaces)\n"
-         "#   ERV/HRV mechanical fresh air (default off):\n"
-          "#   erv_enabled: true + erv_flow_m3h (m3/h) + erv_sensible_eff\n"
-          "#                 # [0,0.95] (default 0.7) + erv_latent_eff\n"
-          "#                 # (0 = sensible-only HRV; >0 = enthalpy ERV);\n"
-          "#                 # un-recovered share of the fresh air enters the\n"
-          "#                 # heat/moisture balance on top of ach leakage\n"
-          "#   economizer (P3-9, default off): economizer_enabled: true +\n"
-          "#                 # economizer_flow_m3h (m3/h) + economizer_delta_t_k\n"
-          "#                 # (default 1.0) = dry-bulb free cooling: bypasses\n"
-          "#                 # the core when cooling is demanded and T_out <=\n"
-          "#                 # T_zone - delta; erv_fan_power_w (W at reference\n"
-          "#                 # flow, default 0 = not modelled) meters + heats\n"
-          "# ------------------------------------------------------------------\n"
-     ),
+        "#   solar_mass_fraction  # [0,1] window solar fed into the RC network\n"
+        "#                        # (1.0 = LBNL rule: solar lands on surfaces)\n"
+        "#   ERV/HRV mechanical fresh air (default off):\n"
+        "#   erv_enabled: true + erv_flow_m3h (m3/h) + erv_sensible_eff\n"
+        "#                 # [0,0.95] (default 0.7) + erv_latent_eff\n"
+        "#                 # (0 = sensible-only HRV; >0 = enthalpy ERV);\n"
+        "#                 # un-recovered share of the fresh air enters the\n"
+        "#                 # heat/moisture balance on top of ach leakage\n"
+        "#   economizer (P3-9, default off): economizer_enabled: true +\n"
+        "#                 # economizer_flow_m3h (m3/h) + economizer_delta_t_k\n"
+        "#                 # (default 1.0) = dry-bulb free cooling: bypasses\n"
+        "#                 # the core when cooling is demanded and T_out <=\n"
+        "#                 # T_zone - delta; erv_fan_power_w (W at reference\n"
+        "#                 # flow, default 0 = not modelled) meters + heats\n"
+        "# ------------------------------------------------------------------\n"
+    ),
     "hvac": (
         "# ------------------------------------------------------------------\n"
         "# hvac: air conditioning (cooling + dehumidification by coil)\n"
@@ -289,14 +289,14 @@ _YAML_SECTION_COMMENTS = {
         "# deh: dehumidifier (removes moisture from transpiration)\n"
         "#   P_ref_w     - compressor rated electrical power (W); fan metered\n"
         "#                 separately\n"
-         "#   smer        - specific moisture extraction (kg water / kWh COMPRESSOR\n"
-         "#                 input, fan excluded); realistic 1.5-3.0\n"
-         "#   smer_curve  - true: DOE rating-point W_z SMER correction (R33,\n"
-         "#                 power law; default false)\n"
-         "#   smer_map    - true: EnergyPlus Dehumidifier:DX (T,RH) biquadratic\n"
-         "#                 capacity+SMER maps (R34; default false; exclusive\n"
-         "#                 with smer_curve)\n"
-         "#   control     - vfd (variable speed, part-load SMER penalty)\n"
+        "#   smer        - specific moisture extraction (kg water / kWh COMPRESSOR\n"
+        "#                 input, fan excluded); realistic 1.5-3.0\n"
+        "#   smer_curve  - true: DOE rating-point W_z SMER correction (R33,\n"
+        "#                 power law; default false)\n"
+        "#   smer_map    - true: EnergyPlus Dehumidifier:DX (T,RH) biquadratic\n"
+        "#                 capacity+SMER maps (R34; default false; exclusive\n"
+        "#                 with smer_curve)\n"
+        "#   control     - vfd (variable speed, part-load SMER penalty)\n"
         "#                 | on_off (full-speed cycling, rated SMER)\n"
         "#   auto_size   - true = size capacity from design moisture load\n"
         "#   M_deh_nom   - alternative spec: nominal removal (L/day)\n"
@@ -632,7 +632,10 @@ def _cmd_design_new(args):
         if rec is None:
             print(f"Tariff region '{args.tariff}' not found. Available:", file=sys.stderr)
             for r in list_regions():
-                print(f"  {r['id']:15s}  {str(r.get('currency', '?')):4s}  {r['label']}", file=sys.stderr)
+                print(
+                    f"  {r['id']:15s}  {str(r.get('currency', '?')):4s}  {r['label']}",
+                    file=sys.stderr,
+                )
             sys.exit(1)
         preset.tariff = TariffConfig(
             hourly_prices=rec["hourly_prices"], export_price=rec["export_price"]
@@ -1139,9 +1142,7 @@ def _cmd_evaluate(args):
                 f"(provider {project.site.weather_provider}, "
                 f"ghi_scale {project.site.ghi_scale:g})"
             )
-            _print_ghi_caveat(
-                project.site.weather_provider, project.site.ghi_scale, "  "
-            )
+            _print_ghi_caveat(project.site.weather_provider, project.site.ghi_scale, "  ")
     if args.export:
         export_dir = Path(args.export)
         export_dir.mkdir(parents=True, exist_ok=True)
@@ -1253,9 +1254,7 @@ def _cmd_sweep(args):
         # conclusions a full sweep's best row does.
         if float(_sp.pv_area_m2) > 0:
             _sp_prov = provider_override or _sp.site.weather_provider
-            _sp_scale = (
-                ghi_scale_override if ghi_scale_override is not None else _sp.site.ghi_scale
-            )
+            _sp_scale = ghi_scale_override if ghi_scale_override is not None else _sp.site.ghi_scale
             _print_ghi_caveat(_sp_prov, _sp_scale, "  ")
         if args.out:
             import pandas as pd
@@ -1427,9 +1426,7 @@ def _cmd_sweep(args):
     if float(best.get("pv_area", 0.0)) > 0:
         _gp = DesignProject.load(args.project)
         _gp_prov = provider_override or _gp.site.weather_provider
-        _gp_scale = (
-            ghi_scale_override if ghi_scale_override is not None else _gp.site.ghi_scale
-        )
+        _gp_scale = ghi_scale_override if ghi_scale_override is not None else _gp.site.ghi_scale
         _print_ghi_caveat(_gp_prov, _gp_scale, "    ")
 
     if args.out:

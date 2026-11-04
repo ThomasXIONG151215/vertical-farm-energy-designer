@@ -113,9 +113,7 @@ def distribute_nodes_fd(layers: List[Tuple[float, float, float, float]], n_total
     both earn resolution).  Largest-remainder rounding keeps the total exact
     and every layer keeps >= 1 node.
     """
-    weights = [
-        ((d / k) * (rho * c * d)) ** 0.5 for (d, k, rho, c) in layers
-    ]
+    weights = [((d / k) * (rho * c * d)) ** 0.5 for (d, k, rho, c) in layers]
     total = sum(weights)
     raw = [n_total * w / total for w in weights]
     counts = [max(1, int(r)) for r in raw]
@@ -445,9 +443,7 @@ class Envelope:
                 f"erv_enabled must be a boolean, got "
                 f"{type(erv_enabled).__name__}: {erv_enabled!r}"
             )
-        if isinstance(erv_flow_m3h, bool) or not isinstance(
-            erv_flow_m3h, (int, float)
-        ):
+        if isinstance(erv_flow_m3h, bool) or not isinstance(erv_flow_m3h, (int, float)):
             raise ValueError(
                 f"erv_flow_m3h must be a number (m3/h), got "
                 f"{type(erv_flow_m3h).__name__}: {erv_flow_m3h!r}"
@@ -497,9 +493,7 @@ class Envelope:
                 f"{type(economizer_flow_m3h).__name__}: {economizer_flow_m3h!r}"
             )
         if float(economizer_flow_m3h) < 0.0:
-            raise ValueError(
-                f"economizer_flow_m3h must be >= 0, got {economizer_flow_m3h}"
-            )
+            raise ValueError(f"economizer_flow_m3h must be >= 0, got {economizer_flow_m3h}")
         if isinstance(economizer_delta_t_k, bool) or not isinstance(
             economizer_delta_t_k, (int, float)
         ):
@@ -513,17 +507,13 @@ class Envelope:
                 f"before outdoor air beats return air), got "
                 f"{economizer_delta_t_k}"
             )
-        if isinstance(erv_fan_power_w, bool) or not isinstance(
-            erv_fan_power_w, (int, float)
-        ):
+        if isinstance(erv_fan_power_w, bool) or not isinstance(erv_fan_power_w, (int, float)):
             raise ValueError(
                 f"erv_fan_power_w must be a number (W), got "
                 f"{type(erv_fan_power_w).__name__}: {erv_fan_power_w!r}"
             )
         if float(erv_fan_power_w) < 0.0:
-            raise ValueError(
-                f"erv_fan_power_w must be >= 0 W, got {erv_fan_power_w}"
-            )
+            raise ValueError(f"erv_fan_power_w must be >= 0 W, got {erv_fan_power_w}")
         if economizer_enabled and not (float(economizer_flow_m3h) > 0.0):
             raise ValueError(
                 f"economizer_enabled=true requires economizer_flow_m3h > 0 "
@@ -548,8 +538,7 @@ class Envelope:
         # engine reads it every substep, so store unconditionally).
         if not (0.0 <= solar_mass_fraction <= 1.0):
             raise ValueError(
-                "solar_mass_fraction must be within [0, 1], got "
-                f"{solar_mass_fraction!r}"
+                "solar_mass_fraction must be within [0, 1], got " f"{solar_mass_fraction!r}"
             )
         if solar_mass_fraction > 0.0 and wall_rc_nodes == 0 and wall_fd_nodes == 0:
             raise ValueError(
@@ -586,8 +575,7 @@ class Envelope:
             for li, lay in enumerate(layers):
                 if not isinstance(lay, (list, tuple)) or len(lay) != 4:
                     raise ValueError(
-                        f"wall_layers[{li}] must be (thickness_m, k, rho, c), "
-                        f"got {lay!r}"
+                        f"wall_layers[{li}] must be (thickness_m, k, rho, c), " f"got {lay!r}"
                     )
                 d_i, k_i, rho_i, c_i = (float(v) for v in lay)
                 for name, v in (
@@ -597,26 +585,18 @@ class Envelope:
                     ("c_J_kgK", c_i),
                 ):
                     if not (v > 0.0):
-                        raise ValueError(
-                            f"wall_layers[{li}].{name} must be > 0, got {v}"
-                        )
+                        raise ValueError(f"wall_layers[{li}].{name} must be > 0, got {v}")
                 clean_layers.append((d_i, k_i, rho_i, c_i))
             if not (wall_area_m2 > 0.0):
                 raise ValueError(
                     f"wall_fd_nodes > 0 requires wall_area_m2 > 0 (got {wall_area_m2})"
                 )
             if not (h_ext_wm2 > 0.0):
-                raise ValueError(
-                    f"wall_fd_nodes > 0 requires h_ext_wm2 > 0 (got {h_ext_wm2})"
-                )
+                raise ValueError(f"wall_fd_nodes > 0 requires h_ext_wm2 > 0 (got {h_ext_wm2})")
             if not (h_int_c_wm2 > 0.0):
-                raise ValueError(
-                    f"wall_fd_nodes > 0 requires h_int_c_wm2 > 0 (got {h_int_c_wm2})"
-                )
+                raise ValueError(f"wall_fd_nodes > 0 requires h_int_c_wm2 > 0 (got {h_int_c_wm2})")
             if not (0.0 <= wall_solar_abs <= 1.0):
-                raise ValueError(
-                    f"wall_solar_abs must be within [0, 1], got {wall_solar_abs}"
-                )
+                raise ValueError(f"wall_solar_abs must be within [0, 1], got {wall_solar_abs}")
             if C_mass <= 0.0:
                 raise ValueError(
                     f"wall_fd_nodes > 0 requires C_mass > 0 Wh/K (internal "
@@ -792,11 +772,7 @@ class Envelope:
             # 2R3C: coupled explicit Euler on (T_s, T_m) from substep-start
             # states.  C_surface/C_mass are Wh/K -> J/K via x3600; g in W/K,
             # dt in s -> fluxes in W, energies in J.
-            q_s = (
-                rc.g_sa * (T_z - rc.T_s)
-                + rc.g_sm * (rc.T_m - rc.T_s)
-                + Q_source_w
-            )
+            q_s = rc.g_sa * (T_z - rc.T_s) + rc.g_sm * (rc.T_m - rc.T_s) + Q_source_w
             q_m = rc.g_sm * (rc.T_s - rc.T_m) + rc.g_em * (T_ext - rc.T_m)
             t_s_new = rc.T_s + q_s * dt / (rc.C_surface * 3600.0)
             t_m_new = rc.T_m + q_m * dt / (rc.C_mass * 3600.0)
@@ -929,12 +905,7 @@ class Envelope:
         M_lat_net = (1.0 - self.erv_latent_eff) * m_full_lat
         Q_lat_net = M_lat_net * latent_heat_vaporization(T_z) * 1000.0
         Q_rec_sens = self.erv_sensible_eff * q_full_sens
-        Q_rec_lat = (
-            self.erv_latent_eff
-            * m_full_lat
-            * latent_heat_vaporization(T_z)
-            * 1000.0
-        )
+        Q_rec_lat = self.erv_latent_eff * m_full_lat * latent_heat_vaporization(T_z) * 1000.0
         return Q_sens_net, M_lat_net, Q_lat_net, Q_rec_sens, Q_rec_lat
 
     # -- Dry-bulb economizer free cooling (P3-9) ---------------------------

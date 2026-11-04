@@ -66,9 +66,7 @@ def validate_eta_rel_nodes(nodes) -> EtaRelNodes:
     try:
         pairs = [(float(g), float(e)) for g, e in nodes]
     except (TypeError, ValueError):
-        raise ValueError(
-            "eta_rel_nodes entries must be (G, eta_rel) pairs of numbers"
-        ) from None
+        raise ValueError("eta_rel_nodes entries must be (G, eta_rel) pairs of numbers") from None
     if not pairs:
         raise ValueError("eta_rel_nodes must not be empty")
     for g, e in pairs:
@@ -117,21 +115,15 @@ class ModuleSpec:
         if self.eta_pv <= 0.0:
             raise ValueError(f"ModuleSpec.eta_pv must be > 0, got {self.eta_pv!r}")
         if self.area_to_power <= 0.0:
-            raise ValueError(
-                f"ModuleSpec.area_to_power must be > 0, got {self.area_to_power!r}"
-            )
+            raise ValueError(f"ModuleSpec.area_to_power must be > 0, got {self.area_to_power!r}")
         for fname in _SDM_POINT_FIELDS + ("N_s", "degradation", "bifaciality"):
             v = getattr(self, fname)
             if v is not None and not math.isfinite(v):
                 raise ValueError(f"ModuleSpec.{fname} must be finite or None, got {v!r}")
         if self.eta_rel_nodes is not None:
-            object.__setattr__(
-                self, "eta_rel_nodes", validate_eta_rel_nodes(self.eta_rel_nodes)
-            )
+            object.__setattr__(self, "eta_rel_nodes", validate_eta_rel_nodes(self.eta_rel_nodes))
         if self.sdm_complete and self.degradation is None:
-            raise ValueError(
-                "a ModuleSpec with a complete STC point set must set degradation"
-            )
+            raise ValueError("a ModuleSpec with a complete STC point set must set degradation")
 
     @property
     def sdm_complete(self) -> bool:

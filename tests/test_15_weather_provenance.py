@@ -68,6 +68,18 @@ def _block_network(monkeypatch):
     monkeypatch.setattr(weather_bridge.requests, "get", boom)
 
 
+_CACHE_HIT_NAME = "weather_31.230_121.470_2025_t20.000_a180.000_z8.000.csv"
+
+
+def _seed_latlon_cache(cache_dir):
+    """Seed the tilt-aware lat/lon cache key for (31.23, 121.47, 2025,
+    t20/a180/z8) with a synthetic aligned 8760-row CSV.  The repo-root
+    weather_cache/ copy is local-only (untracked since 1b5db18 removed the
+    last cached CSV from git), so the cache-hit path is proven against a
+    seeded tmp copy instead of an untracked repo file."""
+    _write_weather_csv(Path(cache_dir) / _CACHE_HIT_NAME, _year_stamps(2025))
+
+
 # ── attrs: pre-downloaded city file path ──────────────────────────────────
 
 
@@ -103,19 +115,20 @@ def test_city_path_attrs_real_shanghai_file():
 # ── attrs: lat/lon cache hit path ─────────────────────────────────────────
 
 
-def test_cache_path_attrs_real_repo_cache(monkeypatch):
-    """The repo-root tilt-aware cache file reports the cache hit + its cache
-    key (file name).  Network is blocked so a stale/missing cache would fail
-    fast instead of silently fetching."""
+def test_cache_path_attrs_cache_hit(tmp_path, monkeypatch):
+    """A tilt-aware cache hit reports the cache provenance + its cache key
+    (file name).  Network is blocked so a missing cache would fail fast
+    instead of silently fetching.  The cache is seeded into tmp_path: the
+    repo-root copy is untracked (1b5db18) and must not be a CI
+    prerequisite."""
     _block_network(monkeypatch)
+    _seed_latlon_cache(tmp_path)
     df = weather_bridge.fetch_weather(
         lat=31.23, lon=121.47, year=2025, tz_hours=8.0,
-        tilt=20.0, azimuth=180.0, cache_dir=_REPO_CACHE,
+        tilt=20.0, azimuth=180.0, cache_dir=tmp_path,
     )
     assert df.attrs["weather_source"] == "cache"
-    assert df.attrs["weather_source_detail"] == (
-        "weather_31.230_121.470_2025_t20.000_a180.000_z8.000.csv"
-    )
+    assert df.attrs["weather_source_detail"] == _CACHE_HIT_NAME
 
 
 # ── attrs: live fetch path (mocked transport, never online) ───────────────
@@ -284,10 +297,13 @@ def test_cli_evaluate_prints_city_source(cli_project_yaml, capsys):
 
 
 def test_cli_evaluate_prints_cache_source(cli_project_yaml, tmp_path, capsys):
-    """city=None + lat/lon matching the repo cache -> the cache hit variant
-    (the two P1-3b provenances are now visibly distinct on the console)."""
+    """city=None + lat/lon matching a seeded cache -> the cache hit variant
+    (the two P1-3b provenances are now visibly distinct on the console).
+    The cache is seeded into tmp_path (repo copy untracked, 1b5db18), so CI
+    never depends on a local weather_cache/ file."""
     from vfed.design.project import DesignProject
 
+    _seed_latlon_cache(tmp_path)
     p = DesignProject.load(cli_project_yaml)
     p.site.city = None
     p.site.lat = 31.23
@@ -295,13 +311,12 @@ def test_cli_evaluate_prints_cache_source(cli_project_yaml, tmp_path, capsys):
     p.site.year = 2025
     yaml_path = tmp_path / "farm_cache.yaml"
     p.save(yaml_path)
-    rc = main(["evaluate", str(yaml_path), "--cache", str(_REPO_CACHE)])
+    rc = main(["evaluate", str(yaml_path), "--cache", str(tmp_path)])
     out = capsys.readouterr().out
     assert rc == 0
     assert (
-        "  Weather source  : cache hit "
-        "(weather_31.230_121.470_2025_t20.000_a180.000_z8.000.csv)"
-    ) in out
+        f"  Weather source  : cache hit ({_CACHE_HIT_NAME})" in out
+    )
 
 
 def test_sweep_console_never_prints_source(cli_project_yaml, monkeypatch, capsys):

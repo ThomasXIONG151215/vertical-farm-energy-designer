@@ -36,18 +36,19 @@ class CalibrationResult:
     anchor: Optional[InterceptAnchor] = None
     identifiability: Optional[IdentifiabilityReport] = None
 
-    def add_param(self, name: str, value: float,
-                  label: ParameterLabel, note: str = "") -> None:
+    def add_param(self, name: str, value: float, label: ParameterLabel, note: str = "") -> None:
         self.params[name] = float(value)
         self.labels[name] = label
         if note:
             self.notes.append("%s: %s" % (name, note))
 
     def to_markdown(self) -> str:
-        t = ["# 生长模型校准结果 — %s" % self.dataset,
-             "",
-             "生成时间: %s" % self.generated_at.strftime("%Y-%m-%d %H:%M"),
-             ""]
+        t = [
+            "# 生长模型校准结果 — %s" % self.dataset,
+            "",
+            "生成时间: %s" % self.generated_at.strftime("%Y-%m-%d %H:%M"),
+            "",
+        ]
         t.append("| 参数 | 值 | 来源标签 |")
         t.append("|---|---|---|")
         for name, value in self.params.items():
@@ -56,19 +57,23 @@ class CalibrationResult:
             t.append("| %s | %.6g | %s |" % (name, value, zh))
         t.append("")
         if self.metrics is not None:
-            win = ("%.1f" % self.metrics.window_days
-                   if self.metrics.window_days is not None else "—")
-            t.append("拟合指标: RMSE = %.4f kg/m2, n = %d, 窗口 = %s 天"
-                     % (self.metrics.rmse_kg_m2, self.metrics.n_samples, win))
+            win = "%.1f" % self.metrics.window_days if self.metrics.window_days is not None else "—"
+            t.append(
+                "拟合指标: RMSE = %.4f kg/m2, n = %d, 窗口 = %s 天"
+                % (self.metrics.rmse_kg_m2, self.metrics.n_samples, win)
+            )
             t.append("")
         if self.anchor is not None:
             a = self.anchor
-            t.append("截获锚定（适配器 A）: c_pl_d = %.2f（LSQ 取用值）；"
-                     "过原点回归 %.2f；k_PAR = %.2f" %
-                     (a.value, a.c_regression, a.k_par))
-            t.append("LAI/X_d 比值: 均值 %.1f, 范围 %.1f–%.1f, "
-                     "漂移 %.2f×（非单调漂移 = 单状态结构残差信号）" %
-                     (a.ratio_mean, a.ratio_min, a.ratio_max, a.ratio_drift))
+            t.append(
+                "截获锚定（适配器 A）: c_pl_d = %.2f（LSQ 取用值）；"
+                "过原点回归 %.2f；k_PAR = %.2f" % (a.value, a.c_regression, a.k_par)
+            )
+            t.append(
+                "LAI/X_d 比值: 均值 %.1f, 范围 %.1f–%.1f, "
+                "漂移 %.2f×（非单调漂移 = 单状态结构残差信号）"
+                % (a.ratio_mean, a.ratio_min, a.ratio_max, a.ratio_drift)
+            )
             t.append("")
         if self.identifiability is not None:
             t.append("可辨识性结论:")

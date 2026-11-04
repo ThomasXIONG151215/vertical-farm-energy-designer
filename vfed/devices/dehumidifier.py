@@ -103,6 +103,7 @@ def _as_tau_pair(value, name: str) -> Tuple[float, float]:
         raise ValueError(f"{name} time constant must be > 0, got {value!r}")
     return tau, tau
 
+
 # P1-1: DEH control modes.  "vfd" = variable-speed (DOE part-load SMER curve),
 # "on_off" = bang-bang cycling at full speed (rated SMER).  An unknown value
 # is rejected (fail-fast) instead of silently falling back to VFD.
@@ -148,10 +149,22 @@ _SMER_AIR_B0, _SMER_AIR_EXP, _SMER_AIR_FLOOR = 0.25, 0.7, 0.25
 # Unlike the R33 power law (ceiling 1.0), the E+ curves may legitimately
 # EXCEED 1.0 in wetter-than-rated air (EF ~1.12 at 21 C / 68 % RH): the rating
 # point is an anchor, not a cap, per the E+ model.
-_WR_MAP_COEF = (-2.724878664080, 0.100711983591, -0.000990538285,
-                0.050053043874, -0.000203629282, -0.000341750531)
-_EF_MAP_COEF = (-2.388319068955, 0.093047739452, -0.001369700327,
-                0.066533716758, -0.000343198063, -0.000562490295)
+_WR_MAP_COEF = (
+    -2.724878664080,
+    0.100711983591,
+    -0.000990538285,
+    0.050053043874,
+    -0.000203629282,
+    -0.000341750531,
+)
+_EF_MAP_COEF = (
+    -2.388319068955,
+    0.093047739452,
+    -0.001369700327,
+    0.066533716758,
+    -0.000343198063,
+    -0.000562490295,
+)
 _MAP_T_MIN, _MAP_T_MAX = 21.0, 32.22  # E+ curve x domain (C)
 _MAP_RH_MIN, _MAP_RH_MAX = 40.0, 80.0  # E+ curve y domain (% RH)
 _MAP_FLOOR = 0.05  # normalized-output floor (safety only; in-domain > 0.34)
@@ -298,9 +311,7 @@ class DEHDevice:
         of (setpoint, S_DH) float pairs.
         """
         if not isinstance(sm, dict):
-            raise ValueError(
-                f"setpoint_modulation must be a dict, got {type(sm).__name__}"
-            )
+            raise ValueError(f"setpoint_modulation must be a dict, got {type(sm).__name__}")
         unknown = set(sm) - {"lookup", "lookup_dark", "rh_err_coef"}
         if unknown:
             raise ValueError(
@@ -312,16 +323,13 @@ class DEHDevice:
 
         def _norm(table, name):
             if not isinstance(table, dict) or len(table) < 2:
-                raise ValueError(
-                    f"setpoint_modulation {name} needs >= 2 points, got {table!r}"
-                )
+                raise ValueError(f"setpoint_modulation {name} needs >= 2 points, got {table!r}")
             pts = []
             for k, v in table.items():
                 kf, vf = float(k), float(v)
                 if not 0.0 <= vf <= 1.0:
                     raise ValueError(
-                        f"setpoint_modulation {name} values must be in [0, 1], "
-                        f"got {k}: {v}"
+                        f"setpoint_modulation {name} values must be in [0, 1], " f"got {k}: {v}"
                     )
                 pts.append((kf, vf))
             pts.sort()
@@ -330,9 +338,7 @@ class DEHDevice:
         return {
             "lookup": _norm(sm["lookup"], "lookup"),
             "lookup_dark": (
-                _norm(sm["lookup_dark"], "lookup_dark")
-                if "lookup_dark" in sm
-                else None
+                _norm(sm["lookup_dark"], "lookup_dark") if "lookup_dark" in sm else None
             ),
             "rh_err_coef": float(sm.get("rh_err_coef", 0.0)),
         }
@@ -383,7 +389,7 @@ class DEHDevice:
         input, so the effective SMER falls with W_z/W_nom."""
         ratio = max(W_z, 0.0) / _W_NOM_DOE
         return min(
-            max(_SMER_AIR_B0 + 0.75 * ratio ** _SMER_AIR_EXP, _SMER_AIR_FLOOR),
+            max(_SMER_AIR_B0 + 0.75 * ratio**_SMER_AIR_EXP, _SMER_AIR_FLOOR),
             1.0,
         )
 

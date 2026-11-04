@@ -70,7 +70,7 @@ def _soft_cap_cool(lift_c: float) -> float:
 # model is built on.  Air-to-air heat-pump heating only.
 _DEFROST_MODES = ("off", "timed", "on_demand")
 _DEFROST_COIL_A = 0.82  # T_coil [C] = 0.82*T_db_o - 8.589 (outdoor coil
-_DEFROST_COIL_B = 8.589  #  frost-point correlation, DOE-2.1E)
+_DEFROST_COIL_B = 8.589  # frost-point correlation, DOE-2.1E)
 _DEFROST_DW_MIN = 1e-6  # kg/kg floor of the frost-potential difference
 _DEFROST_OD_K = 0.01446  # on-demand t_frac = 1/(1 + K/d_omega)
 _DEFROST_OD_CAP = 0.875  # on-demand capacity  multiplier = CAP*(1 - t_frac)
@@ -231,9 +231,7 @@ class HVACDevice:
         defrost_duration_min: float = 5.0,  # timed defrost duration (min)
     ):
         if defrost not in _DEFROST_MODES:
-            raise ValueError(
-                f"defrost must be one of {'|'.join(_DEFROST_MODES)}, got {defrost!r}"
-            )
+            raise ValueError(f"defrost must be one of {'|'.join(_DEFROST_MODES)}, got {defrost!r}")
         if defrost != "off":
             if heat_mode != "heat_pump":
                 raise ValueError(
@@ -334,7 +332,11 @@ class HVACDevice:
         )
 
     def _defrost_heat_step(
-        self, T_ext: float, W_ext: Optional[float], dt: float, Q_machine: float,
+        self,
+        T_ext: float,
+        W_ext: Optional[float],
+        dt: float,
+        Q_machine: float,
         P_machine: float,
     ):
         """R34/H3: one heat-pump heating substep under frost conditions.
