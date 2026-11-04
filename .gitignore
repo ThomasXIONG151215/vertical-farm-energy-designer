@@ -31,6 +31,8 @@ gadget/
 
 # Local scratchpads (no longer tracked; history kept)
 .scratchpad/
+# Agent working files (local-only per docs/architecture.md)
+.workbuddy/
 
 # IDE / tooling
 .pytest_cache/
