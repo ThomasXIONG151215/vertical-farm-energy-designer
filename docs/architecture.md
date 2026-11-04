@@ -45,7 +45,7 @@ Frozen archive:     research/ (imported by nothing)
 
 Rules (enforced by `tests/test_architecture.py`):
 
-1. Layer-1 packages (`physics`, `devices`, `plants`, `weather`, `pvbes`) **never import** `design`, `agent`, `cli`, or `calibration`.
+1. Layer-1 packages (`physics`, `devices`, `plants`, `weather`, `pvbes`) **never import** `design`, `agent`, `cli`, or `calibration`. Intra-layer edges are allowed: `devices` → `physics` (COP / SMER psychrometrics) and `plants` → `physics` (saturation-deficit transpiration).
 2. `design/engine.py` is the hub — it imports `physics` (psychrometrics, envelope, ode, shr), `devices` (hvac, dehumidifier, led, co2), `plants` (transpiration, van_henten, van_henten_3state), and `weather` (`fetch_weather`).
 3. `design/sweep.py` additionally imports `pvbes` (pv, battery, grid, energy_system) and `design.engine`.
 4. `agent/evaluator.py` imports `design` only. `cli.py` additionally imports `weather.city_db` and `pvbes.tariff_db`.
