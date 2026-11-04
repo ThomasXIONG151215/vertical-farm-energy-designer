@@ -283,9 +283,13 @@ def render_idf(case):
     # Moisture-audit variables: infiltration latent (all cases) +
     # IdealLoads latent (HVAC cases only -- FF has no IdealLoads and a
     # wildcard request would warn).  Names per out_case600p/eplusout.rdd.
+    # Zone Air Relative Humidity is a COMMON output since the parity grid
+    # figure needs the hourly RH channel for the dry cases too (output-only
+    # request: no physics change, annual totals bit-identical).
     outputs = (
         "  Output:VariableDictionary, IDF;\n"
         "  Output:Variable, *, Zone Mean Air Temperature, Hourly;\n"
+        "  Output:Variable, *, Zone Air Relative Humidity, Hourly;\n"
         "  Output:Variable, *, Infiltration Latent Heat Loss Energy, "
         "Hourly;\n"
         "  Output:Variable, *, Infiltration Latent Heat Gain Energy, "
@@ -296,8 +300,7 @@ def render_idf(case):
            "Cooling Energy, Hourly;\n"
            "  Output:Variable, *, Zone Ideal Loads Supply Air Latent "
            "Cooling Energy, Hourly;\n" if hvac else "")
-        + ("  Output:Variable, *, Zone Air Relative Humidity, Hourly;\n"
-           "  Output:Variable, *, Zone Dehumidifier Electricity Energy, "
+        + ("  Output:Variable, *, Zone Dehumidifier Electricity Energy, "
            "Hourly;\n"
            "  Output:Variable, *, Zone Dehumidifier Removed Water Mass, "
            "Hourly;\n"

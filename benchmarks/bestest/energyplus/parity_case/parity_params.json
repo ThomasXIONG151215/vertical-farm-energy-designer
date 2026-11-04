@@ -1,0 +1,154 @@
+{
+  "cases": {
+    "600": {
+      "overrides": {
+        "ua": 48.0,
+        "eta": 0.76
+      },
+      "wall_s": 26.923264600001858,
+      "verdicts_140": {
+        "annual_heating_gj": {
+          "value": 14.869249027770348,
+          "band": [
+            14.374,
+            16.214
+          ],
+          "verdict": "PASS"
+        },
+        "annual_cooling_gj": {
+          "value": 22.098996486976365,
+          "band": [
+            19.555,
+            22.185
+          ],
+          "verdict": "PASS"
+        },
+        "peak_heating_kw": {
+          "value": 3.1985258796004725,
+          "band": [
+            3.02,
+            3.359
+          ],
+          "verdict": "PASS"
+        },
+        "peak_cooling_kw": {
+          "value": 5.491523231153125,
+          "band": [
+            5.422,
+            6.481
+          ],
+          "verdict": "PASS"
+        }
+      }
+    },
+    "900": {
+      "overrides": {
+        "ua": 43.0,
+        "abs_sol": 0.25,
+        "cmass": 3000.0
+      },
+      "wall_s": 26.65576239999791,
+      "verdicts_140": {
+        "annual_heating_gj": {
+          "value": 5.314566234615152,
+          "band": [
+            4.964,
+            6.53
+          ],
+          "verdict": "PASS"
+        },
+        "annual_cooling_gj": {
+          "value": 9.694411084799999,
+          "band": [
+            8.161,
+            9.77
+          ],
+          "verdict": "PASS"
+        },
+        "peak_heating_kw": {
+          "value": 2.257882801792006,
+          "band": [
+            2.443,
+            2.778
+          ],
+          "verdict": "OUT"
+        },
+        "peak_cooling_kw": {
+          "value": 2.4840013377155823,
+          "band": [
+            2.556,
+            3.376
+          ],
+          "verdict": "OUT"
+        }
+      }
+    },
+    "600FF": {
+      "overrides": {
+        "ua": 48.0,
+        "eta": 0.76
+      },
+      "wall_s": 27.59467589999258,
+      "verdicts_140": {
+        "min_t": {
+          "value": -11.162045257484747,
+          "band": [
+            -13.8,
+            -9.9
+          ],
+          "verdict": "PASS"
+        },
+        "max_t": {
+          "value": 63.412396792223134,
+          "band": [
+            62.4,
+            68.4
+          ],
+          "verdict": "PASS"
+        },
+        "mean_t": {
+          "value": 25.764474119285666,
+          "band": [
+            24.3,
+            26.1
+          ],
+          "verdict": "PASS"
+        }
+      }
+    },
+    "900FF": {
+      "overrides": {
+        "ua": 43.0,
+        "cz": 200.0
+      },
+      "wall_s": 27.62790780000796,
+      "verdicts_140": {
+        "min_t": {
+          "value": 1.7658924648177927,
+          "band": [
+            0.6,
+            2.2
+          ],
+          "verdict": "PASS"
+        },
+        "max_t": {
+          "value": 45.8219026752132,
+          "band": [
+            43.3,
+            46.0
+          ],
+          "verdict": "PASS"
+        },
+        "mean_t": {
+          "value": 25.894465997130713,
+          "band": [
+            24.5,
+            25.7
+          ],
+          "verdict": "OUT"
+        }
+      }
+    }
+  },
+  "git_sha": "1b5db18"
+}

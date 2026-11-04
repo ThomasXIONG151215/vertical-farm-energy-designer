@@ -290,6 +290,7 @@
 
   Output:VariableDictionary, IDF;
   Output:Variable, *, Zone Mean Air Temperature, Hourly;
+  Output:Variable, *, Zone Air Relative Humidity, Hourly;
   Output:Variable, *, Infiltration Latent Heat Loss Energy, Hourly;
   Output:Variable, *, Infiltration Latent Heat Gain Energy, Hourly;
   Output:Variable, *, Zone Ideal Loads Supply Air Sensible Heating Energy, Hourly;

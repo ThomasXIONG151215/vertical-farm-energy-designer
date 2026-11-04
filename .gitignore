@@ -65,6 +65,10 @@ data/Lettuce_growth.zip
 # EnergyPlus benchmark outputs (regeneratable: run_energyplus.py / build_idf.py)
 benchmarks/bestest/energyplus/out*/
 
+# Parity-study intermediates (regeneratable: parity_case.py scan/finalize; JSON records + figs stay tracked)
+benchmarks/bestest/energyplus/parity_case/series_*.npz
+benchmarks/bestest/energyplus/parity_case/*.log
+
 # Browser frontend (moved to local backups/ on 2026-10-23, removed from public repo)
 vfed-web/
 # Local backups (never tracked)
