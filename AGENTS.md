@@ -52,7 +52,7 @@ pytest --cov=vfed
 | `vfed/physics/` | Psychrometrics, envelope, ODE solver, SHR | `engine.py` consumes all |
 | `vfed/devices/` | HVAC (Carnot COP default), dehumidifier (auto-size), LED, compressor, lag | Built by `engine.py` |
 | `vfed/pvbes/` | PV, battery, grid, energy system | Consumed by `sweep.py` |
-| `vfed/design/` | Project config, engine, presets, sweep | `engine.py` is the hub |
+| `vfed/design/` | Project config, engine (+`engine_loop`/`engine_report`), presets, sweep | `engine.py` is the hub |
 | `vfed/weather/` | Open-Meteo fetch, geocoding | `engine.py` calls `fetch_weather` |
 | `vfed/plants/` | Transpiration (5 methods: van_henten model-coupled; daily/per_plant/daily_per_period/per_plant_per_period direct-set), Van Henten growth | `engine.py` steps each hour |
 | `vfed/agent/` | Evaluator (agent-cli contract) | Entry point for CLI |
@@ -69,7 +69,7 @@ pytest --cov=vfed
 - **All parameters live in YAML** — `vfed/design/project.py` is the config contract. New fields must be added there and in `presets.py`.
 - **No EnergyPlus dependency** — pure Python ODE solver (`vfed/physics/ode.py`).
 - **Python >= 3.8** — core deps: `numpy`, `pandas`, `pyyaml`, `requests`.
-- **`vfed/design/engine.py` is the hub** — it imports from every other module. Changes to physics/devices/plants/weather may affect it.
+- **`vfed/design/engine.py` is the hub** — it imports from every other module. `run()` orchestrates `engine_loop.py` (hourly timestep loop) and `engine_report.py` (report + PVBES quick-eval); they lazy-import back from `engine.py`, so no import cycle. Changes to physics/devices/plants/weather may affect all three.
 - **Strategy/scenario modes are NOT implemented** — the 4 strategy modes (`default` / `conservative` / `progressive` / `aggressive`) exist only as a *planned* feature documented in the `vfed/design/project.py` docstring. Do not add or reference a `strategy:` config field.
 - **HVAC COP mode is 4** — `carnot` (default: η_II × T_evap/(T_cond-T_evap)), `constant`, `linear`, `table`. Carnot depends on both indoor and outdoor temperature.
 - **Transpiration method is 5** — 1 model-coupled (`van_henten`) + 4 direct-set (`daily`, `per_plant`, `daily_per_period`, `per_plant_per_period`).

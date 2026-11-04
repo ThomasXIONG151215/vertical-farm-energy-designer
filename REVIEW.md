@@ -1,7 +1,7 @@
 # REVIEW.md — VFED 仿真架构审查标准
 
 > 依据 2026-08-15 会话创建。聚焦传热传质与能源调度两大主题。
-> 参考约束：AGENTS.md（无 EnergyPlus、参数全在 YAML、engine.py 为枢纽）。
+> 参考约束：AGENTS.md（无 EnergyPlus、参数全在 YAML、engine.py 为枢纽——run() 编排 engine_loop.py 逐时循环与 engine_report.py 报告层）。
 > 仓库结构与模块分层规则见 docs/architecture.md。
 
 ## Always flag

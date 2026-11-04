@@ -146,5 +146,5 @@ research/                       # 论文归档（冻结）
 | C2 | ✅ 完成（161 例冒烟通过，同步复查通过） | `a49f823` |
 | C3 | ✅ 完成（docs-only：architecture.md 新建 + README×2 加节 + AGENTS 两层表/File Conventions + REVIEW 指针 + design/README 扩充） | `901525a` |
 | C4 | ✅ 完成（tests/test_architecture.py 分层守护，7 例通过） | `b3a56c3` |
-| C2b | ✅ 完成（33 个纯重命名 + 引用与路径修正；并行会话未提交改动保持未暂存） | 本 commit |
-| C5 | 待执行（下一个）— fellow session `67a2444` 已提交，engine.py 可动 | — |
+| C2b | ✅ 完成（33 个纯重命名 + 引用与路径修正；并行会话未提交改动保持未暂存） | `fe0a8d5` |
+| C5 | ✅ 完成（engine.py 2268→1186 行；engine_loop.py 525 + engine_report.py 841；条件绑定名字以 None 占位传参；零漂移子集 186 例 + 全量 1069 例通过；接口 DesignEngine/run_project/full_load_warnings/SimulationResult 冻结不变） | 本 commit |
