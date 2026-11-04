@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 
-**Contents:** [Background](#background) · [Quick Start](#quick-start) · [What's New](#whats-new-2026-10) · [How VFED Works](#how-vfed-works) · [Comparison](#how-vfed-compares-to-other-simulators) · [Weather Data](#weather-data--network-cache-offline) · [DIY / Prosumer Guide](#diy--prosumer-guide) · [CLI Reference](#cli-reference) · [Configuration](#configuration) · [Interpreting Results](#interpreting-results) · [Troubleshooting](#troubleshooting) · [Citation](#citation)
+**Contents:** [Background](#background) · [Repository Structure](#repository-structure) · [Quick Start](#quick-start) · [What's New](#whats-new-2026-10) · [How VFED Works](#how-vfed-works) · [Comparison](#how-vfed-compares-to-other-simulators) · [Weather Data](#weather-data--network-cache-offline) · [DIY / Prosumer Guide](#diy--prosumer-guide) · [CLI Reference](#cli-reference) · [Configuration](#configuration) · [Interpreting Results](#interpreting-results) · [Troubleshooting](#troubleshooting) · [Citation](#citation)
 
 ## Background
 
@@ -23,6 +23,29 @@ Integrating rooftop photovoltaics (PV) with battery energy storage (BES) can dra
 > [DOI: 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
 
 The `research/xiong-pvbes-photoperiod-2026/` directory contains the archived code and experimental data from the published paper. The current active codebase (`vfed/`) replaces the EnergyPlus-based load generator with a pure-Python first-principles ODE solver and adds a parametric design sweep — see [research/xiong-pvbes-photoperiod-2026/](research/xiong-pvbes-photoperiod-2026/) for details.
+
+## Repository Structure
+
+```text
+vertical-farm-energy-designer/
+├── vfed/        # the simulator package
+│   ├── physics/ # psychrometrics, envelope, ODE solver, SHR
+│   ├── devices/ # HVAC, dehumidifier, LED, CO2
+│   ├── plants/  # transpiration (5 methods), Van Henten growth (1-/3-state)
+│   ├── weather/ # Open-Meteo fetch + cache, city table
+│   ├── pvbes/   # PV, battery, grid tariff, energy system
+│   ├── design/  # config contract, engine (hub), presets, sweep
+│   ├── agent/   # evaluator (agent-cli contract)
+│   └── calibration/ # identifiability + fitting tools
+├── tests/       # pytest suite (866+ tests, CI: Python 3.10–3.12)
+├── scripts/     # utilities + validation benchmarks (planned split: tools/ + benchmarks/)
+├── examples/    # example project YAMLs (sweep / LCOE demos)
+├── data/        # city weather CSVs + public datasets
+├── docs/        # architecture.md · reports/ · references/ · planning/
+└── research/    # archived paper code (frozen)
+```
+
+The full map — tracked vs local-only directories, module layering rules, dependency graph, and data flow — lives in [docs/architecture.md](docs/architecture.md).
 
 ## Quick Start
 

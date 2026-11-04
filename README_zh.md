@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 
-**目录：**[背景](#背景) · [快速开始](#快速开始) · [最新进展](#最新进展2026-10) · [工作原理](#vfed-工作原理) · [与其他仿真引擎的对比](#与其他仿真引擎的对比) · [天气数据](#天气数据--联网缓存与离线) · [DIY / 个人用户指南](#diy--个人用户指南) · [CLI 命令参考](#cli-命令参考) · [配置](#配置) · [输出结果解读](#输出结果解读) · [故障排除](#故障排除) · [引用](#引用)
+**目录：**[背景](#背景) · [仓库结构](#仓库结构) · [快速开始](#快速开始) · [最新进展](#最新进展2026-10) · [工作原理](#vfed-工作原理) · [与其他仿真引擎的对比](#与其他仿真引擎的对比) · [天气数据](#天气数据--联网缓存与离线) · [DIY / 个人用户指南](#diy--个人用户指南) · [CLI 命令参考](#cli-命令参考) · [配置](#配置) · [输出结果解读](#输出结果解读) · [故障排除](#故障排除) · [引用](#引用)
 
 ## 背景
 
@@ -23,6 +23,29 @@
 > [DOI: 10.1016/j.enbuild.2026.117462](https://doi.org/10.1016/j.enbuild.2026.117462)
 
 `research/xiong-pvbes-photoperiod-2026/` 目录包含该论文的归档代码和实验数据。当前活跃代码库 (`vfed/`) 用纯 Python 第一性原理 ODE 求解器替代了基于 EnergyPlus 的负荷生成器，并增加了参数化设计扫描 — 详见 [research/xiong-pvbes-photoperiod-2026/](research/xiong-pvbes-photoperiod-2026/)。
+
+## 仓库结构
+
+```text
+vertical-farm-energy-designer/
+├── vfed/        # 仿真器主包
+│   ├── physics/ # 湿空气热力学、围护结构、ODE 求解器、SHR
+│   ├── devices/ # HVAC、除湿机、LED、CO2
+│   ├── plants/  # 蒸腾（5 种方法）、Van Henten 生长（1-/3-状态）
+│   ├── weather/ # Open-Meteo 拉取 + 缓存、城市表
+│   ├── pvbes/   # 光伏、电池、电网电价、能源系统
+│   ├── design/  # 配置契约、引擎（枢纽）、预设、扫描
+│   ├── agent/   # 评估器（agent-cli 契约）
+│   └── calibration/ # 可辨识性 + 拟合工具
+├── tests/       # pytest 测试套件（866+ 用例，CI：Python 3.10–3.12）
+├── scripts/     # 工具 + 验证基准（计划拆分：tools/ + benchmarks/）
+├── examples/    # 示例项目 YAML（sweep / LCOE 演示）
+├── data/        # 城市天气 CSV + 公开数据集
+├── docs/        # architecture.md · reports/ · references/ · planning/
+└── research/    # 论文归档代码（冻结）
+```
+
+完整地图 — 跟踪目录 vs 仅本地目录、模块分层规则、依赖图与数据流 — 见 [docs/architecture.md](docs/architecture.md)。
 
 ## 快速开始
 

@@ -2,6 +2,7 @@
 
 > 依据 2026-08-15 会话创建。聚焦传热传质与能源调度两大主题。
 > 参考约束：AGENTS.md（无 EnergyPlus、参数全在 YAML、engine.py 为枢纽）。
+> 仓库结构与模块分层规则见 docs/architecture.md。
 
 ## Always flag
 

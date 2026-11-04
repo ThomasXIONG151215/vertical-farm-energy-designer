@@ -4,6 +4,20 @@
 
 Vertical Farm Energy Designer (VFED) is a parametric, config-driven design simulator for plant factories. It couples a first-principles ODE building model (no EnergyPlus) to a PV-Battery-Grid energy system for LCOE-optimal solar+storage sizing.
 
+## Repository Layout (two layers)
+
+Full map with layering rules and dependency graph: `docs/architecture.md`.
+
+| Layer | Path | Role |
+|-------|------|------|
+| Tracked | `vfed/` | Active simulator code (see flat map below) |
+| Tracked | `tests/` | Pytest suite — CI-locked, do not move |
+| Tracked | `scripts/` | Utilities + benchmarks (split into `tools/` + `benchmarks/` planned) |
+| Tracked | `examples/` `data/` `docs/` | Example YAMLs · weather/datasets · architecture/reports/references/planning |
+| Tracked | `research/` | Archived paper code — frozen |
+| Local-only | `gadget/` `user-gym/` `backups/` | Git-ignored machine-local folders — never move (sync layer), never commit |
+| Local-only | `weather_cache/` `.scratchpad/` `.workbuddy/` | Runtime cache / agent working files — regeneratable or transient |
+
 ## Commands
 
 ```bash
@@ -91,4 +105,8 @@ pytest --cov=vfed
 - Presets: `vfed/design/presets.py`
 - CLI entry: `vfed/cli.py`
 - Tests: `tests/`
+- Example projects: `examples/`
+- Architecture map: `docs/architecture.md`
+- Session plans: `docs/planning/`
+- Validation data (PV/BES datasheets, measured curves): `docs/references/`
 - Cached weather: `weather_cache/` (git-ignored, regeneratable)

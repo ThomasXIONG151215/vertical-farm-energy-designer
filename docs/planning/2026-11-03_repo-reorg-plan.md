@@ -137,3 +137,14 @@ research/                       # 论文归档（冻结）
 5. **C4（原 P4）**：tests/test_architecture.py 分层守护
 6. **C5（原 P5）**：engine.py 接口保持式拆分（先通读 2201 行出拆分方案，接口零变更，全量 pytest 验证）；
    拆分落地后同步核对 `REVIEW.md` 第 4 行与 `AGENTS.md` 中"engine.py 为枢纽"的措辞是否需要更新
+
+## 10. 执行状态
+
+| 阶段 | 状态 | Commit |
+|------|------|--------|
+| C1 | ✅ 完成 | `a8be8b5` |
+| C2 | ✅ 完成（161 例冒烟通过，同步复查通过） | `a49f823` |
+| C3 | ✅ 完成（docs-only：architecture.md 新建 + README×2 加节 + AGENTS 两层表/File Conventions + REVIEW 指针 + design/README 扩充） | 本文件所在 commit |
+| C4 | 待执行（下一个） | — |
+| C2b | ⏸ 挂起 — 并行会话正在修改 scripts/benchmarks 与 vfed/ 多文件，等其提交后执行 | — |
+| C5 | ⏸ 挂起 — engine.py 被并行会话修改中，等其提交后执行 | — |
