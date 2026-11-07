@@ -10,9 +10,21 @@ T1 (nested-time v2): weather enters via the ``weather_series`` ZOH
 lookup, sampled at each substep start ``t = h*3600 + s*dt``; the legacy
 ``T_ext[h]``/``RH_ext[h]``/``GHI[h]`` array indexing was replaced
 value-identically (hourly rows resolve to row ``h`` — zero drift).
+
+ZoneState packaging (multi-zone step 1): the per-zone mutable state
+(room scalars, device objects, hourly buffers, monthly/typical
+accumulators, accounting dicts, meters) moved from ~72 keyword-only
+arguments into the :class:`ZoneState` container.  ``run_hourly_loop``
+unpacks it back to the original local names at the top of the function,
+so the loop body is character-identical and the sha256 oracle gates any
+drift.  Building-shared context (project, ``weather_series``, time
+grid, ``dt``/``sub``, ``P_atm``, outdoor CO2, policy/``zone_id``) stays
+in the signature for the outer layer — a future N-zone loop builds one
+ZoneState per room.
 """
 
 from dataclasses import dataclass
+from typing import Any, List, Optional
 import numpy as np
 from ..devices.co2 import DM_TO_CO2, mixing_ratio_to_ppm
 from ..physics.psychrometrics import ah_to_temp_rh, latent_heat_vaporization, temp_rh_to_ah
@@ -43,93 +55,203 @@ class LoopState:
     total_water_kg: float
 
 
+@dataclass
+class ZoneState:
+    """Per-zone mutable state carried through the hourly loop.
+
+    Pure-move packaging (multi-zone step 1): every field below was a
+    keyword-only argument of :func:`run_hourly_loop` and is rebound to
+    its original local name at the top of the function, so the loop
+    body is character-identical and the sha256 oracle gates any drift.
+    A future N-zone loop builds one ``ZoneState`` per room; the
+    building-shared context (project, weather series, time grid,
+    ``dt``/``sub``, ``P_atm``, outdoor CO2, policy seat) stays outside.
+    All fields are required — no defaults — so a missing field fails at
+    construction, not mid-loop.
+    """
+
+    # -- A. live room scalars (mutated every substep) -----------------
+    RH_z: float
+    T_z: float
+    W_z: float
+    X_d: float
+    c_z: Optional[float]  # None when CO2 enrichment is disabled
+    cycle_h: float
+    next_harvest_h: float
+
+    # -- B. per-zone crop/CO2/HVAC constants --------------------------
+    X_d_init: float
+    crop_area: float
+    harvest_hours: float
+    co2_on: bool
+    co2_sp_ppm: float
+    co2_gamma: Optional[float]  # None when CO2 disabled
+    air_mass_co2: Optional[float]  # None when CO2 disabled
+    m_dot_ach_co2: Optional[float]  # None when CO2 disabled
+    hvac_cool_full_w: float
+    hvac_heat_full_w: float
+    econ_on: bool
+    econ_dt_k: float
+    econ_flow: float
+    erv_on: bool
+    erv_fan_w: float
+    erv_fan_ref_flow: float
+
+    # -- C. device objects (per-zone instances) -----------------------
+    env: Any
+    hvac: Any
+    deh: Any
+    led: Any
+    transp: Any
+    grow: Any
+    ode: Any
+    co2_dev: Optional[Any]  # None when CO2 device not configured
+
+    # -- D. hourly output buffers (length n) --------------------------
+    load_kw: np.ndarray
+    T_z_out: np.ndarray
+    RH_z_out: np.ndarray
+    P_hvac: np.ndarray
+    P_deh: np.ndarray
+    P_led: np.ndarray
+    P_misc: np.ndarray
+    X_d_arr: np.ndarray
+    ppfd_out: List[float]
+    qled_out: List[float]
+    T_m_out: Optional[np.ndarray]  # None when RC wall model off
+    T_s_out: Optional[np.ndarray]  # None when RC3 wall model off
+    T_wall_out_arr: Optional[np.ndarray]  # None when wall model off
+    T_sol_air_arr: Optional[np.ndarray]  # None when wall model off
+    CO2_z_out: Optional[np.ndarray]  # None when CO2 disabled
+    S_co2_inj_out: Optional[np.ndarray]  # None when CO2 disabled
+    E_co2_Wh: Optional[np.ndarray]  # None when CO2 disabled
+
+    # -- E. full-load hourly flags (bool arrays, length n) ------------
+    hvac_cool_full_h: np.ndarray
+    hvac_heat_full_h: np.ndarray
+    deh_full_h: np.ndarray
+
+    # -- F. monthly accumulators (length 12 / (12, 5)) ----------------
+    monthly_energy: np.ndarray
+    monthly_harvest: np.ndarray
+    monthly_t_sum: np.ndarray
+    monthly_rh_sum: np.ndarray
+    monthly_hours: np.ndarray
+    monthly_water_kg: np.ndarray
+    monthly_co2_kg: Optional[np.ndarray]  # None when CO2 disabled
+
+    # -- G. typical-day 12x24 profiles --------------------------------
+    typical_load_sum: np.ndarray
+    typical_count: np.ndarray
+
+    # -- H. accounting dicts (mutated in place) -----------------------
+    clamp_stats: dict
+    co2_clamp_stats: Optional[dict]  # None when CO2 disabled
+    deh_perf: dict
+
+    # -- I. meters / running totals ------------------------------------
+    total_water_kg: float
+    total_harvest_kg: float
+    co2_inj_total_kg: Optional[float]  # None when CO2 disabled
+    deh_comp_kwh: float
+    econ_active_s: float
+    econ_free_cool_j: float
+    erv_fan_j: float
+    erv_rec_lat_j: float
+    erv_rec_sens_j: float
+
+
 def run_hourly_loop(
     *,
-    CO2_z_out,
-    E_co2_Wh,
+    zone_state,
     P_atm,
-    P_deh,
-    P_hvac,
-    P_led,
-    P_misc,
-    RH_z,
-    RH_z_out,
-    S_co2_inj_out,
-    T_m_out,
-    T_s_out,
-    T_sol_air_arr,
-    T_wall_out_arr,
-    T_z,
-    T_z_out,
-    W_z,
-    X_d,
-    X_d_arr,
-    X_d_init,
-    air_mass_co2,
     c_out,
-    c_z,
-    clamp_stats,
-    co2_clamp_stats,
-    co2_dev,
-    co2_gamma,
-    co2_inj_total_kg,
-    co2_on,
-    co2_sp_ppm,
-    crop_area,
-    cycle_h,
-    deh,
-    deh_comp_kwh,
-    deh_full_h,
-    deh_perf,
     dt,
-    econ_active_s,
-    econ_dt_k,
-    econ_flow,
-    econ_free_cool_j,
-    econ_on,
-    env,
-    erv_fan_j,
-    erv_fan_ref_flow,
-    erv_fan_w,
-    erv_on,
-    erv_rec_lat_j,
-    erv_rec_sens_j,
-    grow,
-    harvest_hours,
     hours,
-    hvac,
-    hvac_cool_full_h,
-    hvac_cool_full_w,
-    hvac_heat_full_h,
-    hvac_heat_full_w,
-    led,
-    load_kw,
-    m_dot_ach_co2,
-    monthly_co2_kg,
-    monthly_energy,
-    monthly_harvest,
-    monthly_hours,
-    monthly_rh_sum,
-    monthly_t_sum,
-    monthly_water_kg,
     months,
     n,
-    next_harvest_h,
-    ode,
     p,
-    ppfd_out,
-    qled_out,
     sub,
-    total_harvest_kg,
-    total_water_kg,
-    transp,
-    typical_count,
-    typical_load_sum,
     weather_series,
     policy=None,
     control_steps=1,
     zone_id="main",
 ) -> LoopState:
+    # ZoneState packaging (multi-zone step 1): pure move.  The 72
+    # per-zone arguments now arrive via ``zone_state`` and are rebound
+    # to their original local names below; the loop body is unchanged.
+    RH_z = zone_state.RH_z
+    T_z = zone_state.T_z
+    W_z = zone_state.W_z
+    X_d = zone_state.X_d
+    c_z = zone_state.c_z
+    cycle_h = zone_state.cycle_h
+    next_harvest_h = zone_state.next_harvest_h
+    X_d_init = zone_state.X_d_init
+    crop_area = zone_state.crop_area
+    harvest_hours = zone_state.harvest_hours
+    co2_on = zone_state.co2_on
+    co2_sp_ppm = zone_state.co2_sp_ppm
+    co2_gamma = zone_state.co2_gamma
+    air_mass_co2 = zone_state.air_mass_co2
+    m_dot_ach_co2 = zone_state.m_dot_ach_co2
+    hvac_cool_full_w = zone_state.hvac_cool_full_w
+    hvac_heat_full_w = zone_state.hvac_heat_full_w
+    econ_on = zone_state.econ_on
+    econ_dt_k = zone_state.econ_dt_k
+    econ_flow = zone_state.econ_flow
+    erv_on = zone_state.erv_on
+    erv_fan_w = zone_state.erv_fan_w
+    erv_fan_ref_flow = zone_state.erv_fan_ref_flow
+    env = zone_state.env
+    hvac = zone_state.hvac
+    deh = zone_state.deh
+    led = zone_state.led
+    transp = zone_state.transp
+    grow = zone_state.grow
+    ode = zone_state.ode
+    co2_dev = zone_state.co2_dev
+    load_kw = zone_state.load_kw
+    T_z_out = zone_state.T_z_out
+    RH_z_out = zone_state.RH_z_out
+    P_hvac = zone_state.P_hvac
+    P_deh = zone_state.P_deh
+    P_led = zone_state.P_led
+    P_misc = zone_state.P_misc
+    X_d_arr = zone_state.X_d_arr
+    ppfd_out = zone_state.ppfd_out
+    qled_out = zone_state.qled_out
+    T_m_out = zone_state.T_m_out
+    T_s_out = zone_state.T_s_out
+    T_wall_out_arr = zone_state.T_wall_out_arr
+    T_sol_air_arr = zone_state.T_sol_air_arr
+    CO2_z_out = zone_state.CO2_z_out
+    S_co2_inj_out = zone_state.S_co2_inj_out
+    E_co2_Wh = zone_state.E_co2_Wh
+    hvac_cool_full_h = zone_state.hvac_cool_full_h
+    hvac_heat_full_h = zone_state.hvac_heat_full_h
+    deh_full_h = zone_state.deh_full_h
+    monthly_energy = zone_state.monthly_energy
+    monthly_harvest = zone_state.monthly_harvest
+    monthly_t_sum = zone_state.monthly_t_sum
+    monthly_rh_sum = zone_state.monthly_rh_sum
+    monthly_hours = zone_state.monthly_hours
+    monthly_water_kg = zone_state.monthly_water_kg
+    monthly_co2_kg = zone_state.monthly_co2_kg
+    typical_load_sum = zone_state.typical_load_sum
+    typical_count = zone_state.typical_count
+    clamp_stats = zone_state.clamp_stats
+    co2_clamp_stats = zone_state.co2_clamp_stats
+    deh_perf = zone_state.deh_perf
+    total_water_kg = zone_state.total_water_kg
+    total_harvest_kg = zone_state.total_harvest_kg
+    co2_inj_total_kg = zone_state.co2_inj_total_kg
+    deh_comp_kwh = zone_state.deh_comp_kwh
+    econ_active_s = zone_state.econ_active_s
+    econ_free_cool_j = zone_state.econ_free_cool_j
+    erv_fan_j = zone_state.erv_fan_j
+    erv_rec_lat_j = zone_state.erv_rec_lat_j
+    erv_rec_sens_j = zone_state.erv_rec_sens_j
     # C1 (control protocol): seat setup.  The integer ledger counts
     # substeps as N = h*sub + s (recomputed, never accumulated), so the
     # modulo tests below cannot drift.  Every validation here is
