@@ -16,8 +16,9 @@ does not exist, and any ``strategy`` top-level YAML key is rejected by
 field (P5-14).
 """
 
+import re
 from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -60,6 +61,8 @@ __all__ = [
     "HARD_LIMITS",
     "PARAM_PATH_MAP",
     "PARAM_TOPLEVEL_MAP",
+    "ZONE_OVERRIDABLE",
+    "ZONE_RESERVED_IDS",
 ]
 
 
@@ -154,6 +157,31 @@ PARAM_TOPLEVEL_MAP: Dict[str, str] = {
     "pv_area": "pv_area_m2",
     "battery": "battery_kwh",
 }
+
+# ---------------------------------------------------------------------------
+# Zones (multi-room v1): override-delta contract.  A zone is one room that
+# writes ONLY the fields differing from the global project (a delta patch);
+# shared project-level config (tariff / pv / battery / space / economics) is
+# identical for every zone and therefore not zone-overridable.  Merging is
+# field-level only: view_section = {**global_section, **delta_section}.
+# zones not sweepable in v1; zone-aware sweep lands with the O phase.
+# ---------------------------------------------------------------------------
+ZONE_OVERRIDABLE = frozenset(
+    {
+        "setpoints",
+        "led",
+        "hvac",
+        "deh",
+        "co2",
+        "transpiration",
+        "growth",
+        "envelope",
+    }
+)
+# Reserved ids: whole-building aggregation labels that report/summary layers
+# must keep free, so they can never name a zone.
+ZONE_RESERVED_IDS = frozenset({"total", "building", "all"})
+_ZONE_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 
 
 # ---------------------------------------------------------------------------
@@ -1356,6 +1384,12 @@ class DesignProject:
     # sizing via pv_area_m2.  Set only by from_dict; never emitted by
     # to_dict when empty (same rule as the None sentinels above).
     pv_arrays: Tuple["PVArrayConfig", ...] = ()
+    # Multi-room v1: zone_id -> {section -> {field: value}} override deltas.
+    # Each zone stores ONLY the fields that differ from the global sections
+    # (sections restricted to ZONE_OVERRIDABLE); ``zone_view`` merges a delta
+    # onto a copy of the global config.  Empty dict = single-room legacy
+    # behaviour; ``to_dict`` omits the key entirely then (pv_arrays rule).
+    zones: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     # ---- (de)serialisation ---------------------------------------------
     def to_dict(self) -> dict:
@@ -1456,11 +1490,54 @@ class DesignProject:
         # exactly as before.
         if not d.get("pv_arrays"):
             d.pop("pv_arrays", None)
+        # Zones (multi-room v1): an empty mapping means single-room legacy
+        # behaviour -- omit it so default projects serialize exactly as
+        # before (same rule as pv_arrays above).
+        if not d.get("zones"):
+            d.pop("zones", None)
         return d
 
     def save(self, path) -> None:
         with open(path, "w", encoding="utf-8") as f:
             yaml.safe_dump(self.to_dict(), f, sort_keys=False, allow_unicode=True)
+
+    # ---- zones (multi-room v1) -----------------------------------------
+    def zone_view(self, zone_id: str) -> dict:
+        """Merge ``zone_id``'s override delta onto the global config.
+
+        Returns a plain ``dict`` (NOT a DesignProject): the global
+        ``to_dict()`` with every whitelisted section field-merged with the
+        zone's delta (``{**global_section, **delta_section}``).  The view
+        carries no ``zones`` key, so feeding it back through ``from_dict``
+        re-validates the merged room as a standalone project without
+        recursion.  Mutating the returned dict never touches the project
+        (``to_dict`` deep-copies).
+        """
+        _delta = self.zones.get(zone_id)
+        if _delta is None:
+            raise ValueError(
+                f"unknown zone id {zone_id!r}; configured zones: "
+                f"{sorted(self.zones) if self.zones else '(none)'}"
+            )
+        view = self.to_dict()
+        view.pop("zones", None)
+        for _sec, _fields in _delta.items():
+            # Defensive: a directly-constructed DesignProject bypasses
+            # from_dict's structural guard, so re-check the whitelist here.
+            if _sec not in ZONE_OVERRIDABLE:
+                raise ValueError(
+                    f"zones.{zone_id}: section '{_sec}' is not "
+                    f"zone-overridable. Zone-overridable sections: "
+                    f"{sorted(ZONE_OVERRIDABLE)}; tariff / pv / battery / "
+                    f"space / economics are shared project-level config and "
+                    f"cannot be overridden per zone."
+                )
+            view[_sec] = {**view.get(_sec, {}), **_fields}
+        return view
+
+    def zone_views(self) -> Dict[str, dict]:
+        """All zone views keyed by zone id (empty dict for single-room)."""
+        return {_zid: self.zone_view(_zid) for _zid in self.zones}
 
     @classmethod
     def from_dict(cls, d: dict) -> "DesignProject":
@@ -1505,6 +1582,7 @@ class DesignProject:
             "pv_area_m2",
             "battery_kwh",
             "pv_arrays",
+            "zones",
         }
         unknown_top = set(d.keys()) - _TOP_KEYS
         if unknown_top:
@@ -2737,6 +2815,60 @@ class DesignProject:
                 "area, not both"
             )
 
+        # ── Zones (multi-room v1): structural parse of the override ──
+        # deltas.  Field-level schema validity (unknown keys, types, hard
+        # limits) is NOT re-checked here -- it is delegated below to a full
+        # ``from_dict(zone_view)`` pass so every section guard applies to
+        # the MERGED room exactly as it would to a standalone project.
+        _zones_raw = d.get("zones", {})
+        if not isinstance(_zones_raw, dict):
+            raise ValueError(
+                f"zones must be a mapping of zone_id -> override delta, "
+                f"got {type(_zones_raw).__name__}"
+            )
+        _zones: Dict[str, Dict[str, Any]] = {}
+        for _zid, _zdelta in _zones_raw.items():
+            if not isinstance(_zid, str) or not _zid:
+                raise ValueError(
+                    f"zone id must be a non-empty string, got {_zid!r}"
+                )
+            if _zid in ZONE_RESERVED_IDS:
+                raise ValueError(
+                    f"zone id {_zid!r} is reserved for whole-building "
+                    f"aggregation labels; pick another id (reserved: "
+                    f"{sorted(ZONE_RESERVED_IDS)})."
+                )
+            if not _ZONE_ID_RE.match(_zid):
+                raise ValueError(
+                    f"zone id {_zid!r} must match "
+                    f"^[A-Za-z_][A-Za-z0-9_-]*$ (letter or '_' first, then "
+                    f"letters, digits, '_' or '-')."
+                )
+            if not isinstance(_zdelta, dict):
+                raise ValueError(
+                    f"zones.{_zid} must be a mapping of section -> fields, "
+                    f"got {type(_zdelta).__name__}"
+                )
+            _unknown_sec = set(_zdelta) - ZONE_OVERRIDABLE
+            if _unknown_sec:
+                raise ValueError(
+                    f"Unrecognised sections in 'zones.{_zid}': "
+                    f"{sorted(_unknown_sec)}. Zone-overridable sections: "
+                    f"{sorted(ZONE_OVERRIDABLE)}; tariff / pv / battery / "
+                    f"space / economics are shared project-level config and "
+                    f"cannot be overridden per zone."
+                )
+            for _sec, _fields in _zdelta.items():
+                if not isinstance(_fields, dict):
+                    raise ValueError(
+                        f"zones.{_zid}.{_sec} must be a mapping of field -> "
+                        f"value (field-level delta), got "
+                        f"{type(_fields).__name__}"
+                    )
+            _zones[_zid] = {
+                _sec: dict(_fields) for _sec, _fields in _zdelta.items()
+            }
+
         project = cls(
             name=d.get("name", "unnamed"),
             site=SiteConfig(**site_cfg),
@@ -2768,7 +2900,21 @@ class DesignProject:
             pv_area_m2=d.get("pv_area_m2", 0.0),
             battery_kwh=d.get("battery_kwh", 0.0),
             pv_arrays=_pv_arrays,
+            zones=_zones,
         )
+
+        # Zones (multi-room v1): full schema validation per zone.  Each
+        # zone's merged view is re-loaded through ``from_dict`` so unknown
+        # fields, type guards and HARD_LIMITS all apply to the MERGED room.
+        # The view carries no 'zones' key (zone_view strips it), so the
+        # recursive call cannot loop; the try/except adds zone-id context.
+        for _zid in _zones:
+            try:
+                cls.from_dict(project.zone_view(_zid))
+            except ValueError as _exc:
+                raise ValueError(
+                    f"zones.{_zid}: invalid override delta -- {_exc}"
+                ) from _exc
 
         # ── R26 currency engine: materialize USD-baseline default prices ──
         # Every None sentinel (omitted key / explicit null) becomes the
