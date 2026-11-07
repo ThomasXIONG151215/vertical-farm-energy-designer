@@ -128,3 +128,120 @@ def merge(action: Optional[ZoneAction], daily: Optional[DailyPlan], hour: int) -
             value = getattr(daily_action, f.name)
         setattr(merged, f.name, value)
     return merged
+
+
+# ---------------------------------------------------------------------------
+# O5: declarative policy registry.  Candidates (optimize.py / YAML) name a
+# policy by string type + params dict; ``build_policy`` instantiates it.
+# This module stays a pure leaf (stdlib-only imports, see test_40's AST
+# gate), so the registry maps names to classes defined HERE only —
+# third-party policies are attached programmatically via engine.run.
+# ---------------------------------------------------------------------------
+POLICY_REGISTRY: Dict[str, type] = {}
+
+
+def register_policy(name: str):
+    """Class decorator: register a BuildingPolicy implementation under *name*."""
+
+    def _wrap(cls):
+        if name in POLICY_REGISTRY:
+            raise ValueError(
+                f"policy type '{name}' is already registered to "
+                f"{POLICY_REGISTRY[name].__name__}"
+            )
+        POLICY_REGISTRY[name] = cls
+        return cls
+
+    return _wrap
+
+
+def build_policy(spec) -> "BuildingPolicy":
+    """Instantiate a registered policy from a ``{"type": ..., "params": ...}`` spec.
+
+    Fail-fast contract: an unknown type name, a missing ``"type"`` key or
+    a non-mapping spec/params all raise ``ValueError`` naming the
+    offending key/type, before any simulation runs.
+    """
+    if not isinstance(spec, Mapping):
+        raise ValueError(
+            f"policy spec must be a mapping {{'type': str, 'params': dict}}, "
+            f"got {type(spec).__name__}"
+        )
+    ptype = spec.get("type")
+    if not isinstance(ptype, str) or not ptype:
+        raise ValueError(
+            f"policy spec needs a string 'type' key, got {ptype!r} "
+            f"(spec keys: {sorted(spec)})"
+        )
+    params = spec.get("params", {})
+    if params is None:
+        params = {}
+    if not isinstance(params, Mapping):
+        raise ValueError(
+            f"policy spec 'params' for type '{ptype}' must be a mapping, "
+            f"got {type(params).__name__}"
+        )
+    cls = POLICY_REGISTRY.get(ptype)
+    if cls is None:
+        raise ValueError(
+            f"unknown policy type '{ptype}'; registered types: "
+            f"{sorted(POLICY_REGISTRY)}"
+        )
+    return cls(**params)
+
+
+@register_policy("setpoint_offset")
+@dataclass
+class SetpointOffsetPolicy:
+    """Example offset policy: shift setpoints / LED / economizer by fixed deltas.
+
+    Params (all default to no-op):
+        t_offset_k: temperature setpoint offset (K).  Non-zero shifts
+            both the cooling setpoint (``T_sp`` = config T_light/T_dark
+            by ``obs.is_light`` + offset) and the heating setpoint
+            (``T_heat_sp`` = config T_dark + offset).  Boundary: the
+            optional config fields ``setpoints.T_heat`` / ``RH_dark``
+            are not visible in ``PolicyContext``, so a non-zero offset
+            re-bases the heat setpoint on ``T_dark`` and the humidity
+            setpoint on ``RH`` — projects using those optional twins
+            should apply their offsets programmatically.
+        rh_offset_pp: humidity setpoint offset (percentage points) on
+            ``ctx.RH``.
+        led_dim: LED dimming fraction (0-1); ``None`` keeps the config
+            LED path.
+        econ_override: forced economizer state; ``None`` keeps legacy.
+
+    Zero drift: with all params at their defaults every emitted field is
+    ``None``, so the merged ``ZoneAction`` is all-``None`` and the run is
+    bit-identical to ``policy=None``.
+    """
+
+    t_offset_k: float = 0.0
+    rh_offset_pp: float = 0.0
+    led_dim: Optional[float] = None
+    econ_override: Optional[bool] = None
+
+    def __post_init__(self) -> None:
+        self._ctx: Optional[PolicyContext] = None
+
+    def reset(self, ctx: PolicyContext) -> None:
+        self._ctx = ctx
+
+    def plan_daily(self, obs: Observation) -> Optional[DailyPlan]:
+        return None
+
+    def step(self, obs: Observation) -> ControlAction:
+        if self._ctx is None:
+            raise RuntimeError(
+                "SetpointOffsetPolicy.step called before reset(ctx)"
+            )
+        za = ZoneAction()
+        if self.t_offset_k:
+            base_cool = self._ctx.T_light if obs.is_light else self._ctx.T_dark
+            za.T_sp = base_cool + self.t_offset_k
+            za.T_heat_sp = self._ctx.T_dark + self.t_offset_k
+        if self.rh_offset_pp:
+            za.RH_sp = self._ctx.RH + self.rh_offset_pp
+        za.led_dim = self.led_dim
+        za.econ_override = self.econ_override
+        return ControlAction(zones={self._ctx.zone_id: za})

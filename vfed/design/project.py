@@ -125,6 +125,11 @@ HARD_LIMITS: Dict[str, Tuple[float, float]] = {
     # (0, 1) — 0 = no ground reflection, 1 = perfect mirror; typical
     # surfaces sit at 0.15-0.25 (the legacy hard-coded value was 0.2).
     "albedo": (0, 1),
+    # O5: control tick cadence (C1/T2).  Must be an integer multiple of
+    # space.timestep_s (engine _resolve_control_steps) and at least one
+    # full minute / at most one hour.  None (unset) stays the physics
+    # timestep and never reaches this guard.
+    "period_s": (60, 3600),
 }
 
 # Mapping: hard-limit name -> (project_dict_section, field_name) for the
@@ -147,6 +152,9 @@ PARAM_PATH_MAP: Dict[str, Tuple[str, str]] = {
     "co2_band_ppm": ("co2", "band_ppm"),
     "co2_capacity_g_per_h": ("co2", "capacity_g_per_h"),
     "albedo": ("site", "albedo"),
+    # O5: control tick cadence — registered so optimize/evaluate
+    # candidates can override it like any other sweepable parameter.
+    "period_s": ("control", "period_s"),
 }
 
 # PVBES sizing keys (pv_area / battery) have no nested section: their YAML
