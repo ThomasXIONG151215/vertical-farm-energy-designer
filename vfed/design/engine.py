@@ -26,7 +26,8 @@ from ..devices.led import LEDDevice
 from ..plants.transpiration import TranspirationModel
 from ..plants.van_henten import VanHenten
 from ..plants.van_henten_3state import VanHenten3State
-from ..weather.weather_bridge import fetch_weather
+from ..weather.series import WeatherSeries
+from ..weather.weather_bridge import fetch_weather, to_hourly
 from .result import SimulationResult
 
 __all__ = ["DesignEngine", "run_project", "full_load_warnings"]
@@ -445,6 +446,27 @@ def _wall_fd_stability_guard(p) -> None:
         raise RuntimeError(f"wall_fd_nodes must be in [10, 100] (got {e.wall_fd_nodes!r}).")
 
 
+def _resolve_control_steps(dt: float, period_s) -> int:
+    """T2 (nested-time v2): control cadence in integer substeps.
+
+    ``period_s`` None resolves to the physics timestep (k = 1, legacy
+    behaviour).  The period must be an integer multiple of dt and at
+    least dt; otherwise raise (fail fast, mirroring the dt|3600 gate) —
+    a non-integer k would make an ``N % k`` tick test silently never
+    fire (B2: float-modulo trap).
+    """
+    period = float(dt) if period_s is None else float(period_s)
+    k = period / float(dt)
+    ki = int(round(k))
+    if ki < 1 or abs(k - ki) > 1e-9:
+        raise ValueError(
+            f"control.period_s={period_s} must be an integer multiple of "
+            f"space.timestep_s={dt}s (and >= dt); got k={k}. Choose "
+            f"period_s = k * timestep_s."
+        )
+    return ki
+
+
 def _build_devices(p, P_atm: float = 101.325):
     env = Envelope(
         U_wall_A=p.envelope.U_wall_A,
@@ -814,8 +836,15 @@ class DesignEngine:
     def __init__(self, cache_dir: Optional[str] = "weather_cache"):
         self.cache_dir = cache_dir
 
-    def run(self, project, weather: Optional[pd.DataFrame] = None) -> SimulationResult:
+    def run(self, project, weather: Optional[pd.DataFrame] = None, policy=None) -> SimulationResult:
         """Run a full-year simulation and return a ``SimulationResult``.
+
+        ``policy`` (C1 control protocol) optionally attaches a
+        ``BuildingPolicy`` to the building loop; ``None`` (the default)
+        keeps the config-driven path bit-identical.  When a policy is
+        attached, ``p.control.period_s`` sets the control tick cadence
+        and the policy's ``step`` is called every tick, with
+        ``plan_daily`` at each day boundary.
 
         SIDE EFFECT (P4-9): when auto-sizing is enabled (``deh.auto_size`` or
         ``hvac`` default sizing), this method writes the resulting nameplates
@@ -851,7 +880,14 @@ class DesignEngine:
         # DataFrame itself is never rebuilt here, so the attrs survive; a
         # caller-supplied df without attrs degrades to an empty dict.
         weather_attrs = dict(getattr(weather, "attrs", {}) or {})
-        n = len(weather)
+        # T3 (nested-time v2): dual view.  ``weather_hourly`` is the report/
+        # PVBES/sweep view (hourly aggregates; hourly input hits the
+        # identity fast path and stays bit-identical incl. dtype/attrs).
+        # ``weather_series`` is the building loop's native-resolution ZOH
+        # lookup built from the raw frame (T1 wiring, upgraded in T3).
+        weather_hourly = to_hourly(weather)
+        weather_series = WeatherSeries.from_dataframe(weather)
+        n = len(weather_hourly)
         dt = p.space.timestep_s
         sub = max(1, int(round(3600.0 / dt)))
         if abs(sub * dt - 3600.0) > 1.0:
@@ -862,14 +898,19 @@ class DesignEngine:
                 f"(e.g., 600, 900, 1200, 1800, 3600)."
             )
 
-        T_ext = weather["temperature_2m"].values.astype(float)
-        RH_ext = weather["relative_humidity_2m"].values.astype(float)
-        GHI = weather["shortwave_radiation"].values.astype(float)
-        hours = weather.index.hour.values.astype(float)
-        months = weather.index.month.values.astype(int)
-        days = weather.index.day.values.astype(int)
-        direct = weather["direct_radiation"].values.astype(float)
-        diffuse = weather["diffuse_radiation"].values.astype(float)
+        # T2 (nested-time v2): fail-fast cadence check — control.period_s
+        # must be an integer multiple of dt (k substeps per tick).  C1
+        # captures the resolved tick length and passes it to the loop.
+        control_steps = _resolve_control_steps(dt, p.control.period_s)
+
+        T_ext = weather_hourly["temperature_2m"].values.astype(float)
+        RH_ext = weather_hourly["relative_humidity_2m"].values.astype(float)
+        GHI = weather_hourly["shortwave_radiation"].values.astype(float)
+        hours = weather_hourly.index.hour.values.astype(float)
+        months = weather_hourly.index.month.values.astype(int)
+        days = weather_hourly.index.day.values.astype(int)
+        direct = weather_hourly["direct_radiation"].values.astype(float)
+        diffuse = weather_hourly["diffuse_radiation"].values.astype(float)
 
         # Validate weather input arrays — no NaN/inf allowed
         _weather_arrays = {
@@ -888,9 +929,9 @@ class DesignEngine:
                 )
 
         # Surface pressure — Open-Meteo returns hPa, convert to kPa
-        surface_pressure = weather.get(
+        surface_pressure = weather_hourly.get(
             "surface_pressure",
-            pd.Series([1013.25] * n, index=weather.index),
+            pd.Series([1013.25] * n, index=weather_hourly.index),
         ).values.astype(float)
         # P4-6 (MINOR): fail-fast on NaN/inf like the other weather arrays
         # (np.nanmean previously swallowed bad station-pressure data silently,
@@ -1107,17 +1148,14 @@ class DesignEngine:
         loop = run_hourly_loop(
             CO2_z_out=CO2_z_out,
             E_co2_Wh=E_co2_Wh,
-            GHI=GHI,
             P_atm=P_atm,
             P_deh=P_deh,
             P_hvac=P_hvac,
             P_led=P_led,
             P_misc=P_misc,
-            RH_ext=RH_ext,
             RH_z=RH_z,
             RH_z_out=RH_z_out,
             S_co2_inj_out=S_co2_inj_out,
-            T_ext=T_ext,
             T_m_out=T_m_out,
             T_s_out=T_s_out,
             T_sol_air_arr=T_sol_air_arr,
@@ -1188,6 +1226,9 @@ class DesignEngine:
             transp=transp,
             typical_count=typical_count,
             typical_load_sum=typical_load_sum,
+            weather_series=weather_series,
+            policy=policy,
+            control_steps=control_steps,
         )
         return build_report(
             CO2_z_out=CO2_z_out,
@@ -1241,7 +1282,7 @@ class DesignEngine:
             self=self,
             typical_count=typical_count,
             typical_load_sum=typical_load_sum,
-            weather=weather,
+            weather=weather_hourly,
             weather_attrs=weather_attrs,
             X_d=loop.X_d,
             co2_inj_total_kg=loop.co2_inj_total_kg,

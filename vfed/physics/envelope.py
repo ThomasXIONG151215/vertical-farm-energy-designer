@@ -861,7 +861,18 @@ class Envelope:
 
     # -- Mechanical ventilation with ERV/HRV heat recovery (R34/W3-E) ----
     def mechanical_ventilation(
-        self, T_ext: float, T_z: float, W_ext: float, W_z: float
+        self,
+        T_ext: float,
+        T_z: float,
+        W_ext: float,
+        W_z: float,
+        flow_override_m3h: Optional[float] = None,
+        #   C2 runtime airflow override (wired into the hourly loop by C2b):
+        #   None = design flow (the legacy bit-for-bit path); a non-None
+        #   value is clamped to [0, design flow] -- the ERV cannot exceed
+        #   its rated airflow, and 0 fully closes the fresh-air dampers.
+        #   The ``erv_enabled`` hardware switch still gates the whole
+        #   channel: a disabled ERV returns zeros regardless of the override.
     ) -> Tuple[float, float, float, float, float]:
         """Mass-flow mechanical fresh air through an ERV/HRV core.
 
@@ -896,7 +907,13 @@ class Envelope:
         """
         if not self.erv_enabled or self.erv_flow_m3h <= 0.0:
             return 0.0, 0.0, 0.0, 0.0, 0.0
-        m_v = self.erv_flow_m3h * self.rho_air / 3600.0  # kg/s
+        # C2: resolve the runtime airflow override before the mass-flow
+        # expression; on the None path ``flow`` IS the design flow value, so
+        # the arithmetic below is bit-identical to the legacy expression.
+        flow = self.erv_flow_m3h
+        if flow_override_m3h is not None:
+            flow = min(max(flow_override_m3h, 0.0), self.erv_flow_m3h)
+        m_v = flow * self.rho_air / 3600.0  # kg/s
         q_full_sens = m_v * self.cp_air * (T_ext - T_z)  # W, un-recovered basis
         m_full_lat = m_v * (W_ext - W_z)  # kg/s
         # Same evaluation order as infiltration() ((M*lv)*1000) so the

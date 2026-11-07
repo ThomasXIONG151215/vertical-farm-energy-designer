@@ -1,8 +1,16 @@
 """
-Weather bridge — fetches hourly meteorology from Open-Meteo for an arbitrary
-site and prepares it for the building + PV simulations.
+Weather bridge — fetches meteorology from Open-Meteo or NASA POWER for an
+arbitrary site and prepares it for the building + PV simulations.
 
-Outputs a tidy hourly DataFrame with the columns consumed downstream:
+The exit contract is a UNIFORM TIMESTEP GRID: strictly increasing naive
+local wall-clock timestamps with one constant integer-second step (3600 s
+today; 900 s or 1800 s sub-hourly grids validate identically) that covers
+the requested local calendar year.  ``to_hourly`` aggregates any such grid
+to the hourly rows consumed by the report and PV layers, and hourly input
+passes through bit-identically (dual view: native resolution for the
+building loop, hourly aggregation for the annual reports).
+
+Outputs a tidy DataFrame with the columns consumed downstream:
 
   timestamp, temperature_2m, relative_humidity_2m, wind_speed_10m,
   shortwave_radiation (GHI, W/m^2),
@@ -53,6 +61,17 @@ NASA_POWER_PARAMS = "T2M,RH2M,WS10M,ALLSKY_SFC_SW_DWN"
 # Provider vocabulary (single source of truth for the fetcher, the config
 # guard and the CLI override).
 WEATHER_PROVIDERS = ("open-meteo", "nasa-power")
+
+# T3 (wave-1): the minimum column set every exit path must deliver.  It is
+# the intersection of what the two live providers return and what the
+# pre-downloaded city files carry; direct/diffuse/poa are added downstream
+# by add_poa and are therefore not part of this base contract.
+REQUIRED_WEATHER_COLUMNS = ("temperature_2m", "relative_humidity_2m", "shortwave_radiation")
+
+# Integer-nanosecond helpers for the grid contract (ns keep exact int64
+# arithmetic on DatetimeIndex.asi8 without float rounding).
+_NS_PER_SECOND = 1_000_000_000
+_NS_PER_HOUR = 3_600_000_000_000
 
 # G2 (Wave 1): POA transposition-model vocabulary (single source of truth
 # for add_poa, fetch_weather and the SiteConfig field).  "isotropic" is the
@@ -113,9 +132,185 @@ __all__ = [
     "fetch_weather",
     "add_poa",
     "erbs_split",
+    "to_hourly",
+    "validate_weather_grid",
     "WeatherFetchError",
+    "REQUIRED_WEATHER_COLUMNS",
     "TRANSPOSITION_MODELS",
 ]
+
+
+# ---------------------------------------------------------------------------
+# T3 (wave-1): unified timestep-grid contract.
+#
+# The pre-T3 bridge hard-required exactly 8760/8784 HOURLY rows at every
+# exit.  The contract is now a UNIFORM timestep grid of any integer-second
+# step (3600 s, 1800 s, 900 s, ...) that tiles the requested window; the
+# hourly behaviour is unchanged (an hourly grid is the 3600 s special case
+# and every hourly message stays byte-identical).  Two public entry points
+# carry the contract:
+#
+#   validate_weather_grid(df, year, context) -- fail-fast validation with
+#       the first offending row index in every diagnostic.
+#   to_hourly(df) -- aggregate any sub-hourly grid to hourly rows (arithmetic
+#       mean per column, timestamps at hour start); an hourly input returns
+#       a bitwise-identical copy.
+# ---------------------------------------------------------------------------
+
+
+def _window_seconds(year: int) -> int:
+    """Length of *year* in seconds (365 or 366 days, no leap seconds)."""
+    days = 365 + int(calendar.isleap(year))
+    return days * 86400
+
+
+def _grid_step_seconds(index: pd.DatetimeIndex) -> Optional[int]:
+    """Lenient step probe used only for cache-hit ROUTING decisions.
+
+    Returns the constant integer-second step of *index* when the grid is
+    uniform, otherwise ``None``.  A ``None`` result routes the caller down
+    its existing misaligned-cache path (stale-cache warning + refetch), so
+    this helper must never raise on malformed input.
+    """
+    if not isinstance(index, pd.DatetimeIndex) or len(index) < 2:
+        return None
+    deltas = np.diff(index.asi8)
+    d0 = int(deltas[0])
+    if d0 <= 0 or d0 % _NS_PER_SECOND != 0 or np.any(deltas != d0):
+        return None
+    return d0 // _NS_PER_SECOND
+
+
+def _uniform_step_seconds(df: pd.DataFrame, context: str) -> int:
+    """Return the constant integer-second step of the frame's DatetimeIndex.
+
+    Raises ``WeatherFetchError`` with the FIRST offending row index for
+    every violation class: not a DatetimeIndex, tz-aware stamps, an empty
+    frame, fewer than two rows, non-increasing stamps, a non-constant
+    step, and a step that is not a whole number of seconds.
+    """
+    index = df.index
+    if not isinstance(index, pd.DatetimeIndex):
+        raise WeatherFetchError(
+            f"{context}: weather data must be timestamp-indexed, got a "
+            f"{type(index).__name__} index."
+        )
+    if index.tz is not None:
+        raise WeatherFetchError(
+            f"{context}: weather stamps carry a timezone ({index.tz}); the "
+            "grid contract works on naive local wall time."
+        )
+    if len(index) == 0:
+        raise WeatherFetchError(f"{context}: weather data contains 0 rows.")
+    if len(index) == 1:
+        raise WeatherFetchError(
+            f"{context}: weather data contains 1 row; a timestep is "
+            "undefined below two rows."
+        )
+    deltas = np.diff(index.asi8)
+    bad = np.nonzero(deltas <= 0)[0]
+    if len(bad):
+        i = int(bad[0])
+        raise WeatherFetchError(
+            f"{context}: timestamps are not strictly increasing at row "
+            f"{i + 1} ({index[i]} -> {index[i + 1]})."
+        )
+    d0 = int(deltas[0])
+    if np.any(deltas != d0):
+        bad = np.nonzero(deltas != d0)[0]
+        i = int(bad[0])
+        actual = int(deltas[i]) / _NS_PER_SECOND
+        raise WeatherFetchError(
+            f"{context}: timestep is not constant at row {i + 1} "
+            f"(step {d0 / _NS_PER_SECOND:g} s so far, then "
+            f"{actual:g} s to {index[i + 1]})."
+        )
+    if d0 % _NS_PER_SECOND != 0:
+        raise WeatherFetchError(
+            f"{context}: timestep {d0 / _NS_PER_SECOND:g} s is not a whole "
+            "number of seconds; the grid contract needs integer-second steps."
+        )
+    return d0 // _NS_PER_SECOND
+
+
+def validate_weather_grid(df: pd.DataFrame, year: int, context: str, *, strict_window: bool = True) -> int:
+    """Validate the unified exit contract and return the step in seconds.
+
+    Checks, in order: the three required columns are present, the stamp
+    index is a strictly increasing uniform integer-second grid (via
+    ``_uniform_step_seconds``), and — with ``strict_window=True`` — the
+    grid exactly covers the local-year window
+    ``[year-01-01 00:00, (year+1)-01-01 00:00)``.  Every violation raises
+    ``WeatherFetchError`` naming the first offending row.
+
+    ``strict_window=False`` keeps the city-file behaviour of tolerating a
+    shifted or short window (the pinned warn-and-use-as-is path) while
+    still raising on broken grids.
+    """
+    missing = [c for c in REQUIRED_WEATHER_COLUMNS if c not in df.columns]
+    if missing:
+        raise WeatherFetchError(
+            f"{context}: weather data is missing required column(s) "
+            f"{', '.join(missing)}; the contract needs all of "
+            f"{', '.join(REQUIRED_WEATHER_COLUMNS)}."
+        )
+    step_s = _uniform_step_seconds(df, context)
+    if not strict_window:
+        return step_s
+    start = pd.Timestamp(year=year, month=1, day=1)
+    end = start + pd.Timedelta(seconds=_window_seconds(year))
+    index = df.index
+    if index[0] != start:
+        raise WeatherFetchError(
+            f"{context}: window starts at row 0 with {index[0]}, expected "
+            f"{start} local wall time."
+        )
+    expected_n = _window_seconds(year) // step_s
+    covered = index[-1] + pd.Timedelta(seconds=step_s)
+    if covered != end:
+        raise WeatherFetchError(
+            f"{context}: window ends at row {len(index) - 1} "
+            f"({len(index)} rows of {step_s} s, covering through "
+            f"{covered}), expected {expected_n} rows covering through "
+            f"{end}; refusing a partial year."
+        )
+    return step_s
+
+
+def to_hourly(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate a uniform sub-hourly grid to hourly rows; hourly in = identical out.
+
+    Each column becomes the arithmetic mean of the rows inside its hour
+    and the hourly stamps sit at hour starts.  A frame that is already
+    hourly is returned as a bitwise-identical copy (values, dtypes and
+    ``attrs`` preserved) — downstream hourly consumers see zero change.
+    """
+    step_s = _uniform_step_seconds(df, "to_hourly")
+    if 3600 % step_s != 0:
+        raise WeatherFetchError(
+            f"to_hourly: timestep {step_s} s does not divide one hour; "
+            "rows cannot be aggregated to whole hours."
+        )
+    index = df.index
+    if int(index.asi8[0]) % _NS_PER_HOUR != 0:
+        raise WeatherFetchError(
+            f"to_hourly: first stamp {index[0]} is not anchored on the "
+            "hour; hourly aggregation needs hour-aligned windows."
+        )
+    n_sub = 3600 // step_s
+    if len(index) % n_sub != 0:
+        raise WeatherFetchError(
+            f"to_hourly: {len(index)} rows of {step_s} s do not tile whole "
+            f"hours ({len(index)} % {n_sub} = {len(index) % n_sub} rows "
+            "left over)."
+        )
+    if n_sub == 1:
+        return df.copy()
+    out = df.iloc[::n_sub].copy()
+    for name in df.columns:
+        out[name] = df[name].to_numpy().reshape(-1, n_sub).mean(axis=1)
+    out.attrs = dict(df.attrs)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -564,27 +759,30 @@ def fetch_weather(
             # pipeline cache format.  Never re-zones or shifts the values.
             if len(df) > 0 and isinstance(df.index, pd.DatetimeIndex) and df.index.tz is not None:
                 df.index = df.index.tz_localize(None)
+            # T3: unified grid validation — a broken grid (gaps, disorder,
+            # non-constant or non-integer-second step, missing columns)
+            # raises with the first offending row; the window ALIGNMENT
+            # (P1-3b) stays a warn-and-use-as-is decision below.
+            step_s = validate_weather_grid(
+                df, year, f"City weather file {local.name}", strict_window=False
+            )
             # P1-3b: alignment guard (P4-16 parity for the city path).  A
             # rotated window (first row not at local Jan 1 00:00) is missing
             # the first tz_hours hours of the local year and wraps the tail
             # into the next year — warn loudly and use the file as-is (no
             # interpolation / no synthesized rows, no-hardcoded-science).
-            expected_n = (365 + int(calendar.isleap(year))) * 24
-            first_ts = df.index[0] if len(df) > 0 else None
-            strict_mono = bool(
-                len(df) > 0 and df.index.is_monotonic_increasing and df.index.is_unique
-            )
+            expected_n = _window_seconds(year) // step_s
+            first_ts = df.index[0]
             aligned = (
                 len(df) == expected_n
                 and first_ts == pd.Timestamp(f"{year}-01-01 00:00:00")
-                and strict_mono
             )
             if not aligned:
                 warnings.warn(
                     f"City weather file {local.name} is not aligned to the "
                     f"local calendar year {year} (first row {first_ts}, "
                     f"{len(df)} rows, expected {expected_n} rows starting "
-                    f"{year}-01-01 00:00:00, strictly monotonic={strict_mono}); "
+                    f"{year}-01-01 00:00:00); "
                     "using it as-is without interpolation. Regenerate the "
                     "file from Open-Meteo for an aligned window.",
                     stacklevel=2,
@@ -633,7 +831,11 @@ def fetch_weather(
         # alignment fix are shifted by tz_hours (missing Jan 1 00-07h local,
         # carrying phantom hours of the next year).  If the window is not
         # aligned to the local calendar year, regenerate below.
-        expected_n = (365 + int(calendar.isleap(year))) * 24
+        # T3: the expected row count is resolution-aware (window seconds
+        # over the grid step) so a future sub-hourly cache is not spuriously
+        # treated as stale; today's hourly caches keep the same numbers.
+        step_s = _grid_step_seconds(df.index)
+        expected_n = _window_seconds(year) // step_s if step_s else (365 + int(calendar.isleap(year))) * 24
         aligned = (
             len(df) > 0
             and df.index[0] == pd.Timestamp(f"{year}-01-01 00:00:00")
@@ -674,9 +876,10 @@ def fetch_weather(
     # ── NASA POWER live fetch (round 22) ──
     if provider == "nasa-power":
         # Same padded request window as the Open-Meteo branch below (one
-        # extra day on each side): the P4-16 local-year slice must yield
-        # EXACTLY 8760/8784 rows — the engine rejects any other year length
-        # and the cache-hit alignment guard keys on the exact row count, so
+        # extra day on each side): the P4-16 local-year slice must yield a
+        # complete uniform grid covering the local year — validate_weather_grid
+        # rejects any gap or shortfall before the data is cached, and the
+        # cache-hit alignment guard keys on the exact window coverage, so
         # the UTC request has to over-cover |tz_hours| hours on both flanks.
         p_start = date(year - 1, 12, 31).strftime("%Y%m%d")
         p_end = date(year + 1, 1, 2).strftime("%Y%m%d")
@@ -724,12 +927,11 @@ def fetch_weather(
         hi = pd.Timestamp(f"{year + 1}-01-01 00:00:00", tz=tz)
         df = df[(df.index >= lo) & (df.index < hi)]
         df.index = df.index.tz_localize(None)  # naive local wall time (cache format)
-        expected_n = (365 + int(calendar.isleap(year))) * 24
-        if len(df) != expected_n:
-            raise WeatherFetchError(
-                f"NASA POWER yielded {len(df)} hourly rows for local year "
-                f"{year} (expected {expected_n}); refusing a partial year."
-            )
+        # T3: unified grid validation replaces the hardcoded hourly row
+        # count — the slice must still cover the full local year, and any
+        # gap, disorder or non-uniform step fails fast with the offending
+        # row before the result is cached.
+        validate_weather_grid(df, year, "NASA POWER")
         df = add_poa(df, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
         df.to_csv(cp)
         # P2-2: provenance metadata (live NASA POWER).  Detail carries the
@@ -824,6 +1026,10 @@ def fetch_weather(
     hi = pd.Timestamp(f"{year + 1}-01-01 00:00:00", tz=tz)
     df = df[(df.index >= lo) & (df.index < hi)]
     df.index = df.index.tz_localize(None)  # naive local wall time (cache format)
+    # T3: unified grid validation before add_poa and the cache write — a
+    # partial or broken year fails fast here instead of being cached as a
+    # silent landmine for every later run.
+    validate_weather_grid(df, year, "Open-Meteo")
     df = add_poa(df, tilt, azimuth, lat, lon, tz_hours, albedo, transposition)
     df.to_csv(cp)
     # P2-2: provenance metadata (live Open-Meteo).  Detail carries the API

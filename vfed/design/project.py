@@ -102,6 +102,11 @@ HARD_LIMITS: Dict[str, Tuple[float, float]] = {
     "T_light": (15, 30),
     "T_dark": (10, 28),
     "RH": (40, 90),
+    # C2: optional dark-period / heating setpoints (None = inherit the
+    # legacy twin, see SetpointConfig).  Same bands as their twins; the
+    # from_dict guard skips None sentinels, so only explicit values check.
+    "T_heat": (10, 28),
+    "RH_dark": (40, 90),
     "co2_ppm": (300, 2000),
     # CO2 supplement (M1): outdoor/infiltration CO2, enrichment deadband
     # half-width and injector capacity.  Registered in PARAM_PATH_MAP so
@@ -130,6 +135,9 @@ PARAM_PATH_MAP: Dict[str, Tuple[str, str]] = {
     "T_light": ("setpoints", "T_light"),
     "T_dark": ("setpoints", "T_dark"),
     "RH": ("setpoints", "RH"),
+    # C2: optional contract fields — registered so sweep can scan them too.
+    "T_heat": ("setpoints", "T_heat"),
+    "RH_dark": ("setpoints", "RH_dark"),
     "co2_ppm": ("setpoints", "co2_ppm"),
     "crop_cycle_days": ("setpoints", "crop_cycle_days"),
     "outdoor_co2_ppm": ("envelope", "outdoor_co2_ppm"),
@@ -1120,6 +1128,18 @@ class SetpointConfig:
     #     concentration balance (co2.setpoint_ppm = null, the default,
     #     inherits THIS value so there is a single source of truth).
     crop_cycle_days: float = 30.0  # harvest interval (resets canopy dry weight)
+    # C2 (control-plane contract): optional dedicated heating setpoint.  None
+    # = inherit T_dark (legacy behaviour: heating targets the dark-period
+    # setpoint, so day/night temperature setbacks drove heating too); an
+    # explicit value decouples heating from the dark schedule.  Lazily
+    # consumed by design: the engine_loop wiring lands in C2b, so this field
+    # intentionally has no consumer in the current engine yet.
+    T_heat: Optional[float] = None
+    # C2 (control-plane contract): optional dark-period RH setpoint.  None =
+    # inherit RH (legacy single-setpoint behaviour); an explicit value gives
+    # the dark period its own humidity target.  Lazily consumed by design:
+    # the DEH/HVAC setpoint wiring lands in C2b, not in this change.
+    RH_dark: Optional[float] = None
 
 
 @dataclass
@@ -1249,6 +1269,19 @@ class TariffConfig:
 
 
 @dataclass
+class ControlConfig:
+    # T2 (nested-time v2): control cadence contract.  The building policy
+    # ticks every k physics substeps (k = period_s / space.timestep_s,
+    # integer, validated fail-fast by the engine; None = the physics
+    # timestep itself, k = 1).  The policy protocol lands with C1
+    # (design/control.py): a policy observes on the tick and writes
+    # setpoints through a register the substep loop consumes, with a
+    # three-layer merge (config default < plan_daily schedule < per-tick
+    # override) so partial control inherits untouched fields.
+    period_s: Optional[float] = None
+
+
+@dataclass
 class DesignSpace:
     # dict[param_name, [min, max, step]]
     # Parameters NOT listed here use their fixed value from the project.
@@ -1283,6 +1316,7 @@ class DesignProject:
     battery: BatteryConfig = field(default_factory=BatteryConfig)
     tariff: TariffConfig = field(default_factory=TariffConfig)
     space: DesignSpace = field(default_factory=DesignSpace)
+    control: ControlConfig = field(default_factory=ControlConfig)
     equipment_power_w: float = 0.0  # constant facility electrical base load (W)
     equipment_capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
     envelope_capital: CapitalCostConfig = field(default_factory=CapitalCostConfig)
@@ -1400,6 +1434,23 @@ class DesignProject:
             for _k in ("setpoint_ppm", "co2_initial_ppm"):
                 if _co2.get(_k) is None:
                     _co2.pop(_k, None)
+        # T2 (nested-time v2): control.period_s None = physics-timestep
+        # cadence (re-derived on reload) — omit the sentinel, drop the
+        # empty section (same roundtrip rule as tariff above).
+        _ctrl = d.get("control")
+        if isinstance(_ctrl, dict):
+            if _ctrl.get("period_s") is None:
+                _ctrl.pop("period_s", None)
+            if not _ctrl:
+                d.pop("control", None)
+        # C2: setpoints.T_heat / setpoints.RH_dark None = inherit the legacy
+        # twin (re-derived on reload) — omit the null sentinels, the same
+        # roundtrip rule as the tariff sentinels above.
+        _sp = d.get("setpoints")
+        if isinstance(_sp, dict):
+            for _k in ("T_heat", "RH_dark"):
+                if _sp.get(_k) is None:
+                    _sp.pop(_k, None)
         # Wave 2 (G1): an empty pv_arrays tuple means "legacy single-array
         # sizing via pv_area_m2" -- omit it so default projects serialize
         # exactly as before.
@@ -1441,6 +1492,7 @@ class DesignProject:
             "battery",
             "tariff",
             "space",
+            "control",
             "growth",
             "equipment_power_w",
             "equipment_capital",
@@ -2700,6 +2752,9 @@ class DesignProject:
             battery=BatteryConfig(**battery_cfg),
             tariff=_tariff(d.get("tariff", {})),
             space=DesignSpace(**space_cfg),
+            control=ControlConfig(
+                **sub(ControlConfig, d.get("control", {}), yaml_path="control")
+            ),
             equipment_power_w=d.get("equipment_power_w", 0.0),
             equipment_capital=_equipment_cap,
             envelope_capital=_envelope_cap,

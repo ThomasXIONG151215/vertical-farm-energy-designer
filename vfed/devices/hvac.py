@@ -454,6 +454,15 @@ class HVACDevice:
         W_ext: Optional[float] = None,
         #   R34/H3: outdoor humidity ratio (kg/kg); consumed by the
         #   on_demand defrost factors only (ignored on the default path).
+        m_override: Optional[float] = None,
+        #   C2 runtime modulation override (wired into the hourly loop by
+        #   C2b): None = legacy path; a non-None value is clamped to [0, 1]
+        #   and REPLACES the CompressorState output m.  The hysteresis /
+        #   min_on / min_off state machine above still runs first, so the
+        #   override never bypasses compressor protection.  Mode selection
+        #   stays temperature-driven: an override passed while the thermal
+        #   logic sits in "idle" reports its mod but produces no thermal
+        #   action (the loop layer decides when overrides are passed).
     ) -> Dict[str, float]:
         """Advance one timestep.
 
@@ -482,6 +491,11 @@ class HVACDevice:
             mode = "idle"
             if self.comp.is_on and self._last_mode != "idle":
                 mode = self._last_mode
+
+        # C2: apply the runtime modulation override AFTER the state machine
+        # so hysteresis / min_on / min_off protection always runs first.
+        if m_override is not None:
+            mod = min(max(m_override, 0.0), 1.0)
 
         Q_target, M_target, P_elec = 0.0, 0.0, 0.0
         cop = self.cop(T_ext, T_z)

@@ -743,6 +743,7 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
             np.zeros_like(_load_arr),
             _hours_arr,
             months=(np.asarray(_months_arr, dtype=int) if _months_arr is not None else None),
+            dt=1.0,  # T2 (B8-2): hourly arrays, cadence stated at the call
         )["net_grid_cost"]
         # F1 (round 21): payback baseline capital for this building combo —
         # the same config priced at pv=0 / battery=0.  Pure config arithmetic
@@ -760,6 +761,7 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
                         [A_pv, E_bat],
                         sim["weather"],
                         sim["load"],
+                        dt=1.0,  # T2 (B8-2): hourly arrays, cadence stated at the call
                         # Mid-life degradation year: LCOE uses CRF over the
                         # lifetime, so pair it with the average (mid-life)
                         # PV output rather than pristine first-year output.
@@ -875,6 +877,7 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
                     [A_pv, E_bat],
                     sim["weather"],
                     sim["load"],
+                    dt=1.0,  # T2 (B8-2): hourly arrays, cadence stated at the call
                     year=es.lifetime // 2,
                 )
                 net_grid = m["annual_grid_cost"]
@@ -895,6 +898,7 @@ def sweep_design(project: DesignProject, cache_dir: str = "weather_cache") -> Di
                         if "month" in sim["weather"]
                         else None
                     ),
+                    dt=1.0,  # T2 (B8-2): hourly arrays, cadence stated at the call
                 )["net_grid_cost"]
             cap = _total_capital(p, A_pv, E_bat)
             annual_cap = _annualized_capital(p, cap, (m or {}).get("battery_life_years"))

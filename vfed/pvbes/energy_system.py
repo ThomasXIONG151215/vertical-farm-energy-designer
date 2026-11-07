@@ -17,15 +17,22 @@ grid interface (the clipped surplus is curtailed, reported only while the
 cap is configured); ``tariff.demand_charge_per_kw`` adds a monthly peak
 demand charge inside ``Tariff.annual_cost``/``net_grid_cost`` (requires
 ``weather["month"]`` labels, fail-fast while active).
+
+T5 (dispatch hook): ``simulate_performance``/``calculate_metrics`` accept an
+optional ``dispatch_policy`` callable that replaces the built-in greedy
+battery dispatch with a per-timestep policy (see the protocol in
+``simulate_performance``).  ``None`` (the default) keeps the greedy path
+bit-identical.
 """
 
+import math
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 
 from .pv import PVSystem
-from .battery import BatterySystem
+from .battery import BatterySystem, CALENDAR_MONTH_HOURS
 from .grid import Tariff
 
 __all__ = ["EnergySystem"]
@@ -53,7 +60,41 @@ class EnergySystem:
         load: np.ndarray,
         year: int = 0,
         pv_power_override: Optional[np.ndarray] = None,
+        dispatch_policy: Optional[Callable[[Dict], Tuple[float, float]]] = None,
     ) -> Dict[str, np.ndarray]:
+        """Simulate the PV-battery-grid dispatch over the load series.
+
+        T5 (dispatch hook): ``dispatch_policy`` (default ``None``) optionally
+        replaces the built-in greedy battery dispatch with a per-timestep
+        policy.  Protocol (frozen; the C1 DispatchPolicy must align with it):
+
+        * ``dispatch_policy(obs) -> (charge_w, discharge_w)`` runs once per
+          hourly timestep, in timestep order.
+        * ``obs`` is a plain dict with exactly these fields: ``t`` (int,
+          0-based timestep index), ``hour`` (int hour-of-day), ``month``
+          (int 1-12), ``price`` (float, tariff price of ``hour``), ``pv_w``
+          and ``load_w`` (floats, this step's PV and load power), ``soc_kwh``
+          (float, stored energy now), ``capacity_kwh`` (float, current usable
+          capacity after fade), ``dt_h`` (float, 1.0).
+        * The action is a pair of *requested* charge/discharge powers.  The
+          engine clamps every request with the same C-rate / SOC-headroom /
+          efficiency limits as the greedy path.  Charging is NOT limited to
+          the PV surplus (the policy may buy from the grid -- this is the
+          deliberate difference from greedy); discharging IS clamped to the
+          current load deficit (discharge serves load only).  The clamped
+          grid import/export is derived from the energy balance downstream.
+        * ``charge_w > 0`` together with ``discharge_w > 0`` is a contract
+          violation and raises ``ValueError``; negative requests also raise.
+        * The policy sees current-and-past information ONLY.  Feeding any
+          future load/PV array into the policy is forbidden by this contract;
+          explicit forecast fields are a separate future project.
+        * Both plain functions and callable objects work.  An object exposing
+          ``reset(timesteps, capacity_kwh)`` has it called once before the
+          first observation (nameplate ``E_bat``); without it nothing extra
+          happens.  When ``E_bat <= 0`` there is no battery to dispatch and
+          the policy is not invoked.
+        * ``None`` keeps the exact greedy dispatch below (bit-identical).
+        """
         A_pv, E_bat = float(x[0]), float(x[1])
         load = np.asarray(load, dtype=float)
         # G1 (Wave 2): multi-array mode sums per-array PV output upstream and
@@ -64,19 +105,29 @@ class EnergySystem:
         else:
             pv_power = self.pv.calculate_pv_output(weather, A_pv, year=year)
         power_balance = pv_power - load
+        # T5 (dispatch hook): a supplied dispatch_policy OWNS the battery
+        # dispatch (the greedy and its P1-2 valley variant are bypassed);
+        # None keeps the exact greedy calls below, untouched.
+        if dispatch_policy is not None:
+            bat = self._dispatch_with_policy(pv_power, load, E_bat, weather, dispatch_policy)
         # P1-2: hand the tariff + hour-of-day to the battery only when grid
         # charging is enabled; the default path keeps the exact previous
         # call (bitwise-identical dispatch).
-        if self.battery.allow_grid_charging:
+        # T2 (B8-2): explicit hourly dt — the engine exports hourly arrays,
+        # so every dispatch step is 1 h (the battery default, now stated at
+        # the call).  Sub-hourly PVBES is a future bounded project; an
+        # explicit dt keeps any later change from silently mispricing energy.
+        elif self.battery.allow_grid_charging:
             bat = self.battery.calculate_battery_flows(
                 power_balance,
                 load,
                 E_bat,
+                dt=1.0,
                 hourly_prices=self.tariff.hourly_prices,
                 hours=np.asarray(weather.get("hour", np.zeros(len(load))), dtype=int),
             )
         else:
-            bat = self.battery.calculate_battery_flows(power_balance, load, E_bat)
+            bat = self.battery.calculate_battery_flows(power_balance, load, E_bat, dt=1.0)
         battery_discharge = np.array(bat["battery_discharge"])
         battery_charge = np.array(bat["battery_charge"])
         grid_import = np.maximum(0.0, load - pv_power - battery_discharge)
@@ -145,6 +196,190 @@ class EnergySystem:
             perf["pv_curtailed"] = pv_curtailed
         return perf
 
+    # ---- T5 policy dispatch ---------------------------------------------
+    def _dispatch_with_policy(
+        self,
+        pv_power: np.ndarray,
+        load: np.ndarray,
+        E_bat: float,
+        weather: Dict[str, np.ndarray],
+        dispatch_policy: Callable[[Dict], Tuple[float, float]],
+    ) -> Dict[str, np.ndarray]:
+        """Hourly dispatch loop driven by ``dispatch_policy`` (T5 hook).
+
+        Returns the same key set as ``BatterySystem.calculate_battery_flows``
+        so the shared accounting tail of ``simulate_performance`` (grid
+        import/export derivation, P4-18 reconciliation, G12 feed-in cap)
+        applies unchanged.  Clamping choice (one of the two the T5 brief
+        allows): call-side pre-clamp with the SAME formulas battery.py uses
+        internally -- the per-step limits are loop-locals there and are not
+        exposed, and battery.py itself is signature-locked by the test_34
+        gate, so the equivalent formulas are mirrored below expression for
+        expression (self-discharge, G10 terminal cap, P2-4 cycle fade, G11
+        calendar fade, P4-18 reconciliation).
+
+        obs conventions: ``hour`` defaults to 0 and ``month`` to 1 when the
+        weather dict lacks the label (the greedy path shares the hour-0
+        convention).  ``capacity_kwh``/``soc_kwh`` use the CURRENT usable
+        capacity ``E_now`` (nameplate while no fade has accrued), so the
+        policy can read the exact SOC fraction as their ratio.  ``pv_w`` /
+        ``load_w`` / the action powers use the same power unit as the load
+        series (kW in this codebase) despite the protocol's ``_w`` names.
+        """
+        n = len(pv_power)
+        b = self.battery
+        dt = 1.0  # hourly dispatch, identical to the greedy call sites (T2).
+        hours = np.asarray(weather.get("hour", np.zeros(n)), dtype=int)
+        months = np.asarray(weather.get("month", np.ones(n, dtype=int)), dtype=int)
+
+        # Protocol reset hook: object policies may expose
+        # reset(timesteps, capacity_kwh); it runs once, before the first
+        # observation.  Plain functions simply skip this.
+        reset = getattr(dispatch_policy, "reset", None)
+        if callable(reset):
+            reset(n, E_bat)
+
+        power_balance = pv_power - load
+        battery_power = np.zeros(n)  # signed: + discharge, - charge
+        battery_discharge = np.zeros(n)  # kW delivered to load
+        battery_charge = np.zeros(n)  # kW into battery
+        grid_charged = np.zeros(n)  # kW of the charge bought from the grid
+        battery_soc = np.zeros(n)
+        soc = 0.5  # soc0 default of calculate_battery_flows (the greedy call).
+        total_charged = 0.0
+        total_discharged = 0.0
+        # P2-4/G11 aging state -- identical formulas to battery.py.
+        soh_k = (1.0 - b.soh_eol) / max(int(b.cycle_life), 1)
+        cycles_now = 0.0
+        E_now = E_bat
+        k_cal = b.calendar_sqrt_coeff()
+
+        for i in range(n):
+            net = power_balance[i]
+            soc *= 1.0 - b.self_discharge * dt
+            if E_bat <= 0:
+                # No battery to dispatch: mirror battery.py (soc row zeroed,
+                # step skipped).  The policy is deliberately not invoked --
+                # there is no dispatch decision to make.
+                battery_soc[i] = 0.0
+                continue
+            # G10: effective terminal power cap (same expression as
+            # battery.py).
+            if b.power_kw is None:
+                p_crate_cap = b.c_rate * E_now
+            else:
+                p_crate_cap = min(b.c_rate * E_now, b.power_kw)
+            p_charge_max = min(p_crate_cap, (b.soc_max - soc) * E_now / dt)
+            p_discharge_max = min(p_crate_cap, (soc - b.soc_min) * E_now / dt) * b.eta_dis
+
+            obs = {
+                "t": i,
+                "hour": int(hours[i]),
+                "month": int(months[i]),
+                "price": self.tariff.price_for_hour(int(hours[i])),
+                "pv_w": float(pv_power[i]),
+                "load_w": float(load[i]),
+                "soc_kwh": float(soc * E_now),
+                "capacity_kwh": float(E_now),
+                "dt_h": dt,
+            }
+            action = dispatch_policy(obs)
+            try:
+                charge_req, discharge_req = action
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "dispatch_policy must return a (charge_w, discharge_w) "
+                    f"pair of two numbers, got {action!r}"
+                )
+            charge_req = float(charge_req)
+            discharge_req = float(discharge_req)
+            if charge_req > 0.0 and discharge_req > 0.0:
+                raise ValueError(
+                    "dispatch_policy contract violation: charge_w and "
+                    f"discharge_w are both positive at t={i} "
+                    f"({charge_req!r}, {discharge_req!r}); the battery cannot "
+                    "charge and discharge in the same timestep."
+                )
+            if charge_req < 0.0 or discharge_req < 0.0:
+                raise ValueError(
+                    "dispatch_policy contract violation: power requests must "
+                    f"be non-negative, got ({charge_req!r}, {discharge_req!r}) "
+                    f"at t={i}."
+                )
+
+            surplus = max(0.0, net)
+            deficit = max(0.0, -net)
+            # Charge: clamped by the terminal limits ONLY (grid charging is
+            # allowed -- the deliberate difference from greedy, which would
+            # also clamp to the PV surplus).  Discharge: clamped to the load
+            # deficit and the terminal limits (the greedy boundary -- the
+            # battery serves load only, it never dumps into exports).
+            ch = min(charge_req, max(0.0, p_charge_max))
+            dch = min(discharge_req, deficit, max(0.0, p_discharge_max))
+            if ch > 0.0:
+                soc += ch * b.eta_ch * dt / E_now
+                battery_charge[i] = ch
+                battery_power[i] = -ch
+                total_charged += ch * dt
+                # Split the charge at the PV surplus first; the remainder is
+                # bought from the grid and lands in grid_import downstream
+                # (same accounting the P1-2 valley charging uses).
+                grid_charged[i] = ch - min(ch, surplus)
+            if dch > 0.0:
+                soc -= dch * dt / (b.eta_dis * E_now)
+                battery_discharge[i] = dch
+                battery_power[i] = dch
+                total_discharged += dch * dt
+            soc = min(b.soc_max, max(b.soc_min, soc))
+            battery_soc[i] = soc
+
+            # P2-4/G11: age the cell exactly like battery.py (nameplate EFC
+            # throughput, then linear cycle fade plus the optional calendar
+            # term), so a policy-driven schedule ages identically to a greedy
+            # one with the same power flows.
+            cycles_now += (
+                (battery_charge[i] * b.eta_ch + battery_discharge[i] / max(b.eta_dis, 0.01))
+                * dt
+                / (2.0 * E_bat)
+            )
+            fade = soh_k * cycles_now
+            if k_cal > 0.0:
+                fade += k_cal * math.sqrt((i + 1) * dt / CALENDAR_MONTH_HOURS)
+            E_now = E_bat * max(1.0 - fade, 1e-3)
+
+        # P4-18: year-end periodic reconciliation, verbatim battery.py logic
+        # (restore soc0, report the grid energy that must cross the
+        # interface so the annual balance closes exactly).
+        soc_end = float(soc)
+        soc_target = min(b.soc_max, max(b.soc_min, 0.5))
+        recon_grid_kwh = 0.0
+        if E_bat > 0 and n > 0:
+            need_stored = E_now * (soc_target - soc_end)
+            if need_stored > 0.0:
+                recon_grid_kwh = need_stored / b.eta_ch  # grid top-up (import)
+                total_charged += recon_grid_kwh
+            elif need_stored < 0.0:
+                recon_grid_kwh = -(-need_stored) * b.eta_dis  # dump (export)
+                total_discharged += -recon_grid_kwh
+            battery_soc[-1] = soc_target
+        return {
+            "battery_power": battery_power,
+            "battery_discharge": battery_discharge,
+            "battery_charge": battery_charge,
+            "battery_soc": battery_soc,
+            "grid_charged": grid_charged,
+            "total_charged": total_charged,
+            "total_discharged": total_discharged,
+            "battery_cycles": (
+                total_charged * b.eta_ch + total_discharged / max(b.eta_dis, 0.01)
+            )
+            / (2.0 * E_bat)
+            if E_bat > 0
+            else 0.0,
+            "soc_end": soc_end,
+            "recon_grid_kwh": recon_grid_kwh,
+        }
+
     # ---- metrics --------------------------------------------------------
     def calculate_metrics(
         self,
@@ -154,11 +389,20 @@ class EnergySystem:
         dt: float = 1.0,
         year: int = 0,
         pv_power_override: Optional[np.ndarray] = None,
+        dispatch_policy: Optional[Callable[[Dict], Tuple[float, float]]] = None,
     ) -> Dict[str, float]:
+        """Full metric set; ``dispatch_policy`` passes through to
+        ``simulate_performance`` (T5 hook, same protocol and default
+        ``None`` = bit-identical greedy path)."""
         A_pv, E_bat = float(x[0]), float(x[1])
         load = np.asarray(load, dtype=float)
         perf = self.simulate_performance(
-            x, weather, load, year=year, pv_power_override=pv_power_override
+            x,
+            weather,
+            load,
+            year=year,
+            pv_power_override=pv_power_override,
+            dispatch_policy=dispatch_policy,
         )
         hours = np.asarray(weather.get("hour", np.zeros(len(load))), dtype=int)
 

@@ -5,6 +5,11 @@ zero-drift sha256 oracle gates any accidental FP reordering. All state
 enters as keyword-only arguments under their original local names;
 buffers and accumulator arrays/lists mutate in place; final scalar
 states come back in :class:`LoopState`.
+
+T1 (nested-time v2): weather enters via the ``weather_series`` ZOH
+lookup, sampled at each substep start ``t = h*3600 + s*dt``; the legacy
+``T_ext[h]``/``RH_ext[h]``/``GHI[h]`` array indexing was replaced
+value-identically (hourly rows resolve to row ``h`` — zero drift).
 """
 
 from dataclasses import dataclass
@@ -15,6 +20,10 @@ from ..plants.van_henten_3state import VanHenten3State
 
 # module-level helpers/constants stay in engine.py (frozen surface)
 from .engine import _FULL_LOAD_HOURLY_FRAC, _limit_removal_by_inventory
+
+# C1 (control protocol): pure-leaf protocol types; no engine import
+# cycle because control.py imports nothing from vfed.
+from .control import Observation, PolicyContext, ZoneAction, merge
 
 
 @dataclass
@@ -38,17 +47,14 @@ def run_hourly_loop(
     *,
     CO2_z_out,
     E_co2_Wh,
-    GHI,
     P_atm,
     P_deh,
     P_hvac,
     P_led,
     P_misc,
-    RH_ext,
     RH_z,
     RH_z_out,
     S_co2_inj_out,
-    T_ext,
     T_m_out,
     T_s_out,
     T_sol_air_arr,
@@ -119,7 +125,51 @@ def run_hourly_loop(
     transp,
     typical_count,
     typical_load_sum,
+    weather_series,
+    policy=None,
+    control_steps=1,
+    zone_id="main",
 ) -> LoopState:
+    # C1 (control protocol): seat setup.  The integer ledger counts
+    # substeps as N = h*sub + s (recomputed, never accumulated), so the
+    # modulo tests below cannot drift.  Every validation here is
+    # load-time fail-fast and only runs when a policy is attached; the
+    # legacy path (policy=None) keeps zone_eff at None and every
+    # consumption guard short-circuits on it without touching a float.
+    zone_eff = None
+    daily_plan = {}
+    if policy is not None:
+        if not isinstance(control_steps, int) or isinstance(control_steps, bool) or control_steps < 1:
+            raise ValueError(
+                f"control_steps must be an int >= 1, got {control_steps!r}."
+            )
+        steps_per_day = int(86400 // dt)
+        if steps_per_day != sub * 24:
+            raise ValueError(
+                f"Day grid {steps_per_day} steps/day does not match the hour "
+                f"grid sub*24 = {sub * 24}; dt={dt}s must divide both 3600s "
+                f"and 86400s so day boundaries align with control ticks."
+            )
+        if p.tariff.hourly_prices is None or len(p.tariff.hourly_prices) != 24:
+            raise ValueError(
+                "policy.tick needs p.tariff.hourly_prices as 24 hourly "
+                "values; build the project with DesignProject.from_dict "
+                "(or presets) so the tariff is materialized."
+            )
+        ctx = PolicyContext(
+            dt=dt,
+            control_period_s=control_steps * dt,
+            zone_id=zone_id,
+            light_start_hour=p.led.light_start_hour,
+            photoperiod_hours=p.led.photoperiod_hours,
+            T_light=p.setpoints.T_light,
+            T_dark=p.setpoints.T_dark,
+            RH=p.setpoints.RH,
+            hourly_prices=list(p.tariff.hourly_prices),
+        )
+        policy.reset(ctx)
+        zone_eff = ZoneAction()
+
     for h in range(n):
         energy_wh = 0.0
 
@@ -170,9 +220,60 @@ def run_hourly_loop(
         is_light_h = led.is_light(hours[h])
 
         for s in range(sub):
+            # T1 (nested-time v2): weather sampled at the substep start on
+            # the idealized hour window t = h*3600 + s*dt, so hourly rows
+            # always resolve to row h even for a non-integral dt; ZOH
+            # staircase lookup, never interpolated.
+            T_ext_s, RH_ext_s, GHI_s = weather_series.sample(h * 3600 + s * dt)
+
             Q_LED, P_led_s = led.step(hours[h])
 
+            # TODO(C2b): zone_eff.led_on / zone_eff.led_dim will be
+            # consumed here (LED on/off and dimming override) once the
+            # device parameter hooks land with C2a/C2b.
+
+            # C1 (control protocol): integer ledger N = h*sub + s counts
+            # substeps from the simulation start.  Control ticks and day
+            # boundaries are integer modulo tests on N, so no float time
+            # accumulator exists.  plan_daily fires BEFORE the first step
+            # of each day; at N=0 both fire and the plan is built first.
+            if policy is not None:
+                N = h * sub + s
+                if N % steps_per_day == 0 or N % control_steps == 0:
+                    obs = Observation(
+                        t_s=int(round(h * 3600 + s * dt)),
+                        hour=hour_of_day,
+                        day_of_year=N // steps_per_day + 1,
+                        month=int(months[h]),
+                        price=p.tariff.hourly_prices[hour_of_day],
+                        is_light=is_light_h,
+                        T_z=T_z,
+                        RH_z=RH_z,
+                        W_z=W_z,
+                        X_d=X_d,
+                        cycle_h=cycle_h,
+                        c_z=c_z,
+                        pv_w=None,
+                    )
+                    if N % steps_per_day == 0:
+                        plan = policy.plan_daily(obs)
+                        daily_plan = plan if plan is not None else {}
+                    if N % control_steps == 0:
+                        ctrl = policy.step(obs)
+                        if ctrl is None:
+                            raise TypeError(
+                                f"policy.step returned None at t_s={obs.t_s}s; "
+                                "return a ControlAction (an all-None action "
+                                "keeps the legacy path)."
+                            )
+                        zone_eff = merge(ctrl.zones.get(zone_id), daily_plan, hour_of_day)
+
             T_sp = p.setpoints.T_light if is_light_h else p.setpoints.T_dark
+
+            # C1: the step/daily action overrides the cooling setpoint
+            # when set; None keeps the legacy ternary above untouched.
+            if zone_eff is not None and zone_eff.T_sp is not None:
+                T_sp = zone_eff.T_sp
 
             # R34/H3: outdoor humidity ratio, hoisted above the HVAC
 
@@ -180,19 +281,37 @@ def run_hourly_loop(
 
             # value-identical) for the on_demand defrost factors.
 
-            W_ext = temp_rh_to_ah(T_ext[h], RH_ext[h], pressure_kpa=P_atm)
+            W_ext = temp_rh_to_ah(T_ext_s, RH_ext_s, pressure_kpa=P_atm)
+
+            # C1: heat setpoint hoisted to a local so the policy can
+            # override it; the hoist is a value-identical attribute read.
+            # TODO(C2b): zone_eff.hvac_m (HVAC modulation command) will be
+            # consumed at the hvac.step call once device mode params land.
+            T_heat_sp = p.setpoints.T_dark
+            if zone_eff is not None and zone_eff.T_heat_sp is not None:
+                T_heat_sp = zone_eff.T_heat_sp
 
             hv = hvac.step(
                 T_z,
                 RH_z,
-                T_ext[h],
+                T_ext_s,
                 dt,
                 T_setpoint=T_sp,
-                T_heat_setpoint=p.setpoints.T_dark,
+                T_heat_setpoint=T_heat_sp,
                 W_ext=W_ext,
             )
 
-            dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=p.setpoints.RH, is_light=is_light_h)
+            # C1: one RH_sp local feeds BOTH the dehumidifier setpoint
+            # here and the W_setpoint_kgs humidity-ratio conversion below
+            # (A7 consistency: a single source for the whole substep).
+            # TODO(C2b): zone_eff.deh_m (dehumidifier modulation command)
+            # will be consumed at the deh.step call once device mode
+            # params land.
+            RH_sp = p.setpoints.RH
+            if zone_eff is not None and zone_eff.RH_sp is not None:
+                RH_sp = zone_eff.RH_sp
+
+            dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=RH_sp, is_light=is_light_h)
 
             # P0-4 full-load observation (read-only on device outputs).
 
@@ -277,8 +396,12 @@ def run_hourly_loop(
             # (mirror of _limit_removal_by_inventory); step_co2's Γ
 
             # floor then reports any residual clamp, never silently.
-
             if co2_on:
+
+                # TODO(C2b): zone_eff.co2_sp (ppm setpoint override) will
+
+                # be consumed here once the CO2 device hook lands.
+
                 phi_c, resp_c = grow.fluxes(T_z, light_wm2, X_d)
 
                 inj = co2_dev.step(mixing_ratio_to_ppm(c_z), dt, co2_sp_ppm, is_light_h)
@@ -342,19 +465,19 @@ def run_hourly_loop(
 
                 f_m = env.solar_mass_fraction
 
-                q_sol_full = env.eta_solar * env.A_window * GHI[h]
+                q_sol_full = env.eta_solar * env.A_window * GHI_s
 
                 T_rc = env.step_mass(
-                    T_ext[h],
+                    T_ext_s,
                     T_z,
                     dt,
                     Q_source_w=f_m * q_sol_full if f_m > 0.0 else 0.0,
-                    I_ext_wm2=GHI[h],
+                    I_ext_wm2=GHI_s,
                 )
 
                 Q_solar = (1.0 - f_m) * q_sol_full
 
-                Q_wall = env.Q_wall(T_ext[h], T_z, T_rc)
+                Q_wall = env.Q_wall(T_ext_s, T_z, T_rc)
 
                 tm_sum += env.T_m
 
@@ -396,30 +519,30 @@ def run_hourly_loop(
 
                     # step-3 rc path.
 
-                    q_sol_full = env.eta_solar * env.A_window * GHI[h]
+                    q_sol_full = env.eta_solar * env.A_window * GHI_s
 
-                    T_rc = env.step_mass(T_ext[h], T_z, dt, Q_source_w=f_m * q_sol_full)
+                    T_rc = env.step_mass(T_ext_s, T_z, dt, Q_source_w=f_m * q_sol_full)
 
                     Q_solar = (1.0 - f_m) * q_sol_full
 
                 else:
-                    T_rc = env.step_mass(T_ext[h], T_z, dt)
+                    T_rc = env.step_mass(T_ext_s, T_z, dt)
 
-                    Q_solar = env.Q_solar(GHI[h])
+                    Q_solar = env.Q_solar(GHI_s)
 
                 tm_sum += env.T_m
 
                 if env.rc3_enabled:
                     ts_sum += env.T_s
 
-                Q_wall = env.Q_wall(T_ext[h], T_z, T_rc)
+                Q_wall = env.Q_wall(T_ext_s, T_z, T_rc)
 
             else:
-                Q_wall = env.Q_wall(T_ext[h], T_z)
+                Q_wall = env.Q_wall(T_ext_s, T_z)
 
-                Q_solar = env.Q_solar(GHI[h])
+                Q_solar = env.Q_solar(GHI_s)
 
-            Q_inf, M_inf, Q_lat_inf = env.infiltration(T_ext[h], T_z, W_ext, W_z)
+            Q_inf, M_inf, Q_lat_inf = env.infiltration(T_ext_s, T_z, W_ext, W_z)
 
             M_perm = env.envelope_moisture(W_ext, W_z)
 
@@ -447,11 +570,18 @@ def run_hourly_loop(
 
             P_erv_fan_s = 0.0
 
-            econ_active = econ_on and hv["mode"] == "cool" and T_ext[h] <= T_z - econ_dt_k
+            econ_active = econ_on and hv["mode"] == "cool" and T_ext_s <= T_z - econ_dt_k
+
+            # C1: econ_override — None keeps the legacy criterion above;
+            # True forces the economizer on whenever the hardware is
+            # enabled (bypassing the cool-mode and temperature gates);
+            # False forces it off.
+            if zone_eff is not None and zone_eff.econ_override is not None:
+                econ_active = econ_on if zone_eff.econ_override else False
 
             if econ_active:
                 Q_erv, M_erv, Q_lat_erv = env.economizer_ventilation(
-                    T_ext[h], T_z, W_ext, W_z, econ_flow
+                    T_ext_s, T_z, W_ext, W_z, econ_flow
                 )
 
                 if Q_erv < 0.0:
@@ -469,7 +599,11 @@ def run_hourly_loop(
                     Q_lat_erv,
                     _q_rec_s,
                     _q_rec_l,
-                ) = env.mechanical_ventilation(T_ext[h], T_z, W_ext, W_z)
+                ) = env.mechanical_ventilation(T_ext_s, T_z, W_ext, W_z)
+
+                # TODO(C2b): zone_eff.erv_flow_m3h will override
+                # env.erv_flow_m3h here once the ERV flow parameter hook
+                # lands with the device-mode work.
 
                 erv_rec_sens_j += abs(_q_rec_s) * dt
 
@@ -516,7 +650,7 @@ def run_hourly_loop(
                 M_inf_kgs=M_inf,
                 M_perm_kgs=M_perm,
                 M_erv_kgs=M_erv,
-                W_setpoint_kgs=temp_rh_to_ah(T_z, p.setpoints.RH, pressure_kpa=P_atm),
+                W_setpoint_kgs=temp_rh_to_ah(T_z, RH_sp, pressure_kpa=P_atm),
             )
 
             # Heat-balance correction: dh["Q_DH_W"] carries the nominal

@@ -905,6 +905,7 @@ def build_report(
                 perf["grid_export"],
                 hours,
                 months=months,
+                dt=1.0,  # T2 (B8-2): hourly arrays, cadence stated at the call
             )
 
             net_grid_cost = tcost["net_grid_cost"]
@@ -1080,7 +1081,9 @@ def build_report(
 
         # grid_import == load, grid_export == 0 (no PV, no battery)
 
-        tcost = tariff.annual_cost(load_kw, np.zeros_like(load_kw), hours, months=months)
+        tcost = tariff.annual_cost(
+            load_kw, np.zeros_like(load_kw), hours, months=months, dt=1.0
+        )  # T2 (B8-2): hourly arrays, cadence stated at the call
 
         net_grid_cost = tcost["net_grid_cost"]
 

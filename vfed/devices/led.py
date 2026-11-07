@@ -121,9 +121,21 @@ class LEDDevice:
             # wrap-around (end has cycled past midnight)
             return h >= self.light_start_hour or h < end
 
-    def step(self, hour: float) -> Tuple[float, float]:
-        """Return (Q_LED_W, P_elec_W) for the given hour-of-day."""
+    def step(self, hour: float, dim: Optional[float] = None) -> Tuple[float, float]:
+        """Return (Q_LED_W, P_elec_W) for the given hour-of-day.
+
+        ``dim`` is the C2 runtime dimming override (wired into the hourly
+        loop by C2b): ``None`` means full power (the legacy bit-for-bit
+        path), while a non-None value is clamped to [0, 1] and scales both
+        the emitted heat and the electrical draw.  The ``par_wm2`` /
+        ``canopy_par_wm2`` properties still derive from ``power_w`` alone,
+        so keeping runtime dimming consistent with the PAR attributes is
+        the loop layer's responsibility (C2b wiring), not this method's.
+        """
         if self.is_light(hour):
-            p = self.power_w
+            if dim is None:
+                p = self.power_w
+            else:
+                p = self.power_w * min(max(dim, 0.0), 1.0)
             return self.heat_fraction * p, p
         return 0.0, 0.0

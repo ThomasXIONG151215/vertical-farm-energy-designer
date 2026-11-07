@@ -416,6 +416,15 @@ class DEHDevice:
         dt: float = 60.0,
         deh_setpoint: float = 60.0,
         is_light: bool = True,
+        m_override: Optional[float] = None,
+        #   C2 runtime modulation override (wired into the hourly loop by
+        #   C2b): None = legacy path; a non-None value is clamped to [0, 1]
+        #   and REPLACES the CompressorState output m.  The hysteresis /
+        #   min_on / min_off state machine still runs first (override never
+        #   bypasses protection).  On the stock (vfd / on_off) paths the
+        #   override propagates to S_DH and hence to power and moisture; in
+        #   the identified ``setpoint_modulation`` mode S_DH keeps coming
+        #   from the measured table and the override only gates ON/OFF.
     ) -> Dict[str, float]:
         """Advance one timestep.
 
@@ -468,6 +477,10 @@ class DEHDevice:
         mod = self.comp.update(
             RH_z - deh_setpoint, dt, on_threshold=0.0, off_threshold=-self.comp.deadband
         )
+        # C2: apply the runtime modulation override AFTER the state machine
+        # so hysteresis / min_on / min_off protection always runs first.
+        if m_override is not None:
+            mod = min(max(m_override, 0.0), 1.0)
 
         Q_sens_target, M_target, P_elec = 0.0, 0.0, 0.0
         s_dh = 0.0
