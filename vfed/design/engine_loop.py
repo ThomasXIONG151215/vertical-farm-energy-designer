@@ -226,17 +226,16 @@ def run_hourly_loop(
             # staircase lookup, never interpolated.
             T_ext_s, RH_ext_s, GHI_s = weather_series.sample(h * 3600 + s * dt)
 
-            Q_LED, P_led_s = led.step(hours[h])
-
-            # TODO(C2b): zone_eff.led_on / zone_eff.led_dim will be
-            # consumed here (LED on/off and dimming override) once the
-            # device parameter hooks land with C2a/C2b.
-
             # C1 (control protocol): integer ledger N = h*sub + s counts
             # substeps from the simulation start.  Control ticks and day
             # boundaries are integer modulo tests on N, so no float time
             # accumulator exists.  plan_daily fires BEFORE the first step
             # of each day; at N=0 both fire and the plan is built first.
+            # C2b: the tick runs BEFORE the device steps below so a
+            # command issued at a substep takes effect at that substep.
+            # policy=None skips the block entirely (zero drift); the
+            # observation carries the CLOCK light state is_light_h, not
+            # the commanded one.
             if policy is not None:
                 N = h * sub + s
                 if N % steps_per_day == 0 or N % control_steps == 0:
@@ -268,10 +267,37 @@ def run_hourly_loop(
                             )
                         zone_eff = merge(ctrl.zones.get(zone_id), daily_plan, hour_of_day)
 
-            T_sp = p.setpoints.T_light if is_light_h else p.setpoints.T_dark
+            # C2b: LED on/off + dimming commands.  led_on None follows the
+            # clock (is_light_h); True/False force light/dark for THIS
+            # substep and drive every downstream is_light consumer via
+            # light_now (setpoints, DEH, transpiration, CO2 lockout).
+            # led_dim is clamped once here so the PAR scaling below uses
+            # the same ratio the device applies (device clamp is
+            # idempotent); None disables dimming (bit-identical).
+            _led_dim_cmd = zone_eff.led_dim if zone_eff is not None else None
+            dim_eff = None if _led_dim_cmd is None else min(max(_led_dim_cmd, 0.0), 1.0)
+            _led_on_cmd = zone_eff.led_on if zone_eff is not None else None
+            light_now = is_light_h if _led_on_cmd is None else bool(_led_on_cmd)
 
-            # C1: the step/daily action overrides the cooling setpoint
-            # when set; None keeps the legacy ternary above untouched.
+            if light_now:
+                if is_light_h:
+                    # clock light: the device applies dim identically;
+                    # dim=None keeps the legacy call bit-identical.
+                    Q_LED, P_led_s = led.step(hours[h], dim=dim_eff)
+                else:
+                    # forced light during clock dark: led.step would gate
+                    # the fixture off by clock, so the loop replicates the
+                    # device light branch (same formulas, same order).
+                    _p_led_eff = led.power_w if dim_eff is None else led.power_w * dim_eff
+                    Q_LED, P_led_s = led.heat_fraction * _p_led_eff, _p_led_eff
+            else:
+                # clock dark or forced off: matches led.step's dark return.
+                Q_LED, P_led_s = 0.0, 0.0
+
+            # C2b: the dual setpoint follows light_now (clock, or forced
+            # via led_on).  C1: the step/daily action overrides the
+            # cooling setpoint when set; None keeps the ternary untouched.
+            T_sp = p.setpoints.T_light if light_now else p.setpoints.T_dark
             if zone_eff is not None and zone_eff.T_sp is not None:
                 T_sp = zone_eff.T_sp
 
@@ -285,12 +311,19 @@ def run_hourly_loop(
 
             # C1: heat setpoint hoisted to a local so the policy can
             # override it; the hoist is a value-identical attribute read.
-            # TODO(C2b): zone_eff.hvac_m (HVAC modulation command) will be
-            # consumed at the hvac.step call once device mode params land.
+            # C2b: setpoints.T_heat (project config) narrows the heating
+            # setpoint independently of T_dark; None (default) inherits
+            # T_dark bit-identically.  Precedence: policy T_heat_sp >
+            # config T_heat > T_dark.
             T_heat_sp = p.setpoints.T_dark
+            if p.setpoints.T_heat is not None:
+                T_heat_sp = p.setpoints.T_heat
             if zone_eff is not None and zone_eff.T_heat_sp is not None:
                 T_heat_sp = zone_eff.T_heat_sp
 
+            # C2b: hvac_m replaces the compressor modulation AFTER the
+            # state machine (hysteresis/min_on/min_off still apply); None
+            # keeps the legacy self-modulated path.
             hv = hvac.step(
                 T_z,
                 RH_z,
@@ -299,19 +332,32 @@ def run_hourly_loop(
                 T_setpoint=T_sp,
                 T_heat_setpoint=T_heat_sp,
                 W_ext=W_ext,
+                m_override=(zone_eff.hvac_m if zone_eff is not None else None),
             )
 
             # C1: one RH_sp local feeds BOTH the dehumidifier setpoint
             # here and the W_setpoint_kgs humidity-ratio conversion below
             # (A7 consistency: a single source for the whole substep).
-            # TODO(C2b): zone_eff.deh_m (dehumidifier modulation command)
-            # will be consumed at the deh.step call once device mode
-            # params land.
+            # C2b: setpoints.RH_dark (project config) narrows the dark
+            # period only (light_now False); None (default) inherits RH
+            # bit-identically.  Precedence: policy RH_sp > config RH_dark
+            # (dark only) > RH.  deh_m replaces the DEH modulation after
+            # the state machine; None keeps the legacy path.
             RH_sp = p.setpoints.RH
+            if not light_now and p.setpoints.RH_dark is not None:
+                RH_sp = p.setpoints.RH_dark
             if zone_eff is not None and zone_eff.RH_sp is not None:
                 RH_sp = zone_eff.RH_sp
 
-            dh = deh.step(T_z, RH_z, W_z, dt, deh_setpoint=RH_sp, is_light=is_light_h)
+            dh = deh.step(
+                T_z,
+                RH_z,
+                W_z,
+                dt,
+                deh_setpoint=RH_sp,
+                is_light=light_now,
+                m_override=(zone_eff.deh_m if zone_eff is not None else None),
+            )
 
             # P0-4 full-load observation (read-only on device outputs).
 
@@ -334,12 +380,24 @@ def run_hourly_loop(
 
             # else the legacy power-derived par_wm2 (bit-identical).
 
-            light_wm2 = led.canopy_par_wm2 if is_light_h else 0.0
+            # C2b: PAR follows light_now (clock or forced led_on) and is
+
+            # scaled by the SAME dim ratio the device applied to power --
+
+            # led.canopy_par_wm2 is a power_w-derived constant and is NOT
+
+            # dimmed internally, so the loop owns dim consistency.  dim
+
+            # None keeps the legacy value bit-identical.
+
+            light_wm2 = led.canopy_par_wm2 if light_now else 0.0
+            if dim_eff is not None and light_wm2 > 0.0:
+                light_wm2 *= dim_eff
 
             E_trans = transp.step(
                 T_z,
                 RH_z,
-                is_light_h,
+                light_now,
                 dt,
                 X_d=X_d,
                 light_wm2=light_wm2,
@@ -398,13 +456,21 @@ def run_hourly_loop(
             # floor then reports any residual clamp, never silently.
             if co2_on:
 
-                # TODO(C2b): zone_eff.co2_sp (ppm setpoint override) will
+                # C2b: co2_sp (policy, ppm) replaces the config-resolved
 
-                # be consumed here once the CO2 device hook lands.
+                # co2_sp_ppm for this substep; None inherits the config
+
+                # chain.  The injector dark lockout follows light_now
+
+                # (forced light unlocks injection, forced off locks it).
+
+                co2_sp_eff = co2_sp_ppm
+                if zone_eff is not None and zone_eff.co2_sp is not None:
+                    co2_sp_eff = zone_eff.co2_sp
 
                 phi_c, resp_c = grow.fluxes(T_z, light_wm2, X_d)
 
-                inj = co2_dev.step(mixing_ratio_to_ppm(c_z), dt, co2_sp_ppm, is_light_h)
+                inj = co2_dev.step(mixing_ratio_to_ppm(c_z), dt, co2_sp_eff, light_now)
 
                 S_inj_co2 = inj["S_inj_kgs"]
 
@@ -593,24 +659,35 @@ def run_hourly_loop(
                     P_erv_fan_s = erv_fan_w * (econ_flow / erv_fan_ref_flow)
 
             elif erv_on:
+                # C2b: erv_flow_m3h (policy) overrides the core airflow,
+                # clamped to [0, design] by the envelope; None keeps the
+                # design flow.  Fan power tracks the effective flow
+                # proportionally while an override is active (economizer
+                # pattern); the no-override path stays bit-identical.
+                _erv_flow_ov = zone_eff.erv_flow_m3h if zone_eff is not None else None
                 (
                     Q_erv,
                     M_erv,
                     Q_lat_erv,
                     _q_rec_s,
                     _q_rec_l,
-                ) = env.mechanical_ventilation(T_ext_s, T_z, W_ext, W_z)
-
-                # TODO(C2b): zone_eff.erv_flow_m3h will override
-                # env.erv_flow_m3h here once the ERV flow parameter hook
-                # lands with the device-mode work.
+                ) = env.mechanical_ventilation(
+                    T_ext_s, T_z, W_ext, W_z, flow_override_m3h=_erv_flow_ov
+                )
 
                 erv_rec_sens_j += abs(_q_rec_s) * dt
 
                 erv_rec_lat_j += abs(_q_rec_l) * dt
 
-                if erv_fan_w > 0.0 and env.erv_flow_m3h > 0.0:
-                    P_erv_fan_s = erv_fan_w
+                if _erv_flow_ov is None:
+                    _flow_eff = env.erv_flow_m3h
+                else:
+                    _flow_eff = min(max(_erv_flow_ov, 0.0), env.erv_flow_m3h)
+                if erv_fan_w > 0.0 and _flow_eff > 0.0:
+                    if _erv_flow_ov is None:
+                        P_erv_fan_s = erv_fan_w
+                    else:
+                        P_erv_fan_s = erv_fan_w * (_flow_eff / erv_fan_ref_flow)
 
             # Transpiration evaporative cooling: water absorbs L_v from
 
