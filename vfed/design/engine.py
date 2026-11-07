@@ -10,7 +10,7 @@ aggregated to hourly load (kW) consumed by the PVBES layer. Device state
 import logging
 import math
 import warnings
-from typing import List, Optional
+from typing import List, Mapping, Optional
 
 import numpy as np
 import pandas as pd
@@ -832,11 +832,341 @@ def _build_devices(p, P_atm: float = 101.325):
     return env, hvac, deh, led, transp, ode, co2_dev
 
 
+def _simulate_zone(
+    zp,
+    *,
+    P_atm,
+    dt,
+    hours,
+    months,
+    n,
+    sub,
+    weather_series,
+    policy=None,
+    control_steps=1,
+    zone_id="main",
+):
+    """Build devices + ZoneState for one zone and run its hourly loop.
+
+    Multi-zone (Z-loop) per-zone driver: a verbatim copy of the setup
+    block in :meth:`DesignEngine.run` (device build -> state init ->
+    ``ZoneState`` -> ``run_hourly_loop``), operating on a per-zone
+    ``DesignProject`` view ``zp`` instead of the shared project.  The
+    single-zone path in ``run()`` stays inline and untouched so its
+    output remains bit-identical (zero-drift gate); keep the two blocks
+    in sync when either changes.
+
+    Auto-sizing writebacks (``hvac.P_rated_w`` / ``P_rated_heat_w``,
+    ``deh.P_ref_w``) land on ``zp`` only, never on the shared project
+    (B8 isolation).  Returns ``(zone_state, loop)`` where ``loop`` is
+    the :class:`~.engine_loop.LoopState` with final scalars.
+    """
+    env, hvac, deh, led, transp, ode, co2_dev = _build_devices(zp, P_atm=P_atm)
+
+    # P0-4 full-load observation thresholds (reporting only): the HVAC
+    # draws its rated electrical input when the VFD sits at m = 1
+    # (cap(1) = eir(1) = 1.0), so a substep is "at rated capacity" when
+    # P_elec >= 99% of rated + fan.  The DEH draw varies with T/W
+    # conditions, so its modulation coefficient (m >= 0.999) is the
+    # full-speed signal instead.
+    hvac_cool_full_w = 0.99 * (hvac.P_rated + hvac.comp.fan_power_w)
+    hvac_heat_full_w = 0.99 * (hvac.P_rated_heat + hvac.comp.fan_power_w)
+
+    # ── plant growth model ─────────────────────────────────────────────
+    # Selected by zp.growth.model: "van_henten" (1-state, default/609
+    # zero-drift) or "van_henten_3state" (3-state, LAI/C_buf states).
+    grow = _build_growth(zp)
+    X_d = zp.growth.initial_dry_weight
+    X_d_init = zp.growth.initial_dry_weight  # reset point after each harvest
+    crop_area = zp.led.covered_area
+    # P4-8 (MINOR): time-based harvest on the full crop_cycle_days (fractional
+    # days allowed) instead of int(round(...)) banker's rounding, which
+    # truncated 30.5 -> 30 and desynced the pre-run from the runtime cycle.
+    harvest_hours = max(24.0, zp.setpoints.crop_cycle_days * 24.0)
+    next_harvest_h = harvest_hours
+    total_harvest_kg = 0.0
+
+    T_z = zp.setpoints.T_light
+    W_z = temp_rh_to_ah(T_z, zp.setpoints.RH, pressure_kpa=P_atm)
+    RH_z = zp.setpoints.RH
+    # ── CO2 concentration state (additive; CO2 supplement M1) ──────
+    # Zero drift: every float below sits behind the co2_on guard; the
+    # disabled default path initialises nothing and never reads these.
+    co2_on = zp.co2.enabled
+    co2_sp_ppm = zp.co2.setpoint_ppm if zp.co2.setpoint_ppm is not None else zp.setpoints.co2_ppm
+    if co2_on:
+        # Initial concentration at the setpoint (avoids a start-up
+        # transient -- same convention as T_z init at T_light), unless
+        # the user pins co2_initial_ppm.
+        c_z = ppm_to_mixing_ratio(
+            zp.co2.co2_initial_ppm if zp.co2.co2_initial_ppm is not None else co2_sp_ppm
+        )
+        c_out = ppm_to_mixing_ratio(zp.envelope.outdoor_co2_ppm)
+        # Gamma (growth CO2 compensation point, kg/m3) in mixing-ratio
+        # form (kg/kg): divide by the configured room air density.
+        co2_gamma = zp.growth.c_Gamma / zp.envelope.rho_air
+        # ach infiltration mass flow (envelope.py:812 same expression);
+        # the ERV fresh-air CO2 channel is an M3 deliverable.
+        m_dot_ach_co2 = zp.envelope.ach * zp.envelope.V_room * zp.envelope.rho_air / 3600.0
+        air_mass_co2 = zp.envelope.V_room * zp.envelope.rho_air
+    # R28: 2R2C wall mass node starts consistent with the air node
+    # (T_m init == T_z init; same warm-up caveat as the air node).
+    # R28 step 3: 2R3C surface node T_s likewise.  R28 step 6: FD-wall
+    # continuum + mass node likewise.
+    if env.rc_enabled or env.fd_enabled:
+        env.reset(T_z)
+        T_m_out = np.zeros(n)
+        if env.rc3_enabled or env.fd_enabled:
+            T_s_out = np.zeros(n)
+        if env.fd_enabled:
+            T_wall_out_arr = np.zeros(n)  # exterior cell (diagnostic)
+            T_sol_air_arr = np.zeros(n)  # sol-air boundary (diagnostic)
+
+    # ── hourly output arrays ───────────────────────────────────────────
+    load_kw = np.zeros(n)
+    T_z_out = np.zeros(n)
+    RH_z_out = np.zeros(n)
+    P_hvac = np.zeros(n)
+    P_deh = np.zeros(n)
+    P_led = np.zeros(n)
+    P_misc = np.zeros(n)
+    X_d_arr = np.zeros(n)
+    # CO2 supplement (M1): additive output columns + accumulators,
+    # allocated ONLY when enabled (T_m/T_s convention: additive columns
+    # must not leak into the default path).
+    if co2_on:
+        CO2_z_out = np.zeros(n)  # ppm, substep mean
+        S_co2_inj_out = np.zeros(n)  # g/h, substep mean
+        E_co2_Wh = np.zeros(n)  # injector electricity, Wh per hour
+        monthly_co2_kg = np.zeros(12)
+        co2_inj_total_kg = 0.0
+        # Γ-floor clamp accounting (ode.step_co2 return_meta): a clamp
+        # is never silently dropped (P0-2 "钳位不静默").
+        co2_clamp_stats = {
+            "floor_clip_events": 0,
+            "floor_clip_co2_kg": 0.0,
+        }
+    # P0-4: hourly "device at rated capacity" flags (reporting layer).
+    hvac_cool_full_h = np.zeros(n, dtype=bool)
+    hvac_heat_full_h = np.zeros(n, dtype=bool)
+    deh_full_h = np.zeros(n, dtype=bool)
+
+    # ── monthly accumulators (12 months) ───────────────────────────────
+    monthly_energy = np.zeros((12, 5))  # cols: total,hvac,deh,led,misc
+    monthly_harvest = np.zeros(12)
+    monthly_t_sum = np.zeros(12)
+    monthly_rh_sum = np.zeros(12)
+    monthly_hours = np.zeros(12)
+    # P1-3a: per-month transpiration water (kg) so monthly.csv can carry
+    # water_m3 (= kg / 1000) and close against summary.annual_water_m3.
+    monthly_water_kg = np.zeros(12)
+    # typical daily: 12 months × 24 hours accumulators
+    typical_load_sum = np.zeros((12, 24))
+    typical_count = np.zeros((12, 24))
+
+    total_water_kg = 0.0
+    # Staged-transpiration cycle clock: hours since the last harvest.
+    # The *_per_period methods map cycle_day=cycle_h/24.0 onto their stage
+    # tables; cycle_h is reset in lockstep with X_d at every harvest so
+    # stage boundaries never drift against the harvest cycle.
+    cycle_h = 0.0
+    # Moisture clamp accounting (P0-2): how often and how much water the
+    # humidity integrator had to clip at the [0, W_sat] bounds.  Exposed in
+    # summary["moisture_clamp_stats"] so over-dehumidification is visible.
+    clamp_stats = {
+        "floor_clip_events": 0,
+        "floor_clip_water_kg": 0.0,
+        "sat_clip_events": 0,
+        "sat_clip_water_kg": 0.0,
+        "temp_clip_events": 0,
+        "temp_clip_deg_c": 0.0,
+    }
+    # Dehumidifier/HVAC performance accounting: nominal (full-capacity)
+    # vs actual moisture removal.  Nominal removal is capped to the room
+    # vapour inventory each sub-step, so `actual` reflects what the device
+    # could physically remove and `deh_utilization` reports how much of
+    # the nominal capacity is actually being used.
+    deh_perf = {
+        "deh_nominal_kg": 0.0,
+        "deh_actual_kg": 0.0,
+        "hvac_nominal_kg": 0.0,
+        "hvac_actual_kg": 0.0,
+        "removal_limited_events": 0,
+        "removal_limited_water_kg": 0.0,
+    }
+    # P1-1: annual DEH COMPRESSOR energy (kWh, fan excluded) for the
+    # effective-SMER report.  Same basis as the rated ``deh.smer`` (P2-5
+    # convention), so effective-vs-rated is an apples-to-apples ratio.
+    deh_comp_kwh = 0.0
+    # P3/B3: hourly light-diagnostic accumulators (canopy-mean PPFD and
+    # LED heat released to the room), plain lists appended once per hour —
+    # additive timeseries columns, no physics impact.
+    ppfd_out: List[float] = []
+    qled_out: List[float] = []
+    # R34/W3-E (H7): ERV recovered-energy meters (J, absolute values;
+    # sensible and latent split).  Zero on the default off path.
+    erv_rec_sens_j = 0.0
+    erv_rec_lat_j = 0.0
+    erv_on = env.erv_enabled
+    # P3-9: dry-bulb economizer + ERV fan power meters.  Zero on both
+    # default-off paths (guarded adds below touch no float otherwise).
+    econ_on = env.economizer_enabled
+    econ_flow = env.economizer_flow_m3h
+    econ_dt_k = env.economizer_delta_t_k
+    erv_fan_w = env.erv_fan_power_w
+    # Reference flow for the fan-power linear scaling (EC motor,
+    # first order): the flow the nameplate W refers to.
+    erv_fan_ref_flow = env.erv_flow_m3h if erv_on else econ_flow
+    econ_free_cool_j = 0.0
+    econ_active_s = 0.0
+    erv_fan_j = 0.0
+    # C5 split (interface-preserving): the hourly loop lives in
+    # .engine_loop.  Lazy import breaks the cycle (engine_loop imports
+    # helpers from this module at top level, which is fully loaded by
+    # the time any zone runs).
+    from .engine_loop import ZoneState, run_hourly_loop
+
+    # Conditionally-created setup buffers (e.g. `if co2_on:`)
+    # are guarded by the same conditions in loop/report, so a
+    # None placeholder is never read - mirrors run() behavior.
+    if "CO2_z_out" not in locals():
+        CO2_z_out = None
+    if "E_co2_Wh" not in locals():
+        E_co2_Wh = None
+    if "S_co2_inj_out" not in locals():
+        S_co2_inj_out = None
+    if "T_m_out" not in locals():
+        T_m_out = None
+    if "T_s_out" not in locals():
+        T_s_out = None
+    if "T_sol_air_arr" not in locals():
+        T_sol_air_arr = None
+    if "T_wall_out_arr" not in locals():
+        T_wall_out_arr = None
+    if "air_mass_co2" not in locals():
+        air_mass_co2 = None
+    if "c_out" not in locals():
+        c_out = None
+    if "c_z" not in locals():
+        c_z = None
+    if "co2_clamp_stats" not in locals():
+        co2_clamp_stats = None
+    if "co2_gamma" not in locals():
+        co2_gamma = None
+    if "co2_inj_total_kg" not in locals():
+        co2_inj_total_kg = None
+    if "m_dot_ach_co2" not in locals():
+        m_dot_ach_co2 = None
+    if "monthly_co2_kg" not in locals():
+        monthly_co2_kg = None
+
+    # ZoneState packaging: the 72 per-zone arguments are bundled into
+    # one ZoneState; the shared building context (time grid, weather
+    # series, dt/sub, P_atm, outdoor CO2, policy seat) stays outside.
+    zone_state = ZoneState(
+        RH_z=RH_z,
+        T_z=T_z,
+        W_z=W_z,
+        X_d=X_d,
+        c_z=c_z,
+        cycle_h=cycle_h,
+        next_harvest_h=next_harvest_h,
+        X_d_init=X_d_init,
+        crop_area=crop_area,
+        harvest_hours=harvest_hours,
+        co2_on=co2_on,
+        co2_sp_ppm=co2_sp_ppm,
+        co2_gamma=co2_gamma,
+        air_mass_co2=air_mass_co2,
+        m_dot_ach_co2=m_dot_ach_co2,
+        hvac_cool_full_w=hvac_cool_full_w,
+        hvac_heat_full_w=hvac_heat_full_w,
+        econ_on=econ_on,
+        econ_dt_k=econ_dt_k,
+        econ_flow=econ_flow,
+        erv_on=erv_on,
+        erv_fan_w=erv_fan_w,
+        erv_fan_ref_flow=erv_fan_ref_flow,
+        env=env,
+        hvac=hvac,
+        deh=deh,
+        led=led,
+        transp=transp,
+        grow=grow,
+        ode=ode,
+        co2_dev=co2_dev,
+        load_kw=load_kw,
+        T_z_out=T_z_out,
+        RH_z_out=RH_z_out,
+        P_hvac=P_hvac,
+        P_deh=P_deh,
+        P_led=P_led,
+        P_misc=P_misc,
+        X_d_arr=X_d_arr,
+        ppfd_out=ppfd_out,
+        qled_out=qled_out,
+        T_m_out=T_m_out,
+        T_s_out=T_s_out,
+        T_wall_out_arr=T_wall_out_arr,
+        T_sol_air_arr=T_sol_air_arr,
+        CO2_z_out=CO2_z_out,
+        S_co2_inj_out=S_co2_inj_out,
+        E_co2_Wh=E_co2_Wh,
+        hvac_cool_full_h=hvac_cool_full_h,
+        hvac_heat_full_h=hvac_heat_full_h,
+        deh_full_h=deh_full_h,
+        monthly_energy=monthly_energy,
+        monthly_harvest=monthly_harvest,
+        monthly_t_sum=monthly_t_sum,
+        monthly_rh_sum=monthly_rh_sum,
+        monthly_hours=monthly_hours,
+        monthly_water_kg=monthly_water_kg,
+        monthly_co2_kg=monthly_co2_kg,
+        typical_load_sum=typical_load_sum,
+        typical_count=typical_count,
+        clamp_stats=clamp_stats,
+        co2_clamp_stats=co2_clamp_stats,
+        deh_perf=deh_perf,
+        total_water_kg=total_water_kg,
+        total_harvest_kg=total_harvest_kg,
+        co2_inj_total_kg=co2_inj_total_kg,
+        deh_comp_kwh=deh_comp_kwh,
+        econ_active_s=econ_active_s,
+        econ_free_cool_j=econ_free_cool_j,
+        erv_fan_j=erv_fan_j,
+        erv_rec_lat_j=erv_rec_lat_j,
+        erv_rec_sens_j=erv_rec_sens_j,
+    )
+    loop = run_hourly_loop(
+        zone_state=zone_state,
+        P_atm=P_atm,
+        c_out=c_out,
+        dt=dt,
+        hours=hours,
+        months=months,
+        n=n,
+        p=zp,
+        sub=sub,
+        weather_series=weather_series,
+        policy=policy,
+        control_steps=control_steps,
+        zone_id=zone_id,
+    )
+    return zone_state, loop
+
+
 class DesignEngine:
     def __init__(self, cache_dir: Optional[str] = "weather_cache"):
         self.cache_dir = cache_dir
 
-    def run(self, project, weather: Optional[pd.DataFrame] = None, policy=None) -> SimulationResult:
+    def run(
+        self,
+        project,
+        weather: Optional[pd.DataFrame] = None,
+        policy=None,
+        policies: Optional[Mapping] = None,
+        interzone=None,
+    ) -> SimulationResult:
         """Run a full-year simulation and return a ``SimulationResult``.
 
         ``policy`` (C1 control protocol) optionally attaches a
@@ -846,6 +1176,19 @@ class DesignEngine:
         and the policy's ``step`` is called every tick, with
         ``plan_daily`` at each day boundary.
 
+        Multi-zone (Z-loop): when ``project.zones`` declares one or more
+        zones, each zone runs its own full-year simulation on its
+        ``zone_view()`` config (no inter-zone heat/mass exchange in v1)
+        and results are aggregated — energy/mass summed in declared zone
+        order, facility climate columns taken from the first-declared
+        zone.  ``policies`` maps zone_id -> BuildingPolicy (its key set
+        must equal the zone ids exactly); the single ``policy`` argument
+        is rejected as ambiguous on the multi-zone path.  ``interzone``
+        exchange parameters are not implemented yet (NotImplementedError).
+        A project without ``zones`` takes the single-zone path, whose
+        output is bit-identical to the pre-multi-zone build (zero-drift
+        gate).
+
         SIDE EFFECT (P4-9): when auto-sizing is enabled (``deh.auto_size`` or
         ``hvac`` default sizing), this method writes the resulting nameplates
         back onto the caller's ``project`` object (``hvac.P_rated_w`` /
@@ -853,9 +1196,38 @@ class DesignEngine:
         reads the sized capacities for CAPEX.  The same values are also exposed
         on ``result.sizing`` (``hvac_P_rated_w`` / ``hvac_P_rated_heat_w`` /
         ``deh_P_ref_w`` / ``deh_M_design_kgs``).  Callers needing pure-function
-        semantics should pass ``copy.deepcopy(project)``.
+        semantics should pass ``copy.deepcopy(project)``.  On the multi-zone
+        path auto-size writebacks land on the per-zone view objects only;
+        the shared project is never mutated (B8 isolation).
         """
         p = project
+        if interzone is not None:
+            raise NotImplementedError(
+                "interzone exchange arrives in a later wave"
+            )
+        zones_cfg = getattr(p, "zones", None) or {}
+        _multi_zone = bool(zones_cfg)
+        if _multi_zone:
+            if policy is not None:
+                raise ValueError(
+                    "ambiguous policy seat on a multi-zone project: pass "
+                    "policies={zone_id: BuildingPolicy} instead of policy"
+                )
+            if policies is not None:
+                missing = sorted(set(zones_cfg) - set(policies))
+                extra = sorted(set(policies) - set(zones_cfg))
+                if missing or extra:
+                    raise ValueError(
+                        f"policies keys must equal zone ids exactly: "
+                        f"zones={sorted(zones_cfg)}, "
+                        f"policies={sorted(policies)} "
+                        f"(missing={missing}, unknown={extra})"
+                    )
+        elif policies is not None:
+            raise ValueError(
+                "policies requires a multi-zone project (declare zones) — "
+                "use policy= for the single-zone path"
+            )
         if weather is None:
             weather = fetch_weather(
                 p.site.lat,
@@ -943,6 +1315,29 @@ class DesignEngine:
                 f"values at indices {idx[:5].tolist()}..."
             )
         P_atm = float(np.mean(surface_pressure)) / 10.0  # hPa → kPa
+
+        if _multi_zone:
+            return self._run_multizone(
+                p=p,
+                zones_cfg=zones_cfg,
+                policies=policies,
+                weather_hourly=weather_hourly,
+                weather_series=weather_series,
+                n=n,
+                dt=dt,
+                sub=sub,
+                control_steps=control_steps,
+                hours=hours,
+                months=months,
+                days=days,
+                T_ext=T_ext,
+                RH_ext=RH_ext,
+                GHI=GHI,
+                direct=direct,
+                diffuse=diffuse,
+                P_atm=P_atm,
+                weather_attrs=weather_attrs,
+            )
 
         env, hvac, deh, led, transp, ode, co2_dev = _build_devices(p, P_atm=P_atm)
 
@@ -1303,6 +1698,303 @@ class DesignEngine:
             next_harvest_h=loop.next_harvest_h,
             total_harvest_kg=loop.total_harvest_kg,
             total_water_kg=loop.total_water_kg,
+        )
+
+    def _run_multizone(
+        self,
+        *,
+        p,
+        zones_cfg,
+        policies,
+        weather_hourly,
+        weather_series,
+        n,
+        dt,
+        sub,
+        control_steps,
+        hours,
+        months,
+        days,
+        T_ext,
+        RH_ext,
+        GHI,
+        direct,
+        diffuse,
+        P_atm,
+        weather_attrs,
+    ):
+        """Run each declared zone sequentially and aggregate a facility report.
+
+        Z-loop v1 conventions (no inter-zone exchange): every zone runs
+        the identical single-zone physics on its ``zone_view()`` config
+        and the full shared weather.  Aggregation, in declared zone
+        order (deterministic):
+
+        * energy/mass quantities (loads, meters, harvest events, water,
+          monthly sums, typical-load sums, clamp/perf counters) are
+          summed across zones;
+        * facility climate columns (T_z/RH_z/X_d/wall arrays) come from
+          the first-declared zone (v1 documentation basis);
+        * full-load hourly flags are the logical OR across zones;
+        * standing crop is evaluated per zone and added to the facility
+          harvest once here, with ``next_harvest_h=0.0`` passed to the
+          report so its standing-crop block cannot double-count.
+
+        Auto-size writebacks land on each zone's private ``zp`` only;
+        the shared ``p`` is never mutated (B8 isolation).
+        """
+        from .engine_report import build_report
+        from .project import DesignProject
+
+        views = p.zone_views()
+        states = []
+        for zid in zones_cfg:
+            zp = DesignProject.from_dict(views[zid])
+            zs, lp = _simulate_zone(
+                zp,
+                P_atm=P_atm,
+                dt=dt,
+                hours=hours,
+                months=months,
+                n=n,
+                sub=sub,
+                weather_series=weather_series,
+                policy=None if policies is None else policies.get(zid),
+                control_steps=control_steps,
+                zone_id=zid,
+            )
+            states.append((zid, zp, zs, lp))
+
+        z0_id, z0p, z0s, z0lp = states[0]
+
+        # ── additive aggregation (declared zone order) ─────────────────
+        load_kw = np.zeros(n)
+        P_hvac = np.zeros(n)
+        P_deh = np.zeros(n)
+        P_led = np.zeros(n)
+        P_misc = np.zeros(n)
+        monthly_energy = np.zeros((12, 5))
+        monthly_harvest = np.zeros(12)
+        monthly_t_sum = np.zeros(12)
+        monthly_rh_sum = np.zeros(12)
+        monthly_hours = np.zeros(12)
+        monthly_water_kg = np.zeros(12)
+        typical_load_sum = np.zeros((12, 24))
+        hvac_cool_full_h = np.zeros(n, dtype=bool)
+        hvac_heat_full_h = np.zeros(n, dtype=bool)
+        deh_full_h = np.zeros(n, dtype=bool)
+        clamp_stats = {
+            "floor_clip_events": 0,
+            "floor_clip_water_kg": 0.0,
+            "sat_clip_events": 0,
+            "sat_clip_water_kg": 0.0,
+            "temp_clip_events": 0,
+            "temp_clip_deg_c": 0.0,
+        }
+        deh_perf = {
+            "deh_nominal_kg": 0.0,
+            "deh_actual_kg": 0.0,
+            "hvac_nominal_kg": 0.0,
+            "hvac_actual_kg": 0.0,
+            "removal_limited_events": 0,
+            "removal_limited_water_kg": 0.0,
+        }
+        erv_fan_w = 0.0
+        erv_fan_j = 0.0
+        erv_rec_sens_j = 0.0
+        erv_rec_lat_j = 0.0
+        econ_active_s = 0.0
+        econ_free_cool_j = 0.0
+        deh_comp_kwh = 0.0
+        total_water_kg = 0.0
+        total_harvest_events_kg = 0.0
+        standing_by_zone = {}
+
+        # CO2 aggregate: any-zone OR gate; arrays/accumulators summed
+        # over the CO2-enriched zones; facility climate/CO2 columns and
+        # setpoint read from the first CO2-enriched zone (v1 basis).
+        co2_first = next((s for s in states if s[2].co2_on), None)
+        co2_on = co2_first is not None
+        E_co2_Wh = np.zeros(n) if co2_on else None
+        monthly_co2_kg = np.zeros(12) if co2_on else None
+        co2_clamp_stats = (
+            {"floor_clip_events": 0, "floor_clip_co2_kg": 0.0} if co2_on else None
+        )
+        co2_inj_total_kg = 0.0
+
+        for zid, zp, zs, lp in states:
+            load_kw += zs.load_kw
+            P_hvac += zs.P_hvac
+            P_deh += zs.P_deh
+            P_led += zs.P_led
+            P_misc += zs.P_misc
+            monthly_energy += zs.monthly_energy
+            monthly_harvest += zs.monthly_harvest
+            monthly_t_sum += zs.monthly_t_sum
+            monthly_rh_sum += zs.monthly_rh_sum
+            monthly_hours += zs.monthly_hours
+            monthly_water_kg += zs.monthly_water_kg
+            typical_load_sum += zs.typical_load_sum
+            hvac_cool_full_h |= zs.hvac_cool_full_h
+            hvac_heat_full_h |= zs.hvac_heat_full_h
+            deh_full_h |= zs.deh_full_h
+            for k in clamp_stats:
+                clamp_stats[k] += zs.clamp_stats[k]
+            for k in deh_perf:
+                deh_perf[k] += zs.deh_perf[k]
+            erv_fan_w += zs.erv_fan_w
+            erv_fan_j += lp.erv_fan_j
+            erv_rec_sens_j += lp.erv_rec_sens_j
+            erv_rec_lat_j += lp.erv_rec_lat_j
+            econ_active_s += lp.econ_active_s
+            econ_free_cool_j += lp.econ_free_cool_j
+            deh_comp_kwh += lp.deh_comp_kwh
+            total_water_kg += lp.total_water_kg
+            total_harvest_events_kg += lp.total_harvest_kg
+            if zs.co2_on:
+                E_co2_Wh += zs.E_co2_Wh
+                monthly_co2_kg += zs.monthly_co2_kg
+                co2_clamp_stats["floor_clip_events"] += zs.co2_clamp_stats[
+                    "floor_clip_events"
+                ]
+                co2_clamp_stats["floor_clip_co2_kg"] += zs.co2_clamp_stats[
+                    "floor_clip_co2_kg"
+                ]
+                co2_inj_total_kg += lp.co2_inj_total_kg or 0.0
+            # Standing crop at horizon end: same expression the report
+            # layer uses for the single-zone path (next_harvest beyond
+            # horizon => the final planting is still in the room).
+            standing = (
+                max((lp.X_d - zs.X_d_init) * zs.crop_area, 0.0)
+                if lp.next_harvest_h > n
+                else 0.0
+            )
+            standing_by_zone[zid] = standing
+
+        total_harvest_kg = total_harvest_events_kg + sum(standing_by_zone.values())
+
+        # Facility climate columns: first-declared zone (v1 basis).
+        T_z_out = z0s.T_z_out
+        RH_z_out = z0s.RH_z_out
+        X_d_arr = z0s.X_d_arr
+        T_m_out = z0s.T_m_out
+        T_s_out = z0s.T_s_out
+        T_wall_out_arr = z0s.T_wall_out_arr
+        T_sol_air_arr = z0s.T_sol_air_arr
+        env = z0s.env
+        hvac = z0s.hvac
+        led = z0s.led
+        X_d_init = z0s.X_d_init
+        crop_area = z0s.crop_area
+        typical_count = z0s.typical_count  # hour-grid counts, not additive
+        co2_sp_ppm = co2_first[2].co2_sp_ppm if co2_first else z0s.co2_sp_ppm
+        CO2_z_out = co2_first[2].CO2_z_out if co2_first else None
+        S_co2_inj_out = co2_first[2].S_co2_inj_out if co2_first else None
+        # Light diagnostics: first zone with per-layer PPFD reporting.
+        ppfd_src = next(
+            (s[2] for s in states if getattr(s[2].led, "ppfd_layers", None)), z0s
+        )
+        ppfd_out = ppfd_src.ppfd_out
+        qled_out = ppfd_src.qled_out
+
+        # Per-zone report payload (Z-report wave 4).
+        zones_payload = []
+        for zid, zp, zs, lp in states:
+            zones_payload.append(
+                {
+                    "zone_id": zid,
+                    "zp": zp,
+                    "load_kw": zs.load_kw,
+                    "T_z_out": zs.T_z_out,
+                    "RH_z_out": zs.RH_z_out,
+                    "P_hvac": zs.P_hvac,
+                    "P_deh": zs.P_deh,
+                    "P_led": zs.P_led,
+                    "P_misc": zs.P_misc,
+                    "X_d_arr": zs.X_d_arr,
+                    "co2_on": zs.co2_on,
+                    "co2_inj_total_kg": lp.co2_inj_total_kg,
+                    "total_harvest_events_kg": lp.total_harvest_kg,
+                    "standing_kg": standing_by_zone[zid],
+                    "total_water_kg": lp.total_water_kg,
+                    "hvac_cool_full_h": zs.hvac_cool_full_h,
+                    "hvac_heat_full_h": zs.hvac_heat_full_h,
+                    "deh_full_h": zs.deh_full_h,
+                    "deh_perf": zs.deh_perf,
+                    "hvac_P_rated_w": float(zp.hvac.P_rated_w),
+                    "hvac_P_rated_heat_w": float(zp.hvac.P_rated_heat_w),
+                    "deh_P_ref_w": float(zp.deh.P_ref_w),
+                }
+            )
+
+        return build_report(
+            CO2_z_out=CO2_z_out,
+            E_co2_Wh=E_co2_Wh,
+            GHI=GHI,
+            P_deh=P_deh,
+            P_hvac=P_hvac,
+            P_led=P_led,
+            P_misc=P_misc,
+            RH_ext=RH_ext,
+            RH_z_out=RH_z_out,
+            S_co2_inj_out=S_co2_inj_out,
+            T_ext=T_ext,
+            T_m_out=T_m_out,
+            T_s_out=T_s_out,
+            T_sol_air_arr=T_sol_air_arr,
+            T_wall_out_arr=T_wall_out_arr,
+            T_z_out=T_z_out,
+            X_d_arr=X_d_arr,
+            X_d_init=X_d_init,
+            clamp_stats=clamp_stats,
+            co2_clamp_stats=co2_clamp_stats,
+            co2_on=co2_on,
+            co2_sp_ppm=co2_sp_ppm,
+            crop_area=crop_area,
+            days=days,
+            deh_full_h=deh_full_h,
+            deh_perf=deh_perf,
+            diffuse=diffuse,
+            direct=direct,
+            env=env,
+            erv_fan_w=erv_fan_w,
+            hours=hours,
+            hvac=hvac,
+            hvac_cool_full_h=hvac_cool_full_h,
+            hvac_heat_full_h=hvac_heat_full_h,
+            led=led,
+            load_kw=load_kw,
+            monthly_co2_kg=monthly_co2_kg,
+            monthly_energy=monthly_energy,
+            monthly_harvest=monthly_harvest,
+            monthly_hours=monthly_hours,
+            monthly_rh_sum=monthly_rh_sum,
+            monthly_t_sum=monthly_t_sum,
+            monthly_water_kg=monthly_water_kg,
+            months=months,
+            n=n,
+            p=p,
+            ppfd_out=ppfd_out,
+            qled_out=qled_out,
+            self=self,
+            typical_count=typical_count,
+            typical_load_sum=typical_load_sum,
+            weather=weather_hourly,
+            weather_attrs=weather_attrs,
+            X_d=z0lp.X_d,
+            co2_inj_total_kg=co2_inj_total_kg,
+            deh_comp_kwh=deh_comp_kwh,
+            econ_active_s=econ_active_s,
+            econ_free_cool_j=econ_free_cool_j,
+            erv_fan_j=erv_fan_j,
+            erv_rec_lat_j=erv_rec_lat_j,
+            erv_rec_sens_j=erv_rec_sens_j,
+            # Standing crop already counted per zone above; 0.0 disables
+            # the report's own standing block (no double counting).
+            next_harvest_h=0.0,
+            total_harvest_kg=total_harvest_kg,
+            total_water_kg=total_water_kg,
+            zones=zones_payload,
         )
 
 

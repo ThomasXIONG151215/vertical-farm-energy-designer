@@ -26,6 +26,7 @@ from .engine import (
 
 def build_report(
     *,
+    zones=None,
     CO2_z_out,
     E_co2_Wh,
     GHI,
@@ -91,6 +92,23 @@ def build_report(
     weather,
     weather_attrs,
 ):
+    """Assemble the :class:`SimulationResult` from loop outputs.
+
+    Multi-zone (wave 4, v1 conventions) — when ``zones`` is a non-empty
+    payload list of per-zone dicts (from ``DesignEngine._run_multizone``):
+
+    - energy/mass facility columns are the SUM over zones in declared
+      order (deterministic);
+    - climate-state facility columns (T_z/RH_z/X_d/wall/PPFD) come from
+      the FIRST declared zone;
+    - hvac/deh full-load flags are the logical OR across zones;
+    - ``monthly`` and ``typical_daily`` stay facility-total only (per-zone
+      monthly is deferred to a later wave);
+    - per-zone prefixed timeseries columns and ``summary["zones"]`` are
+      emitted in addition to the existing facility-level keys.
+
+    ``zones=None`` (single-zone path) keeps today's behavior bitwise.
+    """
     if n not in (8760, 8784):
         logging.warning(
             "weather data has %d hours (expected 8760 or leap 8784); "
@@ -506,6 +524,59 @@ def build_report(
             stacklevel=2,
         )
 
+    # ── multi-zone summary (wave 4 Z-report, additive-only path) ────────
+    # summary["zones"] is emitted ONLY on the multi-zone path (zones
+    # payload non-empty); single-zone output stays bitwise identical.
+    # The facility standing-crop value computed above from the aggregated
+    # X_d/crop_area inputs is replaced by the exact per-zone sum (the
+    # multi-zone engine passes next_harvest_h=0.0, disabling the generic
+    # standing block above, so no double count).
+    zone_ts = {}
+    if zones:
+        zsummary = {}
+        for z in zones:
+            zid = z["zone_id"]
+            zp = z["zp"]
+            z_rh_set = zp.setpoints.RH
+            z_rh_exceed = int(np.count_nonzero(z["RH_z_out"] > z_rh_set))
+            z_harvest_kg = z["total_harvest_events_kg"] + z["standing_kg"]
+            zdp = z["deh_perf"]
+            zmetrics = {
+                "annual_load_kwh": round(float(np.sum(z["load_kw"])), 2),
+                "annual_harvest_kg": round(z_harvest_kg, 2),
+                "annual_harvest_fw_kg": round(
+                    z_harvest_kg / zp.growth.dry_matter_fraction, 2
+                ),
+                "annual_water_m3": round(z["total_water_kg"] / 1000.0, 2),
+                "T_z_mean_c": round(float(np.mean(z["T_z_out"])), 2),
+                "rh_setpoint_pct": z_rh_set,
+                "rh_exceed_hours": z_rh_exceed,
+                "rh_p95_pct": round(float(np.percentile(z["RH_z_out"], 95)), 2),
+                "rh_max_pct": round(float(np.max(z["RH_z_out"])), 2),
+                "deh_utilization": round(
+                    zdp["deh_actual_kg"] / zdp["deh_nominal_kg"], 4
+                )
+                if zdp["deh_nominal_kg"] > 0
+                else 1.0,
+                "full_load_diagnostics": {
+                    "hvac_cool": _full_load_stats(z["hvac_cool_full_h"]),
+                    "hvac_heat": _full_load_stats(z["hvac_heat_full_h"]),
+                    "deh": _full_load_stats(z["deh_full_h"]),
+                },
+                "hvac_P_rated_w": z["hvac_P_rated_w"],
+                "hvac_P_rated_heat_w": z["hvac_P_rated_heat_w"],
+                "deh_P_ref_w": z["deh_P_ref_w"],
+            }
+            if z["co2_on"]:
+                zmetrics["annual_co2_injected_kg"] = round(
+                    z["co2_inj_total_kg"], 3
+                )
+            zsummary[zid] = zmetrics
+        summary["zones"] = zsummary
+        summary["harvest_final_standing_kg"] = round(
+            sum(z["standing_kg"] for z in zones), 4
+        )
+
     # ── monthly dict ───────────────────────────────────────────────────
 
     # P1-3a: flat-key columns (water_m3 / harvest_fw_kg here; grid / cost
@@ -607,6 +678,28 @@ def build_report(
             else {}
         ),
     }
+
+    # ── multi-zone timeseries (wave 4 Z-report, additive-only path) ────
+    # Per-zone columns carry a ``{zone_id}.`` prefix; the unprefixed
+    # facility columns above stay untouched (load_kw is the aggregate
+    # sum; T_z/RH_z are the first declared zone).  Emitted ONLY on the
+    # multi-zone path so the single-zone zero-drift sha256 stays intact.
+    if zones:
+        for z in zones:
+            zid = z["zone_id"]
+            zcols = {
+                "T_z": z["T_z_out"].tolist(),
+                "RH_z": z["RH_z_out"].tolist(),
+                "load_kw": z["load_kw"].tolist(),
+                "E_hvac_Wh": z["P_hvac"].tolist(),
+                "E_deh_Wh": z["P_deh"].tolist(),
+                "E_led_Wh": z["P_led"].tolist(),
+                "E_misc_Wh": z["P_misc"].tolist(),
+                "X_d": z["X_d_arr"].tolist(),
+            }
+            for col, values in zcols.items():
+                ts[f"{zid}.{col}"] = values
+            zone_ts[zid] = zcols
 
     # ── typical daily ──────────────────────────────────────────────────
 
@@ -1196,6 +1289,21 @@ def build_report(
         "deh_M_design_kgs": float(p.deh.P_ref_w * p.deh.smer / 3.6e6),
     }
 
+    # Multi-zone (wave 4): the shared project keeps its raw config values
+    # (auto-size writebacks land on the per-zone projects only, B8), so
+    # facility sizing reads the FIRST declared zone's auto-sized nameplates.
+    if zones:
+        z0 = zones[0]
+        z0p = z0["zp"]
+        sizing = {
+            "hvac_P_rated_w": z0["hvac_P_rated_w"],
+            "hvac_P_rated_heat_w": z0["hvac_P_rated_heat_w"],
+            "deh_P_ref_w": z0["deh_P_ref_w"],
+            "deh_M_design_kgs": float(
+                z0["deh_P_ref_w"] * z0p.deh.smer / 3.6e6
+            ),
+        }
+
     return SimulationResult(
         project_name=p.name,
         currency=p.currency,
@@ -1209,4 +1317,6 @@ def build_report(
         _raw=_raw,
         sizing=sizing,
         weather_attrs=weather_attrs,
+        zone_ids=[z["zone_id"] for z in zones] if zones else [],
+        zone_timeseries=zone_ts,
     )

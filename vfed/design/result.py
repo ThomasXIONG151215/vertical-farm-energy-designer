@@ -91,6 +91,16 @@ class SimulationResult:
     #    CSV export paths (save_*_csv) are unaffected.
     weather_attrs: Dict[str, Any] = field(default_factory=dict, repr=False)
 
+    # ── multi-zone (wave 4 Z-report): declared zone ids and per-zone
+    #    timeseries (unprefixed column names, same 8-column subset).
+    #    Empty on the single-zone path; deliberately NOT part of the
+    #    pinned to_dict() v1.0 schema (summary["zones"] carries the
+    #    per-zone KPIs there).
+    zone_ids: List[str] = field(default_factory=list)
+    zone_timeseries: Dict[str, Dict[str, List[float]]] = field(
+        default_factory=dict
+    )
+
     # -----------------------------------------------------------------
     def __getitem__(self, key: str) -> Any:
         """Backward-compat dict-like access for sweep.py and legacy callers."""
@@ -238,6 +248,8 @@ class SimulationResult:
             energy_breakdown=d.get("energy_breakdown", {}),
             typical_daily=d.get("typical_daily", {}),
             weather_attrs=d.get("weather_attrs", {}),
+            zone_ids=d.get("zone_ids", []),
+            zone_timeseries=d.get("zone_timeseries", {}),
         )
 
 
