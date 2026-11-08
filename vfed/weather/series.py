@@ -152,6 +152,6 @@ class WeatherSeries:
             last = int(self._start[-1]) + (self._step or 0)
             raise IndexError(
                 f"weather sample time {t_s}s is outside the data window "
-                f"[0, {last}s) — the bridge must supply gapless coverage"
+                f"[0, {last}s); the bridge must supply gapless coverage"
             )
         return i

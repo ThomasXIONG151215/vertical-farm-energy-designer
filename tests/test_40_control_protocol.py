@@ -284,3 +284,94 @@ class TestTickCadence:
         )
         # period_s None -> every substep: 48 h x 6 substeps = 288.
         assert pol.step_count == 288
+
+
+class _PvProbePolicy:
+    """Records every Observation handed to step(); touches nothing else."""
+
+    owns = frozenset()
+
+    def __init__(self):
+        self.obs = []
+
+    def reset(self, ctx):
+        return None
+
+    def plan_daily(self, obs):
+        return None
+
+    def step(self, obs):
+        self.obs.append(obs)
+        return ControlAction()
+
+
+class TestPvObservation:
+    def test_pv_w_matches_reference_series(self):
+        from vfed.design.presets import preset_609
+        from vfed.pvbes.energy_system import EnergySystem
+        from vfed.pvbes.pv import PVSystem
+        from vfed.design.fx import USD_C_PV, resolve_unit_price
+
+        p = preset_609()
+        p.pv_area_m2 = 100.0
+        probe = _PvProbePolicy()
+        DesignEngine(cache_dir=None).run(
+            p, weather=synthetic_weather(48), policy=probe
+        )
+        assert probe.obs, "policy.step must have been called at least once"
+        df = synthetic_weather(48)
+        pv_sys = PVSystem(
+            module=p.pv.module,
+            eta_pv=p.pv.eta_pv,
+            area_to_power=p.pv.area_to_power,
+            N_s=p.pv.N_s,
+            I_sc_stc=p.pv.I_sc_stc,
+            V_oc_stc=p.pv.V_oc_stc,
+            I_mp_stc=p.pv.I_mp_stc,
+            V_mp_stc=p.pv.V_mp_stc,
+            alpha_sc=p.pv.alpha_sc,
+            beta_voc=p.pv.beta_voc,
+            gamma_pmp=p.pv.gamma_pmp,
+            NOCT=p.pv.NOCT,
+            eta_inv=p.pv.eta_inv,
+            C_pv=resolve_unit_price(p.pv.C_pv, USD_C_PV, p.currency, p.exchange_rate),
+            degradation=p.pv.degradation,
+            eta_system=p.pv.eta_system,
+        )
+        ref = pv_sys.calculate_pv_output(
+            {
+                "direct_radiation": df["direct_radiation"].to_numpy(dtype=float),
+                "diffuse_radiation": df["diffuse_radiation"].to_numpy(dtype=float),
+                "temperature_2m": df["temperature_2m"].to_numpy(dtype=float),
+            },
+            100.0,
+            year=EnergySystem.lifetime // 2,
+        )
+        assert float(np.max(ref)) > 0.0, "synthetic weather must produce PV output"
+        for o in probe.obs:
+            h = o.t_s // 3600
+            assert o.pv_w == float(ref[h]), (
+                f"pv_w mismatch at t_s={o.t_s}s (hour {h}): "
+                f"{o.pv_w!r} != {float(ref[h])!r}"
+            )
+
+    def test_pv_w_none_without_pv(self):
+        from vfed.design.presets import preset_609
+
+        p = preset_609()
+        p.pv_area_m2 = 0.0
+        p.pv_arrays = ()
+        probe = _PvProbePolicy()
+        DesignEngine(cache_dir=None).run(
+            p, weather=synthetic_weather(48), policy=probe
+        )
+        assert probe.obs, "policy.step must have been called at least once"
+        assert all(o.pv_w is None for o in probe.obs)
+
+    def test_policy_none_default_path_matches_oracle(self):
+        from vfed.design.presets import preset_609
+
+        result = DesignEngine(cache_dir=None).run(
+            preset_609(), weather=synthetic_weather(48)
+        )
+        assert _ts_sha256(result) in ACCEPTED

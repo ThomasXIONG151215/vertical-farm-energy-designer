@@ -145,7 +145,7 @@ def _check_authority_conflicts(flat_keys, zones_delta, policy_specs) -> None:
             raise ValueError(
                 f"candidate key '{key}' is voided by policy field "
                 f"'{voided[key]}' (owned control authority); the policy "
-                "would silently override it at runtime — remove the key "
+                "would silently override it at runtime; remove the key "
                 "from the candidate, or opt out with "
                 "'\"schedule_echo\": true' in the policy spec"
             )
@@ -160,7 +160,7 @@ def _check_authority_conflicts(flat_keys, zones_delta, policy_specs) -> None:
                             f"zones[{zid}].{section}.{field} maps to config "
                             f"key '{flat}', voided by policy field "
                             f"'{voided[flat]}'; the policy would silently "
-                            "override it at runtime — remove the override "
+                            "override it at runtime; remove the override "
                             "or opt out with "
                             "'\"schedule_echo\": true' in the policy spec"
                         )

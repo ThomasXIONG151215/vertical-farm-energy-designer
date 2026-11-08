@@ -1259,7 +1259,7 @@ class DesignEngine:
                     )
         elif policies is not None:
             raise ValueError(
-                "policies requires a multi-zone project (declare zones) — "
+                "policies requires a multi-zone project (declare zones); "
                 "use policy= for the single-zone path"
             )
         if policy is not None:
@@ -1373,6 +1373,17 @@ class DesignEngine:
                 diffuse=diffuse,
                 P_atm=P_atm,
                 weather_attrs=weather_attrs,
+            )
+
+        pv_w_hourly = None
+        if policy is not None and (p.pv_area_m2 > 0 or p.pv_arrays):
+            pv_w_hourly = self._pv_w_hourly(
+                p,
+                weather=weather_hourly,
+                direct=direct,
+                diffuse=diffuse,
+                T_ext=T_ext,
+                n=n,
             )
 
         env, hvac, deh, led, transp, ode, co2_dev = _build_devices(p, P_atm=P_atm)
@@ -1666,6 +1677,7 @@ class DesignEngine:
             p=p,
             sub=sub,
             weather_series=weather_series,
+            pv_w_hourly=pv_w_hourly,
             policy=policy,
             control_steps=control_steps,
         )
@@ -1735,6 +1747,92 @@ class DesignEngine:
             total_harvest_kg=loop.total_harvest_kg,
             total_water_kg=loop.total_water_kg,
         )
+
+    def _pv_w_hourly(self, p, weather, direct, diffuse, T_ext, n):
+        """Hourly PV power series (kW) for the ``Observation.pv_w`` feed.
+
+        Mirrors ``build_report``'s PV power path (same PVSystem construction
+        and ``calculate_pv_output`` call style, multi-array series summed,
+        mid-life degradation year) but feeds only the policy observation;
+        dispatch and accounting are untouched.  Called only when a policy
+        is attached and PV is configured, so the default path never
+        constructs a PVSystem.
+        """
+        from ..pvbes.energy_system import EnergySystem
+        from ..pvbes.pv import PVSystem
+        from .fx import USD_C_PV, resolve_unit_price
+
+        pv_sys = PVSystem(
+            module=p.pv.module,
+            eta_pv=p.pv.eta_pv,
+            area_to_power=p.pv.area_to_power,
+            N_s=p.pv.N_s,
+            I_sc_stc=p.pv.I_sc_stc,
+            V_oc_stc=p.pv.V_oc_stc,
+            I_mp_stc=p.pv.I_mp_stc,
+            V_mp_stc=p.pv.V_mp_stc,
+            alpha_sc=p.pv.alpha_sc,
+            beta_voc=p.pv.beta_voc,
+            gamma_pmp=p.pv.gamma_pmp,
+            NOCT=p.pv.NOCT,
+            eta_inv=p.pv.eta_inv,
+            C_pv=resolve_unit_price(p.pv.C_pv, USD_C_PV, p.currency, p.exchange_rate),
+            degradation=p.pv.degradation,
+            eta_system=p.pv.eta_system,
+        )
+        year = EnergySystem.lifetime // 2
+        if not p.pv_arrays:
+            wx = {
+                "direct_radiation": np.asarray(direct, dtype=float),
+                "diffuse_radiation": np.asarray(diffuse, dtype=float),
+                "temperature_2m": np.asarray(T_ext, dtype=float),
+            }
+            return pv_sys.calculate_pv_output(wx, float(p.pv_area_m2), year=year)
+        main_orient = (
+            round(float(p.site.tilt), 6),
+            round(float(p.site.azimuth), 6),
+        )
+        orient_weather = {}
+        series = np.zeros(n, dtype=float)
+        for a in p.pv_arrays:
+            key = (round(float(a.tilt), 6), round(float(a.azimuth), 6))
+            if key not in orient_weather:
+                if key == main_orient:
+                    orient_weather[key] = weather
+                else:
+                    orient_weather[key] = fetch_weather(
+                        p.site.lat,
+                        p.site.lon,
+                        p.site.year,
+                        tz_hours=p.site.tz_hours,
+                        tilt=a.tilt,
+                        azimuth=a.azimuth,
+                        cache_dir=self.cache_dir,
+                        city=p.site.city,
+                        provider=getattr(p.site, "weather_provider", "open-meteo"),
+                        ghi_scale=getattr(p.site, "ghi_scale", 1.0),
+                        albedo=p.site.albedo,
+                        transposition=p.site.transposition,
+                    )
+            w = orient_weather[key]
+            arr_wx = {
+                "direct_radiation": np.asarray(w["direct_radiation"], dtype=float),
+                "diffuse_radiation": np.asarray(w["diffuse_radiation"], dtype=float),
+                "temperature_2m": np.asarray(w["temperature_2m"], dtype=float),
+            }
+            if a.module is None or a.module == p.pv.module:
+                arr_sys = pv_sys
+            else:
+                arr_sys = PVSystem(
+                    module=a.module,
+                    eta_inv=p.pv.eta_inv,
+                    eta_system=p.pv.eta_system,
+                    C_pv=resolve_unit_price(
+                        p.pv.C_pv, USD_C_PV, p.currency, p.exchange_rate
+                    ),
+                )
+            series += arr_sys.calculate_pv_output(arr_wx, a.area_m2, year=year)
+        return series
 
     def _run_multizone(
         self,

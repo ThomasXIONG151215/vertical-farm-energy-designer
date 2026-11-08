@@ -53,9 +53,11 @@ class ControlAction:
 class Observation:
     """Zone and crop state handed to the policy at a control tick.
 
-    ``pv_w`` is always ``None`` in v1 because the building loop runs
-    before the PVBES dispatch layer; the field is pinned so later
-    versions can fill it without breaking the protocol.
+    ``pv_w`` carries the hourly PV AC output (kW; power series keep
+    the kW convention despite the ``_w`` name, matching the dispatch
+    protocol) when a policy is attached and PV is configured, else
+    ``None``.  v1 wires the single-zone path only; multi-zone runs
+    keep ``pv_w`` at ``None``.
     """
 
     t_s: int

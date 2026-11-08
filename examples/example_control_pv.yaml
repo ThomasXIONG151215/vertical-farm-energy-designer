@@ -1,0 +1,160 @@
+# 控制 + 光伏储能联合示例 — control: 节拍 × PV-电池-电网（PVBES）
+# 用途：同一项目同时声明楼宇控制节拍与固定 PV/电池装机，展示两条
+#       协同入口：
+#       1) 楼宇侧（building loop）：策略经 vfed/design/control.py 的
+#          build_policy({"type", "params"}) 构造，传给 DesignEngine.run
+#          的 policy= 参数；YAML 的 control: 段只声明节拍。
+#       2) 能量侧（dispatch）：调度策略走 DispatchPolicy 钩子——
+#          EnergySystem.simulate_performance 的 dispatch_policy= 参数
+#          （每小时观测 dict → (charge_w, discharge_w) 请求，被调度器
+#          钳位；缺省 None = 内置贪婪调度）。
+# 校验：vfed validate examples/example_control_pv.yaml
+# 运行：vfed evaluate examples/example_control_pv.yaml --cache weather_cache
+# 文档：docs/architecture.md · 契约见 vfed/design/project.py（ControlConfig）
+#       策略见 vfed/design/control.py · 调度钩子见 vfed/pvbes/energy_system.py
+name: example_control_pv
+# 站点与气象（与 examples/example_sweep.yaml 相同；weather_cache/ 已缓存该格点）
+site:
+  lat: 30.9
+  lon: 121.5
+  tz_hours: 8.0
+  tilt: 20.0
+  azimuth: 180.0
+  year: 2023
+# 建筑围护结构（第一性原理 ODE 热工模型）
+envelope:
+  U_wall_A: 125.3
+  A_window: 0.0
+  eta_solar: 0.15
+  ach: 0.001   # 密闭植物工厂气密换气率（Kozai 2013: 0.01-0.02；0.1 为保守泄漏上限）
+  permeance: 0.0
+  V_room: 200.0
+  rho_air: 1.2
+  cp_air: 1005.0
+  C_z: 200000.0
+# 空调系统（cop_mode: constant 恒 COP；可选 carnot/constant/linear/table）
+hvac:
+  P_rated_w: 3000.0
+  cop_value: 4.0
+  cop_mode: constant
+  cop_k: 0.02
+  cop_T_ref: 25.0
+  cop_heat: 3.0
+  heat_mode: heat_pump
+  P_rated_heat_w: 3000.0
+  deadband_c: 1.0
+  min_on_s: 180.0
+  min_off_s: 180.0
+  fan_power_w: 70.0
+  shr_BF: 0.15
+  tau_q: 90.0
+  tau_m: 60.0
+# 除湿机（P_ref_w 额定功率；poly_e 为功率多项式系数）
+deh:
+  P_ref_w: 2233.0
+  poly_e:
+  - 1.0
+  - 0.02
+  - 0.0
+  - 0.05
+  - 0.0
+  - 0.0
+  T_mean: 22.0
+  T_std: 5.0
+  W_mean: 0.012
+  W_std: 0.003
+  smer: 2.0
+  deadband_rh: 3.0
+  min_on_s: 180.0
+  min_off_s: 180.0
+  fan_power_w: 40.0
+  tau_q: 90.0
+  tau_m: 120.0
+# LED 照明（auto_deduce=true 时按 ppfd_target×covered_area/efficacy 重算功率）
+led:
+  power_w: 1300.0  # 被 auto_deduce 覆盖：实际重算为 ppfd_target×covered_area/efficacy
+  light_start_hour: 6
+  photoperiod_hours: 16
+  heat_fraction: 1.0
+  auto_deduce: true  # true → power_w 忽略，功率=ppfd_target×covered_area/efficacy
+  efficacy: 2.5
+  ppfd_target: 400.0
+  covered_area: 45.0
+# 蒸腾模型（method: van_henten 生长耦合）
+transpiration:
+  method: van_henten
+  stage_factor: 1.0
+# 温湿度/CO2 设定点（光期/暗期分设温度）
+setpoints:
+  T_light: 22.0
+  T_dark: 18.0
+  RH: 65.0
+  co2_ppm: 800.0
+  crop_cycle_days: 30.0
+# 光伏组件参数（STC 铭牌；alpha_sc/beta_voc 为相对温漂系数 /K）
+pv:
+  eta_pv: 0.233
+  area_to_power: 4.3
+  N_s: 156
+  I_sc_stc: 13.98
+  V_oc_stc: 57.34
+  I_mp_stc: 12.66
+  V_mp_stc: 45.85
+  alpha_sc: 0.00045
+  beta_voc: -0.0025
+  NOCT: 45.0
+  eta_inv: 0.97
+  C_pv: 500.0   # capital 块缺省时的 legacy 回退单价（项目货币/kWp）
+  degradation: 0.004
+# 电池系统（c_energy 单位成本 元/kWh；cycle_life 全循环寿命）
+battery:
+  c_energy: 220.0
+  c_rate: 1.0
+  eta_ch: 0.91
+  eta_dis: 0.91
+  soc_min: 0.1
+  soc_max: 0.9
+  cycle_life: 4000
+# 电价（legacy 三费率；可用 hourly_prices 替代）
+tariff:
+  peak_price: 0.096
+  normal_price: 0.096
+  valley_price: 0.096
+  export_price: 0.05
+  peak_hours:
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 18
+  - 19
+  - 20
+  - 21
+  valley_hours:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 23
+# 设计空间（timestep_s=600：控制节拍 1800 s = 2 个物理子步）
+space:
+  parameter_ranges: {}
+  timestep_s: 600.0
+  objective: lcoe
+equipment_power_w: 0.0  # 其他设备恒定基础电耗（W）
+# 固定装机规模：`vfed evaluate` 按此运行 PV-电池-电网系统（0 则跳过）
+pv_area_m2: 80.0
+battery_kwh: 50.0
+# ── 控制节拍（T2 契约）──────────────────────────────────────────────────
+# 楼宇策略每 k 个物理子步决策一次（k = 1800/600 = 2）。
+# Python 侧挂载（YAML 只声明节拍）：
+#   policy = build_policy({"type": "setpoint_offset", "params": {...}})
+#   DesignEngine(...).run(project, policy=policy)
+# 能量调度协同入口（PVBES 侧，Python 侧）：
+#   energy_system.simulate_performance(..., dispatch_policy=my_dispatcher)
+#   协议：每小时 obs dict → (charge_w, discharge_w)，请求被调度器钳位。
+control:
+  period_s: 1800

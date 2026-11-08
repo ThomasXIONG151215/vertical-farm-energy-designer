@@ -173,6 +173,7 @@ def run_hourly_loop(
     p,
     sub,
     weather_series,
+    pv_w_hourly=None,
     policy=None,
     control_steps=1,
     zone_id="main",
@@ -380,7 +381,7 @@ def run_hourly_loop(
                         X_d=X_d,
                         cycle_h=cycle_h,
                         c_z=c_z,
-                        pv_w=None,
+                        pv_w=None if pv_w_hourly is None else float(pv_w_hourly[h]),
                     )
                     if N % steps_per_day == 0:
                         plan = policy.plan_daily(obs)
@@ -405,15 +406,16 @@ def run_hourly_loop(
                                     raise RuntimeError(
                                         f"policy owns '{fname}' but the merged "
                                         f"action at t_s={obs.t_s}s zone "
-                                        f"'{zone_id}' left it None — owned "
-                                        "字段每拍必须给值（step 或 plan_daily）"
+                                        f"'{zone_id}' left it None; owned "
+                                        "fields must be set every tick "
+                                        "(via step or plan_daily)"
                                     )
                             elif value is not None:
                                 raise RuntimeError(
                                     f"policy set '{fname}'={value!r} at "
                                     f"t_s={obs.t_s}s zone '{zone_id}' without "
-                                    "declaring it in owns — 要么声明进 "
-                                    "owns，要么别设"
+                                    "declaring it in owns; declare it in "
+                                    "owns or do not set it"
                                 )
 
             # C2b: LED on/off + dimming commands.  led_on None follows the

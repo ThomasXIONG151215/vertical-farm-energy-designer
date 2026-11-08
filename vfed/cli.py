@@ -12,6 +12,9 @@ Commands:
                   [--provider {open-meteo,nasa-power}] [--ghi-scale FLOAT]
     vfed sweep <project.yaml> [--cache weather_cache] [--out results.csv] [--tariff NAME|PATH]
                [--provider {open-meteo,nasa-power}] [--ghi-scale FLOAT]
+    vfed optimize <project.yaml> [--grid KEY=SPEC ...] [--pv a1,a2] [--battery b1,b2]
+                  [--objective {lcoe,kwh_per_kg_fresh,cost_per_kg_fresh}]
+                  [--workers N] [--policy-json JSON] [--cache weather_cache] [--out results.csv]
 
 The CLI is intentionally dependency-light (argparse) and wraps the parametric
 ODE building model + optional PVBES energy system.
@@ -1434,6 +1437,241 @@ def _cmd_sweep(args):
     return 0
 
 
+def _parse_grid_value(key: str, spec: str) -> list:
+    """Parse one ``--grid`` SPEC into a list of floats.
+
+    Accepted forms (same semantics as sweep parameter_ranges):
+      ``min:max:step`` -- inclusive arithmetic scan (``0:6:2`` -> [0, 2, 4, 6]);
+      ``v1,v2,...``    -- explicit list (``100,200`` -> [100.0, 200.0]);
+      ``v``            -- single value (``250`` -> [250.0]).
+    """
+    spec = spec.strip()
+    if ":" in spec:
+        parts = spec.split(":")
+        if len(parts) != 3:
+            raise ValueError(f"grid['{key}']: range spec '{spec}' must be 'min:max:step'")
+        try:
+            lo, hi, step = (float(p) for p in parts)
+        except ValueError:
+            raise ValueError(f"grid['{key}']: range spec '{spec}' must be 'min:max:step'")
+        if step <= 0:
+            raise ValueError(f"grid['{key}']: step must be > 0 (got {step})")
+        if hi < lo:
+            raise ValueError(f"grid['{key}']: max must be >= min (got {lo} > {hi})")
+        vals = []
+        v = lo
+        eps = step * 1e-9
+        while v <= hi + eps:
+            vals.append(round(v, 10))
+            v += step
+        return vals
+    if "," in spec:
+        try:
+            return [float(p) for p in spec.split(",")]
+        except ValueError:
+            raise ValueError(
+                f"grid['{key}']: list spec '{spec}' must be comma-separated numbers"
+            )
+    try:
+        return [float(spec)]
+    except ValueError:
+        raise ValueError(f"grid['{key}']: cannot parse '{spec}' as a number")
+
+
+def _cmd_optimize(args):
+    """Co-optimize building parameters and PV/battery sizing (Python API: vfed.design.optimize)."""
+    if not Path(args.project).is_file():
+        print(
+            f"[ERROR E001] project file not found: '{args.project}'. "
+            f"Create one with 'vfed design new <name> [--preset 609]'.",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        project = DesignProject.load(args.project)
+    except Exception as e:
+        print(f"[ERROR E001] invalid project config: {e}", file=sys.stderr)
+        return 1
+
+    from .design.project import PARAM_PATH_MAP, PARAM_TOPLEVEL_MAP
+    from .design.optimize import optimize as _optimize
+
+    flat_keys = set(PARAM_PATH_MAP) | set(PARAM_TOPLEVEL_MAP)
+    reserved = {"schema", "zones", "policies", "policy"}
+
+    grid = {}
+    for item in args.grid or []:
+        key, eq, spec = item.partition("=")
+        key = key.strip()
+        if not eq or not key:
+            print(f"[ERROR E001] --grid expects KEY=SPEC (got '{item}').", file=sys.stderr)
+            return 1
+        if key in reserved:
+            print(
+                f"[ERROR E001] --grid key '{key}' is a structural dimension; "
+                f"use the Python API vfed.design.optimize for zones/policies.",
+                file=sys.stderr,
+            )
+            return 1
+        if key not in flat_keys:
+            print(
+                f"[ERROR E001] --grid key '{key}' is not a sweepable flat parameter "
+                f"(same keys as YAML parameter_ranges).",
+                file=sys.stderr,
+            )
+            return 1
+        if key in grid:
+            print(f"[ERROR E001] duplicate --grid key '{key}'.", file=sys.stderr)
+            return 1
+        try:
+            grid[key] = _parse_grid_value(key, spec)
+        except ValueError as e:
+            print(f"[ERROR E001] {e}", file=sys.stderr)
+            return 1
+
+    if args.policy_json is not None:
+        import json
+
+        try:
+            policy_spec = json.loads(args.policy_json)
+        except ValueError as e:
+            print(f"[ERROR E001] --policy-json is not valid JSON: {e}", file=sys.stderr)
+            return 1
+        if not isinstance(policy_spec, dict):
+            print(
+                "[ERROR E001] --policy-json must be a JSON object "
+                "{'type': ..., 'params': {...}}.",
+                file=sys.stderr,
+            )
+            return 1
+        grid = {"policy": [policy_spec], **grid}
+
+    pv_vals = None
+    if args.pv is not None:
+        try:
+            pv_vals = [float(p) for p in args.pv.split(",")]
+        except ValueError:
+            print(
+                f"[ERROR E001] --pv expects comma-separated numbers (got '{args.pv}').",
+                file=sys.stderr,
+            )
+            return 1
+    bat_vals = None
+    if args.battery is not None:
+        try:
+            bat_vals = [float(p) for p in args.battery.split(",")]
+        except ValueError:
+            print(
+                f"[ERROR E001] --battery expects comma-separated numbers (got '{args.battery}').",
+                file=sys.stderr,
+            )
+            return 1
+
+    if args.workers < 1:
+        print("[ERROR E001] --workers must be >= 1.", file=sys.stderr)
+        return 1
+
+    print(
+        f"Optimizing '{args.project}' (cache: '{args.cache}', workers={args.workers})...",
+        file=sys.stderr,
+    )
+    try:
+        res = _optimize(
+            project,
+            grid,
+            cache_dir=args.cache,
+            objective=args.objective,
+            pv_grid=pv_vals,
+            battery_grid=bat_vals,
+            n_workers=args.workers,
+        )
+    except ValueError as e:
+        print(f"[ERROR E001] {e}", file=sys.stderr)
+        return 1
+    except WeatherFetchError as e:
+        print(f"[ERROR E003] {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"[ERROR E101] optimization failed: {e}", file=sys.stderr)
+        return 1
+
+    results = res["results"]
+    best = res["best"]
+    if best is None:
+        print("  No results produced.")
+        return 1
+
+    objective = res.get("objective", "lcoe")
+    obj_labels = {
+        "lcoe": "LCOE",
+        "kwh_per_kg_fresh": "kWh/kg (fresh)",
+        "cost_per_kg_fresh": "Cost/kg (fresh)",
+    }
+    obj_label = obj_labels.get(objective, objective)
+    currency = best.get("currency", project.currency)
+
+    print(f"Project: {Path(args.project).name} (name: {project.name})  |  Currency: {currency}")
+    n_configs = len(results)
+    print(f"  Configs enumerated = {n_configs}")
+    print(f"\n  Best design (min {obj_label}):")
+
+    lcoe = best.get("lcoe", float("inf"))
+    cpk = best.get("cost_per_kg_fresh", float("inf"))
+    print(f"    LCOE                    = {lcoe:.4f} {currency}/kWh")
+    print(f"    Cost/kg (fresh)        = {cpk:.4f} {currency}/kg")
+    print(f"    kWh/kg (fresh)          = {best.get('kwh_per_kg_fresh', 0):.1f}")
+
+    ct = best.get("capital_total", 0)
+    if ct > 0:
+        print(f"    Total capital           = {ct:.0f} {currency}")
+        _bp_kwp = float(best.get("pv_area", 0.0)) / project.pv.area_to_power
+        _bp_cap_pv = float(best.get("capital_pv", 0.0))
+        _bp_extra = f" ({_bp_cap_pv / _bp_kwp / 1000:.2f} {currency}/Wp)" if _bp_kwp > 0 else ""
+        _print_unit_price(
+            "    ", "PV unit cost", _bp_cap_pv, _bp_kwp, "kWp", currency, extra=_bp_extra
+        )
+        _print_unit_price(
+            "    ",
+            "Battery unit",
+            float(best.get("capital_battery", 0.0)),
+            float(best.get("battery_kwh", 0.0)),
+            "kWh",
+            currency,
+        )
+    else:
+        print(f"    {_CAPITAL_ZERO_WARNING}")
+
+    for key, val in best.items():
+        if key in _SWEEP_METRIC_KEYS or key in reserved:
+            continue
+        if key == "pv_area":
+            print(f"    pv_area                 = {val:.1f} m2")
+        elif key == "battery_kwh":
+            print(f"    battery_kwh             = {val:.1f} kWh")
+        else:
+            print(f"    {key:24s} = {val}")
+    if isinstance(best.get("policy"), dict):
+        print(f"    policy                  = {best['policy'].get('type', '?')} (from --policy-json)")
+
+    _print_boundary_hints(best, results, "    ")
+
+    print(f"    annual_load_kwh         = {best.get('annual_load_kwh', 0):.0f} kWh/yr")
+    print(f"    biomass_kg (dry)        = {best.get('biomass_kg', 0):.1f} kg")
+    print(f"    annual_capital          = {best.get('annual_capital', 0):.0f} {currency}/yr")
+    print(f"    annual_om               = {best.get('annual_om', 0):.0f} {currency}/yr")
+    print(f"    annual_grid_cost        = {best.get('annual_grid_cost', 0):.0f} {currency}/yr")
+    if "annual_pv_generation" in best:
+        print(f"    annual_pv_generation    = {best.get('annual_pv_generation', 0):.0f} kWh/yr")
+    if "annual_grid_import" in best:
+        print(f"    annual_grid_import      = {best.get('annual_grid_import', 0):.0f} kWh/yr")
+    if float(best.get("pv_area", 0.0)) > 0:
+        _print_ghi_caveat(project.site.weather_provider, project.site.ghi_scale, "    ")
+
+    if args.out:
+        return _write_results_csv(results, args.out)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="vfed", description="VFED design simulator")
     # T1 (P2-3): `vfed --version` -> "vfed <x.y.z>" (single source: vfed/__version__).
@@ -1555,6 +1793,60 @@ def build_parser() -> argparse.ArgumentParser:
         "(default: the YAML's site.ghi_scale, itself 1.0 = no scaling)",
     )
     s.set_defaults(func=_cmd_sweep)
+
+    from .design.sweep import _VALID_OBJECTIVES as _objs
+
+    o = sub.add_parser(
+        "optimize",
+        help="co-optimize building params and PV/battery sizing (nested re-dispatch)",
+    )
+    o.add_argument("project", help="path to the project YAML file")
+    o.add_argument(
+        "--cache", default="weather_cache", help="weather cache directory (default: weather_cache)"
+    )
+    o.add_argument("--out", default=None, help="CSV output file for the full enumeration table")
+    o.add_argument(
+        "--grid",
+        action="append",
+        default=None,
+        metavar="KEY=SPEC",
+        help="repeatable; grid axis over a sweepable flat parameter (same keys "
+        "as YAML parameter_ranges). SPEC forms: 'min:max:step' (inclusive "
+        "arithmetic scan), 'v1,v2,...' (explicit list), 'v' (single value). "
+        "Structural dimensions (zones/policies) are Python-API only",
+    )
+    o.add_argument(
+        "--pv",
+        default=None,
+        metavar="A1,A2,...",
+        help="comma-separated PV areas in m2 for the inner sizing loop (default: 0)",
+    )
+    o.add_argument(
+        "--battery",
+        default=None,
+        metavar="B1,B2,...",
+        help="comma-separated battery capacities in kWh for the inner sizing loop (default: 0)",
+    )
+    o.add_argument(
+        "--objective",
+        choices=sorted(_objs),
+        default="lcoe",
+        help="objective minimized by the optimizer (default: lcoe)",
+    )
+    o.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="parallel worker processes for building combos (default: 1)",
+    )
+    o.add_argument(
+        "--policy-json",
+        default=None,
+        metavar="JSON",
+        help="control policy spec as a JSON object, e.g. "
+        "'{\"type\": \"night_setback\", \"params\": {...}}'; invalid JSON exits E001",
+    )
+    o.set_defaults(func=_cmd_optimize)
 
     return p
 
