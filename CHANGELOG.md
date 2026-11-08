@@ -8,6 +8,70 @@ semantic — behaviour changes are called out explicitly under **Changed**.
 
 ### Added
 
+- **Control protocol + nested-time v2 (wave 1, C1).** New pure-leaf
+  module `vfed/design/control.py` (stdlib-only, enforced by an AST test)
+  defines the building-policy protocol. `ZoneAction` carries optional
+  per-zone commands (LED on/dim, temperature and humidity setpoints,
+  HVAC/DEH mass-flow overrides, economizer override, ERV flow, CO₂
+  setpoint); `ControlAction`, `Observation`, and `PolicyContext`
+  complete the contract, and `BuildingPolicy` is a `reset` /
+  `plan_daily` / `step` Protocol. Actions merge per field with
+  step > daily plan > none, so an all-none policy is bit-identical to
+  the legacy loop (preset oracle hashes unchanged). Policies register
+  in `POLICY_REGISTRY` and are built from config specs
+  (`{"type": ..., "params": ...}`; unknown types fail fast); the first
+  built-in is `setpoint_offset`. The new `control.period_s` config
+  field (an integer multiple of `timestep_s`, limits 60-3600 s,
+  default none = physics timestep) drives an integer time ledger. The
+  device layer consumes the override inputs, and `EnergySystem` gains
+  a frozen `dispatch_policy` hook (causal charge/discharge requests,
+  clamped by the dispatcher). `WeatherSeries` lookup is now
+  zero-order-hold on the time index, and the weather bridge contract
+  relaxes from exactly-8760 rows to any validated gapless hourly grid.
+  Tests: six new files test_37…test_42 (nested time, protocol, merge
+  semantics, registry, dispatch hook, device overrides) plus test_43
+  action wiring; integration regression 550 passed.
+- **Multi-zone config + simulation (waves 3-4).** New top-level
+  `zones` config key: a mapping of zone id → override delta
+  (`{section: {field: value}}`, sections restricted to
+  `ZONE_OVERRIDABLE`). `from_dict` validates every zone delta and
+  fails fast on unknown sections, keys, or zone ids; `zone_view()`
+  merges one delta onto a copy of the global config, and the view
+  never carries the `zones` key itself. `ZoneState` is extracted as a
+  dataclass shared by the loop and the report. With zones present the
+  engine runs one full-year simulation per zone on its own view and
+  reports facility sums, OR-combined flags, per-zone prefixed hourly
+  columns, and a `summary["zones"]` block. Zones are not sweepable in
+  v1; an empty mapping keeps single-room legacy behaviour. Tests:
+  test_44 (zones contract) and test_45 (multi-zone simulation) new.
+- **Co-optimization API (wave 5, O5).** New `vfed/design/optimize.py`
+  exposes `evaluate_candidate` and `optimize`. A candidate is a
+  declarative schema-v1 dict: flat parameter overrides (the same paths
+  sweep uses), a `zones` deep-merge delta, and `policy` / `policies`
+  specs (`{"type", "params"}`); unknown keys or schema versions fail
+  fast. `evaluate_candidate` applies a candidate to a base project,
+  runs one simulation, and scores it with the sweep economics helpers,
+  so the LCOE definition is bit-identical to `vfed sweep`. `optimize`
+  runs a Cartesian grid search (every grid value is a list; zones and
+  policies dimensions carry whole dicts): one engine run per building
+  combination, then the inner PV × battery re-dispatch over
+  `EnergySystem.calculate_metrics` — the same two-phase pattern as
+  `sweep_design`. Runs can parallelise through a `ProcessPoolExecutor`
+  after a serial main-process warm-up run. Python API only; there is
+  still no CLI `optimize` command. Tests: test_46_optimize new.
+- **Policy authority mechanism (wave 6).** Policies declare an `owns`
+  frozenset of control-field names; `CONTROL_FIELDS` is the registry of
+  the 12 first-tier fields (10 building-loop commands plus battery
+  charge/discharge), each with its config counterpart and the config
+  keys it voids (`led_on` voids `light_start_hour` /
+  `photoperiod_hours`, `T_sp` voids `T_light` / `T_dark`, and so on).
+  Two rules are enforced at runtime: a field owned by a policy must
+  receive a command (a `None` after merging raises with the timestep,
+  zone, and field name), and a policy must not write fields outside
+  its `owns` (raises). `optimize` rejects candidates that sweep a
+  config key voided by an owned field (`schedule_echo: true` in a
+  policy spec opts back in). Tests: test_47_authority new (16 tests);
+  suite grew to 1,292.
 - **Dry-bulb economizer free cooling + ERV fan power (P3-9).** New
   envelope fields `economizer_enabled` / `economizer_flow_m3h` /
   `economizer_delta_t_k` / `erv_fan_power_w` (all default off/0, so the
@@ -84,6 +148,23 @@ semantic — behaviour changes are called out explicitly under **Changed**.
   the reference implementation (P/M identical to 0.000 W on an 84-cell
   grid; holdout one-step P_deh MAE 389 W vs 507 W for the prior
   calibrated local model).
+
+- **ERV/HRV mechanical fresh air with heat recovery (R34/W3-E, H7).** New
+  additive envelope fields `erv_enabled` (default `false`, bit-identical
+  baselines) / `erv_flow_m3h` / `erv_sensible_eff` [0, 0.95] (default 0.7)
+  / `erv_latent_eff` [0, 0.95] (default 0 = sensible-only HRV, >0 =
+  enthalpy ERV). Fixed-effectiveness model (ASHRAE HVAC Systems and
+  Equipment Ch. 26): the un-recovered share `(1-eps)` of the fresh-air
+  sensible/latent load superposes on the room balances on top of `ach`
+  infiltration; recovered energy is metered in the `erv` summary block
+  (sensible/latent kWh split) and a one-line `vfed evaluate` self-evidence.
+  Fail-fast: enabled without flow, flow without enabled, effectiveness out
+  of band. The 609 preset does not enable ERV.
+- `vfed design fx` — prints the built-in FX reference snapshot (CNY/USD/EUR
+  and more, per 1 USD, snapshot date annotated, reference values only).
+- `vfed evaluate` prints a `USD equivalent` line for the headline LCOE when
+  `exchange_rate != 1` (project currency is the reporting currency; the
+  extra line keeps cross-site comparisons honest).
 
 ### Changed
 
@@ -189,25 +270,6 @@ semantic — behaviour changes are called out explicitly under **Changed**.
   - Presets are built through `from_dict`, so `preset_609()` /
     `preset_default()` now report `opex_was_defaulted = True` (they do use
     the default OPEX); numbers are unchanged.
-
-### Added
-
-- **ERV/HRV mechanical fresh air with heat recovery (R34/W3-E, H7).** New
-  additive envelope fields `erv_enabled` (default `false`, bit-identical
-  baselines) / `erv_flow_m3h` / `erv_sensible_eff` [0, 0.95] (default 0.7)
-  / `erv_latent_eff` [0, 0.95] (default 0 = sensible-only HRV, >0 =
-  enthalpy ERV). Fixed-effectiveness model (ASHRAE HVAC Systems and
-  Equipment Ch. 26): the un-recovered share `(1-eps)` of the fresh-air
-  sensible/latent load superposes on the room balances on top of `ach`
-  infiltration; recovered energy is metered in the `erv` summary block
-  (sensible/latent kWh split) and a one-line `vfed evaluate` self-evidence.
-  Fail-fast: enabled without flow, flow without enabled, effectiveness out
-  of band. The 609 preset does not enable ERV.
-- `vfed design fx` — prints the built-in FX reference snapshot (CNY/USD/EUR
-  and more, per 1 USD, snapshot date annotated, reference values only).
-- `vfed evaluate` prints a `USD equivalent` line for the headline LCOE when
-  `exchange_rate != 1` (project currency is the reporting currency; the
-  extra line keeps cross-site comparisons honest).
 
 ### Removed
 

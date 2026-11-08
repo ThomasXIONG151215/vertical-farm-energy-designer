@@ -35,7 +35,7 @@ vfed design tariffs
 # Validate (schema check without running a simulation)
 vfed validate <project.yaml>
 
-# Evaluate / Sweep (there is no separate `optimize` command — PVBES sizing is done via sweep)
+# Evaluate / Sweep (there is no separate `optimize` command — PVBES sizing is done via sweep; the co-optimization API in `vfed/design/optimize.py` is Python-only)
 vfed --version
 vfed evaluate <project.yaml> --cache weather_cache [--export out/]
 vfed sweep <project.yaml> --cache weather_cache --out results.csv
@@ -51,11 +51,12 @@ pytest --cov=vfed
 |-----------|---------|----------|
 | `vfed/physics/` | Psychrometrics, envelope, ODE solver, SHR | `engine.py` consumes all |
 | `vfed/devices/` | HVAC (Carnot COP default), dehumidifier (auto-size), LED, compressor, lag | Built by `engine.py` |
-| `vfed/pvbes/` | PV, battery, grid, energy system | Consumed by `sweep.py` |
-| `vfed/design/` | Project config, engine (+`engine_loop`/`engine_report`), presets, sweep | `engine.py` is the hub |
-| `vfed/weather/` | Open-Meteo fetch, geocoding | `engine.py` calls `fetch_weather` |
+| `vfed/pvbes/` | PV, battery, grid, energy system | Consumed by `sweep.py` (and `optimize.py`) |
+| `vfed/design/` | Project config, engine (+`engine_loop`/`engine_report`), presets, sweep, control protocol (`control.py`), co-optimization API (`optimize.py`) | `engine.py` is the hub |
+| `vfed/weather/` | Open-Meteo fetch (NASA-POWER fallback), geocoding | `engine.py` calls `fetch_weather` |
 | `vfed/plants/` | Transpiration (5 methods: van_henten model-coupled; daily/per_plant/daily_per_period/per_plant_per_period direct-set), Van Henten growth | `engine.py` steps each hour |
 | `vfed/agent/` | Evaluator (agent-cli contract) | Entry point for CLI |
+| `vfed/calibration/` | Dataset adapters, identifiability analysis, golden-section fitting | Imports `plants/` only; nothing imports it |
 | `tools/` | Maintenance utilities | `download_weather_db.py` refreshes `data/weather/` city CSVs |
 | `benchmarks/` | Validation benchmarks | BESTEST, BJAAF growth, respiration, UC Davis |
 | `tests/` | Pytest suite | run with `pytest` |
@@ -70,6 +71,7 @@ pytest --cov=vfed
 - **No EnergyPlus dependency** — pure Python ODE solver (`vfed/physics/ode.py`).
 - **Python >= 3.8** — core deps: `numpy`, `pandas`, `pyyaml`, `requests`.
 - **`vfed/design/engine.py` is the hub** — it imports from every other module. `run()` orchestrates `engine_loop.py` (hourly timestep loop) and `engine_report.py` (report + PVBES quick-eval); they lazy-import back from `engine.py`, so no import cycle. Changes to physics/devices/plants/weather may affect all three.
+- **Control protocol & zones are additive and default-off** — `vfed/design/control.py` is a stdlib-only leaf (AST-gated by `tests/test_40_control_protocol.py`); YAML carries only `control.period_s` (integer multiple of `timestep_s`, 60–3600 s, default `None` = physics timestep) and the top-level `zones` mapping (zone id → override delta; non-empty zones run one full-year simulation per zone; zones are not sweepable in v1). Policies are attached in Python via `build_policy({"type", "params"})`. With no policy and empty zones, behaviour is bit-identical to legacy.
 - **Strategy/scenario modes are NOT implemented** — the 4 strategy modes (`default` / `conservative` / `progressive` / `aggressive`) exist only as a *planned* feature documented in the `vfed/design/project.py` docstring. Do not add or reference a `strategy:` config field.
 - **HVAC COP mode is 4** — `carnot` (default: η_II × T_evap/(T_cond-T_evap)), `constant`, `linear`, `table`. Carnot depends on both indoor and outdoor temperature.
 - **Transpiration method is 5** — 1 model-coupled (`van_henten`) + 4 direct-set (`daily`, `per_plant`, `daily_per_period`, `per_plant_per_period`).

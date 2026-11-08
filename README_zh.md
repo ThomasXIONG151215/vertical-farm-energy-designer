@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 
-**目录：**[背景](#背景) · [仓库结构](#仓库结构) · [快速开始](#快速开始) · [最新进展](#最新进展2026-10) · [工作原理](#vfed-工作原理) · [与其他仿真引擎的对比](#与其他仿真引擎的对比) · [天气数据](#天气数据--联网缓存与离线) · [DIY / 个人用户指南](#diy--个人用户指南) · [CLI 命令参考](#cli-命令参考) · [配置](#配置) · [输出结果解读](#输出结果解读) · [故障排除](#故障排除) · [引用](#引用)
+**目录：**[背景](#背景) · [仓库结构](#仓库结构) · [快速开始](#快速开始) · [最新进展](#最新进展) · [工作原理](#vfed-工作原理) · [与其他仿真引擎的对比](#与其他仿真引擎的对比) · [天气数据](#天气数据--联网缓存与离线) · [DIY / 个人用户指南](#diy--个人用户指南) · [CLI 命令参考](#cli-命令参考) · [配置](#配置) · [输出结果解读](#输出结果解读) · [故障排除](#故障排除) · [引用](#引用)
 
 ## 背景
 
@@ -37,7 +37,7 @@ vertical-farm-energy-designer/
 │   ├── design/  # 配置契约、引擎（枢纽）、预设、扫描
 │   ├── agent/   # 评估器（agent-cli 契约）
 │   └── calibration/ # 可辨识性 + 拟合工具
-├── tests/       # pytest 测试套件（866+ 用例，CI：Python 3.10–3.12）
+├── tests/       # pytest 测试套件（1,292 用例，CI：Python 3.10–3.12）
 ├── tools/       # 维护工具（download_weather_db.py）
 ├── benchmarks/  # 验证基准（BESTEST、生长模型）
 ├── examples/    # 示例项目 YAML（sweep / LCOE 演示）
@@ -93,9 +93,19 @@ vfed evaluate my_farm.yaml --cache weather_cache
 vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 ```
 
-`--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `examples/example_lcoe_full.yaml`。没有单独的 `optimize` 命令；容量优化通过 `sweep` 完成。
+`--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `examples/example_lcoe_full.yaml`。没有单独的 `optimize` CLI 命令；容量优化通过 `sweep` 完成，Python 协同优化 API（`vfed.design.optimize`）覆盖候选评估与网格搜索 — 见[最新进展](#最新进展)。
 
-## 最新进展（2026-10）
+## 最新进展
+
+### 2026-11 — 多分区、控制协议、协同优化
+
+仿真器新增建筑控制协议、多分区房间与协同优化 Python API。全部特性均为增量设计且默认关闭 — 已发布基线逐位不变（预设 oracle 哈希不变）。
+
+- **控制协议（`vfed/design/control.py`）** — 叠加在逐时循环之上的纯标准库策略层。`ZoneAction` 携带可选的分区指令（LED 开启/调光、温湿度设定点、HVAC/DEH 质量流量覆盖、经济器覆盖、ERV 风量、CO₂ 设定点）；`Observation` 与 `PolicyContext` 定义策略可见的信息；`BuildingPolicy` 是 `reset` / `plan_daily` / `step` 协议。动作按字段三层合并：step > 日计划 > 无，因此全空策略与 legacy 循环逐位一致。策略按名注册，从 `{"type", "params"}` 配置规格加载（未知类型快速失败）；首个内置策略为 `setpoint_offset`。新增 `control.period_s` 字段（`timestep_s` 的整数倍，60–3600 s，默认无 = 物理步长）设定控制周期；`EnergySystem` 接受冻结的 `dispatch_policy` 钩子用于电池充放电请求。
+- **多分区房间（`zones:` 配置）** — 顶层 `zones:` 映射：分区 id → 覆盖增量（`{section: {field: value}}`），描述与全局配置不同的房间；`from_dict` 逐分区校验增量，未知 section、字段或分区 id 快速失败。声明分区后，引擎在每个分区自己的合并视图上各跑一次全年仿真，报告设施总量、OR 合并标志、分区前缀逐时列与 `summary["zones"]` 块。空映射保持单房间 legacy 行为；分区在 v1 不可扫描。
+- **协同优化 API（`vfed/design/optimize.py`）** — `evaluate_candidate()` 将声明式候选（扁平参数覆盖 + `zones` 深合并增量 + 策略规格，带 schema 版本）应用到基础项目，跑一次仿真，并用 sweep 经济学助手打分 — LCOE 口径与 `vfed sweep` 逐位一致。`optimize()` 执行笛卡尔积网格搜索 — 每个建筑组合一次引擎运行，再做内层 PV × 电池再调度，与 `sweep_design` 相同的两阶段模式 — 支持可选进程池并行。仅 Python API，无 CLI 命令。
+
+### 2026-10 — 验证与标定能力
 
 论文发表之后，引擎已从一个负荷生成器成长为一个带验证、可标定的 PFAL 仿真器。以下各项均为增量特性，除特别说明外默认关闭 — 已发布的基线结果逐位不变。
 
@@ -105,7 +115,7 @@ vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 - **验证与基准**
   - `benchmarks/bestest/` — EnergyPlus BESTEST 验证台（ASHRAE 140 Cases 600/600FF/900/900FF，Denver TMY3）。2R2C 墙体湿路径在 Case 600 上 4/4 项指标通过 EnergyPlus 参考对照。
   - 公开数据生长基准：UC Davis 生菜（3 状态模型生物量 RMSE 21.49 g → 14.26 g）；BJAAF 分阶段留出集（3 状态 −1.6 %/+11.5 %，1 状态外推失败 +27 %）。
-  - 866 个 pytest 用例全部通过。
+  - 1,292 个 pytest 用例全部通过。
 - **本地化的公开数据集**（`data/datasets/`）— AGC 2018/2019 温室（WUR，CC0）、UC Davis 生菜（30 分钟环境 + 逐日生物量 + 冠层 RGB）、BJAAF 北京生菜（配对 LAI/X_d）、CERTH 垂直农场能源（CC BY 4.0）、UniBo VF LCA、Frontiers 能耗强度基准表。
 - **DEH 调试模式** — `609_identified` 预设内置奉贤辨识的设定值调制 map（留出集 DEH 功率 MAE 389 W，优于此前标定模型的 507 W）。`609` 预设保持原厂 DEH 不变。
 
@@ -127,7 +137,7 @@ PFAL 能耗建模分散在三个割裂的世界里：通用建筑引擎（Energy
 
 | 框架 | 定位 | 建筑物理 | HVAC 与除湿 | 作物模型 | 光伏·电池·经济性 | 验证 | 许可证 |
 |---|---|---|---|---|---|---|---|
-| **VFED**（本仓库） | PFAL 优先：不透明、LED 主导的房间 | 纯 Python ODE 热湿围护模型，可选 2R2C 墙体热质量 | COP 四模式（carnot / constant / linear / table）+ 软顶、曲轴箱加热、除霜；专用除湿机带 DOE/E+ SMER 曲线与 map | Van Henten 1 或 3 状态，5 种蒸腾方法 | 光伏 + 电池 + 分时电网，LCOE/NPV/IRR 容量扫描 | 866 个测试；ASHRAE 140（BESTEST）验证台；UC Davis + BJAAF 生长基准 | MIT |
+| **VFED**（本仓库） | PFAL 优先：不透明、LED 主导的房间 | 纯 Python ODE 热湿围护模型，可选 2R2C 墙体热质量 | COP 四模式（carnot / constant / linear / table）+ 软顶、曲轴箱加热、除霜；专用除湿机带 DOE/E+ SMER 曲线与 map | Van Henten 1 或 3 状态，5 种蒸腾方法 | 光伏 + 电池 + 分时电网，LCOE/NPV/IRR 容量扫描 | 1,292 个测试；ASHRAE 140（BESTEST）验证台；UC Davis + BJAAF 生长基准 | MIT |
 | [GreenLight](https://github.com/davkat1/GreenLight)（瓦赫宁根大学） | 自然光番茄温室 | 已验证的 ODE 状态（空气/冠层/覆盖层/土壤） | 锅炉 + 管道加热、通风窗、保温幕；无变 COP 热泵；除湿仅靠通风 | 机理番茄模型（干物质分配、LAI） | 无 | 热需求已验证（Katzin et al. 2020） | BSD-3 |
 | [GreenLight-Gym2](https://github.com/BartvLaatum/GreenLight-Gym2)（瓦赫宁根大学） | 温室强化学习控制基准 | 经 CasADi 的 GreenLight ODE | 同 GreenLight，外加机械除湿规则开关 | 继承番茄模型 | 含能源/CO₂ 价格的利润奖励；无光伏/电池/LCOE | 已发表 IFAC AgriControl 2025 基准 | AGPL-3 |
 | [Greenhouses-Library](https://github.com/queraltab/Greenhouses-Library) | 自然光温室 + 热力系统 | Modelica 物理组件 | CHP + 热泵性能 map、锅炉、储热、区域供热 | TOMGRO 类产量模型 | 仅热力集成 | 同行评审（Altes-Buch et al. 2019） | BSD-3（2023 年起停更） |
@@ -524,6 +534,8 @@ vertical-farm-energy-designer/
   - legacy 格式（兼容）：`peak_price` / `normal_price` / `valley_price` + `peak_hours` / `valley_hours`，加载时展开为 24 值。
   - 参考电价：`vfed design tariffs` 列出区域；`vfed design new ... --tariff <region>` 直接载入。
 - **space** — 可选扫描参数范围与目标（`lcoe` / `kwh_per_kg_fresh` / `cost_per_kg_fresh`）
+- **control** — 建筑策略接线（默认关闭 = legacy 固定日程循环，逐位一致）。YAML 字段仅有 `period_s`：控制周期（`timestep_s` 的整数倍，60–3600 s；默认无 = 每个物理步长）。策略在 Python 侧接入 —— 规格字典 `{"type", "params"}` 加载已注册的 `BuildingPolicy`（内置：`setpoint_offset`；由协同优化 API 消费）；未知类型快速失败。完整 `ZoneAction` / `Observation` / `PolicyContext` 契约见 `vfed/design/control.py` 文档字符串。
+- **zones** — 多分区覆盖增量（默认空 = 单房间 legacy 行为）。映射：分区 id → `{section: {field: value}}`，深合并到全局配置之上；section 限于可覆盖子集，每个增量在加载时校验。声明分区后每个分区在自己的合并视图上跑全年仿真；报告新增设施总量、OR 合并标志、分区前缀逐时列与 `summary["zones"]`。分区在 v1 不可扫描。
 - **opex / equipment_capital / envelope_capital / pump_capital** — 资本与运营成本输入（capital 模式：`per_watt` × 额定 W，光伏 `per_kwp` × kWp，电池 `per_kwh` × kWh；见 DIY 指南第 4 节）
 - **currency / exchange_rate** — 货币设置；见下方[货币模型](#货币模型round-26)
 

@@ -1,12 +1,12 @@
 # Weather Module
 
-Meteorological data acquisition — Open-Meteo API, Erbs GHI splitting, plane-of-array irradiance, and geocoding.
+Meteorological data acquisition — Open-Meteo API (NASA-POWER fallback), Erbs GHI splitting, plane-of-array irradiance, and geocoding.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `weather_bridge.py` | Fetches hourly weather from Open-Meteo, performs Erbs 1982 GHI split, computes POA irradiance, caches as CSV |
+| `weather_bridge.py` | Fetches hourly weather from Open-Meteo (NASA-POWER fallback), performs Erbs 1982 GHI split, computes POA irradiance, caches as CSV; accepts any validated gapless hourly grid (zero-order-hold time-indexed lookup) |
 | `geocode.py` | Open-Meteo geocoding — converts city name to (lat, lon) via API call |
 
 ## Usage

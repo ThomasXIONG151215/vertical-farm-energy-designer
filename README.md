@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 
-**Contents:** [Background](#background) · [Repository Structure](#repository-structure) · [Quick Start](#quick-start) · [What's New](#whats-new-2026-10) · [How VFED Works](#how-vfed-works) · [Comparison](#how-vfed-compares-to-other-simulators) · [Weather Data](#weather-data--network-cache-offline) · [DIY / Prosumer Guide](#diy--prosumer-guide) · [CLI Reference](#cli-reference) · [Configuration](#configuration) · [Interpreting Results](#interpreting-results) · [Troubleshooting](#troubleshooting) · [Citation](#citation)
+**Contents:** [Background](#background) · [Repository Structure](#repository-structure) · [Quick Start](#quick-start) · [What's New](#whats-new) · [How VFED Works](#how-vfed-works) · [Comparison](#how-vfed-compares-to-other-simulators) · [Weather Data](#weather-data--network-cache-offline) · [DIY / Prosumer Guide](#diy--prosumer-guide) · [CLI Reference](#cli-reference) · [Configuration](#configuration) · [Interpreting Results](#interpreting-results) · [Troubleshooting](#troubleshooting) · [Citation](#citation)
 
 ## Background
 
@@ -37,7 +37,7 @@ vertical-farm-energy-designer/
 │   ├── design/  # config contract, engine (hub), presets, sweep
 │   ├── agent/   # evaluator (agent-cli contract)
 │   └── calibration/ # identifiability + fitting tools
-├── tests/       # pytest suite (866+ tests, CI: Python 3.10–3.12)
+├── tests/       # pytest suite (1,292 tests, CI: Python 3.10–3.12)
 ├── tools/       # maintenance utilities (download_weather_db.py)
 ├── benchmarks/  # validation benchmarks (BESTEST, growth)
 ├── examples/    # example project YAMLs (sweep / LCOE demos)
@@ -93,9 +93,19 @@ The `609` preset declares no sweep ranges, so `vfed sweep my_farm.yaml` would on
 vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 ```
 
-`--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `examples/example_lcoe_full.yaml`. There is no separate `optimize` command; sizing is done via `sweep`.
+`--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `examples/example_lcoe_full.yaml`. There is no separate `optimize` CLI command; sizing is done via `sweep`, and the Python co-optimization API (`vfed.design.optimize`) covers candidate evaluation and grid search — see [What's New](#whats-new).
 
-## What's New (2026-10)
+## What's New
+
+### 2026-11 — multi-zone, control protocol, co-optimization
+
+The simulator gains a building-control protocol, multi-zone rooms, and a co-optimization Python API. Every feature is additive and default-off — published baselines stay bit-identical (preset oracle hashes unchanged).
+
+- **Control protocol (`vfed/design/control.py`)** — a pure-stdlib policy layer over the hourly loop. `ZoneAction` carries optional per-zone commands (LED on/dim, temperature and humidity setpoints, HVAC/DEH mass-flow overrides, economizer override, ERV flow, CO₂ setpoint); `Observation` and `PolicyContext` define what a policy sees; `BuildingPolicy` is a `reset` / `plan_daily` / `step` Protocol. Actions merge per field with step > daily plan > none, so an all-none policy reproduces the legacy loop bit-for-bit. Policies register by name and load from `{"type", "params"}` config specs (unknown types fail fast); the first built-in is `setpoint_offset`. The new `control.period_s` field (integer multiple of `timestep_s`, 60–3600 s, default none = physics timestep) sets the control interval, and `EnergySystem` accepts a frozen `dispatch_policy` hook for battery charge/discharge requests.
+- **Multi-zone rooms (`zones:` config)** — a top-level `zones:` mapping of zone id → override delta (`{section: {field: value}}`) describes rooms that differ from the global config; `from_dict` validates every delta and fails fast on unknown sections, keys, or zone ids. With zones present the engine runs one full-year simulation per zone on its merged view and reports facility sums, OR-combined flags, per-zone prefixed hourly columns, and a `summary["zones"]` block. An empty mapping keeps single-room legacy behaviour; zones are not sweepable in v1.
+- **Co-optimization API (`vfed/design/optimize.py`)** — `evaluate_candidate()` applies a declarative candidate (flat parameter overrides + `zones` deep-merge delta + policy specs, schema-versioned) to a base project, runs one simulation, and scores it with the sweep economics helpers, so the LCOE definition is bit-identical to `vfed sweep`. `optimize()` runs a Cartesian grid search — one engine run per building combination, then the inner PV × battery re-dispatch, the same two-phase pattern as `sweep_design` — with optional process-pool parallelism. Python API only; there is no CLI command.
+
+### 2026-10 — validated simulator growth
 
 Since the paper, the engine has grown from a load generator into a validated, calibration-ready PFAL simulator. Every item below is additive and default-off unless stated — published baselines stay bit-identical.
 
@@ -105,7 +115,7 @@ Since the paper, the engine has grown from a load generator into a validated, ca
 - **Validation & benchmarks**
   - `benchmarks/bestest/` — an EnergyPlus BESTEST harness (ASHRAE 140 Cases 600/600FF/900/900FF, Denver TMY3). The 2R2C-wall wet path passes 4/4 Case 600 metrics against the EnergyPlus reference.
   - Growth benchmarks on public data: UC Davis lettuce (biomass RMSE 21.49 g → 14.26 g with the 3-state model) and BJAAF staged holdouts (3-state −1.6 %/+11.5 % vs 1-state +27 % extrapolation failure).
-  - 866 pytest tests, all passing.
+  - 1,292 pytest tests, all passing.
 - **Localized public datasets** under `data/datasets/` — AGC 2018/2019 greenhouse (WUR, CC0), UC Davis lettuce (30-min environment + daily biomass + canopy RGB), BJAAF Beijing lettuce (paired LAI/X_d), CERTH vertical-farm energy (CC BY 4.0), UniBo VF LCA, and the Frontiers energy-intensity benchmark table.
 - **DEH commissioning mode** — the `609_identified` preset ships the Fengxian-identified setpoint-modulation map (holdout DEH power MAE 389 W vs 507 W for the prior calibrated model). The stock `609` preset is unchanged.
 
@@ -127,7 +137,7 @@ PFAL energy modelling lives in three fragmented worlds: general building engines
 
 | Framework | Focus | Building physics | HVAC & dehumidification | Crop model | PV·battery·economics | Validation | License |
 |---|---|---|---|---|---|---|---|
-| **VFED** (this repo) | PFAL-first: opaque, LED-dominant rooms | Pure-Python ODE heat+moisture envelope, optional 2R2C wall mass | COP modes (Carnot / constant / linear / table) + soft cap, crankcase heater, defrost; dedicated dehumidifier with DOE/E+ SMER curves and maps | Van Henten 1- or 3-state, 5 transpiration methods | PV + battery + TOU grid, LCOE/NPV/IRR sizing sweep | 866 tests; ASHRAE 140 (BESTEST) harness; UC Davis + BJAAF growth benchmarks | MIT |
+| **VFED** (this repo) | PFAL-first: opaque, LED-dominant rooms | Pure-Python ODE heat+moisture envelope, optional 2R2C wall mass | COP modes (Carnot / constant / linear / table) + soft cap, crankcase heater, defrost; dedicated dehumidifier with DOE/E+ SMER curves and maps | Van Henten 1- or 3-state, 5 transpiration methods | PV + battery + TOU grid, LCOE/NPV/IRR sizing sweep | 1,292 tests; ASHRAE 140 (BESTEST) harness; UC Davis + BJAAF growth benchmarks | MIT |
 | [GreenLight](https://github.com/davkat1/GreenLight) (WUR) | Sunlit tomato greenhouse | Validated ODE states (air / canopy / cover / soil) | Boiler + pipe-rail heating, vents, thermal screens; no variable-COP heat pump; dehumidification via ventilation only | Mechanistic tomato (DM partitioning, LAI) | None | Heat demand validated (Katzin et al. 2020) | BSD-3 |
 | [GreenLight-Gym2](https://github.com/BartvLaatum/GreenLight-Gym2) (WUR) | Greenhouse RL control benchmark | GreenLight ODE via CasADi | Same as GreenLight, plus a mechanical-dehumidification rule flag | Inherited tomato | Profit reward with energy/CO₂ prices; no PV/battery/LCOE | Published IFAC AgriControl 2025 benchmark | AGPL-3 |
 | [Greenhouses-Library](https://github.com/queraltab/Greenhouses-Library) | Sunlit greenhouse + thermal systems | Physical Modelica components | CHP + heat-pump performance maps, boilers, storage, district heating | TOMGRO-type yield | Thermal integration only | Peer-reviewed (Altes-Buch et al. 2019) | BSD-3 (dormant since 2023) |
@@ -525,6 +535,8 @@ All design parameters live in a single YAML file generated by `vfed design new`.
   - Legacy format (compatible): `peak_price` / `normal_price` / `valley_price` + `peak_hours` / `valley_hours`, expanded to 24 values on load.
   - Reference tariffs: `vfed design tariffs` lists regions; `vfed design new ... --tariff <region>` loads one directly.
 - **space** — optional sweep parameter ranges and objective (`lcoe` / `kwh_per_kg_fresh` / `cost_per_kg_fresh`)
+- **control** — building-policy wiring (default off = the legacy fixed-schedule loop, bit-identical). The only YAML field is `period_s`: the control interval (an integer multiple of `timestep_s`, 60–3600 s; default none = every physics timestep). Policies are attached in Python — a spec `{"type", "params"}` loads a registered `BuildingPolicy` (built-in: `setpoint_offset`; consumed by the co-optimization API); unknown types fail fast. `vfed/design/control.py` documents the full `ZoneAction` / `Observation` / `PolicyContext` contract.
+- **zones** — multi-room override deltas (default empty = single-room legacy behaviour). A mapping of zone id → `{section: {field: value}}`, deep-merged onto the global config; sections are restricted to the zone-overridable subset and every delta is validated at load. With zones present each zone simulates its own full year on its merged view; the report adds facility sums, OR-combined flags, per-zone prefixed hourly columns, and `summary["zones"]`. Zones are not sweepable in v1.
 - **opex / equipment_capital / envelope_capital / pump_capital** — capital and operating cost inputs (capital modes: `per_watt` × rated W, `per_kwp` × kWp for PV, `per_kwh` × kWh for battery; see section 4)
 - **currency / exchange_rate** — currency settings; see the [currency model](#currency-model-round-26) below
 

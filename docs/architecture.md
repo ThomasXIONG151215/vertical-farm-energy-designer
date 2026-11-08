@@ -11,7 +11,7 @@
 | Path | Role |
 |------|------|
 | `vfed/` | The simulator package — see §2 |
-| `tests/` | Pytest suite (866+ tests). CI (`.github/workflows/ci.yml`) runs it on push/PR for Python 3.10–3.12. Do not move. |
+| `tests/` | Pytest suite (1,292 tests). CI (`.github/workflows/ci.yml`) runs it on push/PR for Python 3.10–3.12. Do not move. |
 | `examples/` | Example project YAMLs (`example_sweep.yaml`, `example_lcoe_full.yaml`) |
 | `data/` | `data/weather/` city CSVs (offline quickstart); `data/datasets/` public datasets (git-ignored except `*.md`) |
 | `docs/` | `architecture.md` (this file) · `reports/` (technical deliverables) · `references/` (PV/BES validation data — datasheets, measured curves; `battery.py`/`modules.py` load anchors from here at runtime) · `planning/` (dated session plans) |
@@ -37,7 +37,7 @@
 
 ```text
 Layer 3 (entry):    cli.py · agent/evaluator.py
-Layer 2 (design):   design/ — sweep.py · engine.py (hub) · engine_loop.py · engine_report.py · project.py · presets.py · fx.py · result.py
+Layer 2 (design):   design/ — sweep.py · engine.py (hub) · engine_loop.py · engine_report.py · project.py · presets.py · fx.py · result.py · control.py (pure leaf) · optimize.py
 Layer 1 (domain):   physics/ · devices/ · plants/ · weather/ · pvbes/
 Standalone:         calibration/ (imports plants only; nothing imports it)
 Frozen archive:     research/ (imported by nothing)
@@ -47,10 +47,11 @@ Rules (enforced by `tests/test_architecture.py`):
 
 1. Layer-1 packages (`physics`, `devices`, `plants`, `weather`, `pvbes`) **never import** `design`, `agent`, `cli`, or `calibration`. Intra-layer edges are allowed: `devices` → `physics` (COP / SMER psychrometrics) and `plants` → `physics` (saturation-deficit transpiration).
 2. `design/engine.py` is the hub — it imports `physics` (psychrometrics, envelope, ode, shr), `devices` (hvac, dehumidifier, led, co2), `plants` (transpiration, van_henten, van_henten_3state), and `weather` (`fetch_weather`). Its `run()` orchestrates `engine_loop.py` (hourly timestep loop) and `engine_report.py` (report + PVBES quick-eval layer) via lazy imports; both import helpers/constants back from `engine.py` at top level (no cycle at import time).
-3. `design/sweep.py` additionally imports `pvbes` (pv, battery, grid, energy_system) and `design.engine`.
+3. `design/sweep.py` additionally imports `pvbes` (pv, battery, grid, energy_system) and `design.engine`. `design/optimize.py` additionally imports `design.engine`, `design.project`, `design.control`, and `design.sweep` (energy-system builder + economics helpers).
 4. `agent/evaluator.py` imports `design` only. `cli.py` additionally imports `weather.city_db` and `pvbes.tariff_db`.
 5. `calibration/` imports `plants` only.
 6. Nothing imports from `research/`.
+7. `design/control.py` is a pure leaf — it imports nothing from `vfed/` (stdlib only; enforced by an AST check in `tests/test_40_control_protocol.py`).
 
 ### Dependency graph
 
@@ -62,12 +63,15 @@ graph TD
     PHYS["physics/<br/>psychrometrics · envelope · ode · shr"] --> ENGINE
     DEV["devices/<br/>hvac · dehumidifier · led · co2"] --> ENGINE
     PLANTS["plants/<br/>transpiration · van_henten · 3-state"] --> ENGINE
-    WX["weather/weather_bridge<br/>Open-Meteo + cache"] --> ENGINE
+    WX["weather/weather_bridge<br/>Open-Meteo/NASA-POWER + cache"] --> ENGINE
     ENGINE -->|run() lazy-imports| LOOP["design/engine_loop.py<br/>hourly ODE timestep loop"]
     ENGINE -->|run() lazy-imports| REPORT["design/engine_report.py<br/>report + PVBES quick-eval"]
     ENGINE --> RESULT["design/result.py<br/>SimulationResult"]
     ENGINE --> SWEEP["design/sweep.py<br/>parametric sweep"]
     SWEEP --> ES["pvbes/<br/>pv · battery · grid · energy_system"]
+    ENGINE --> OPT["design/optimize.py<br/>co-optimization API"]
+    SWEEP --> OPT
+    CTRL["design/control.py<br/>control protocol (stdlib-only)"] --> OPT
     ENGINE --> EVAL["agent/evaluator.py"]
     SWEEP --> EVAL
     EVAL --> CLI["cli.py<br/>vfed command"]
@@ -78,7 +82,7 @@ graph TD
 
 ### Data flow
 
-`project.yaml` → `DesignProject` (`design/project.py`) → `DesignEngine` hourly loop — 8,760 steps of room heat & moisture ODE + device dispatch (`design/engine.py` `run()` → `engine_loop.py`) → `SimulationResult` (`design/result.py`, assembled in `engine_report.py`) → parametric sweep × PVBES dispatch (`design/sweep.py` × `pvbes/`) → LCOE / NPV / IRR ranking → CLI / agent output.
+`project.yaml` → `DesignProject` (`design/project.py`) → `DesignEngine` hourly loop — 8,760 steps of room heat & moisture ODE + device dispatch (`design/engine.py` `run()` → `engine_loop.py`) → `SimulationResult` (`design/result.py`, assembled in `engine_report.py`) → parametric sweep × PVBES dispatch (`design/sweep.py` × `pvbes/`) → LCOE / NPV / IRR ranking → CLI / agent output. The co-optimization API (`design/optimize.py`) wraps the same chain: it applies a candidate to the base project, runs the engine, and scores the result with the sweep economics helpers; control policies come from `design/control.py`.
 
 ### Module table
 
@@ -87,9 +91,9 @@ graph TD
 | `physics/` | psychrometrics (wet-air thermodynamics), envelope (UA, solar gains), ode (`RoomODESolver`), shr (`DynamicSHR`) |
 | `devices/` | hvac (4 COP modes, Carnot default), dehumidifier (auto-size, DOE/E+ SMER curves), led, co2 (M1 balance, default off) |
 | `plants/` | transpiration (5 methods), van_henten (1-state growth), van_henten_3state (C_buf + LAI) |
-| `weather/` | weather_bridge (Open-Meteo fetch + cache), city_db |
+| `weather/` | weather_bridge (Open-Meteo/NASA-POWER fetch + cache), city_db |
 | `pvbes/` | pv (single-diode), battery (datasheet-anchored), grid (TOU tariff), energy_system, modules (module library), tariff_db |
-| `design/` | project (config contract), presets, engine (hub), engine_loop (hourly timestep loop), engine_report (report layer), sweep, fx (currency), result |
+| `design/` | project (config contract), presets, engine (hub), engine_loop (hourly timestep loop + control tick), engine_report (report layer), sweep, fx (currency), result, control (control protocol — stdlib-only leaf), optimize (co-optimization API) |
 | `agent/` | evaluator (agent-cli contract) |
 | `calibration/` | dataset adapters, identifiability analysis, golden-section fitting |
 
@@ -97,14 +101,17 @@ graph TD
 
 | File | ~Lines | Note |
 |------|--------|------|
-| `design/project.py` | 2,600 | YAML config contract — every config field starts here (+ `presets.py`) |
-| `design/engine.py` | 1,200 | Hub: setup + device build + `run()` orchestration |
-| `design/engine_report.py` | 840 | Report layer: timeseries/summary/climate + PVBES quick-eval |
-| `design/engine_loop.py` | 525 | Hourly timestep loop (extracted 2026-11-04, zero-drift) |
+| `design/project.py` | 2,800 | YAML config contract — every config field starts here (+ `presets.py`); includes the top-level `zones` contract |
+| `design/engine.py` | 1,900 | Hub: setup + device build + `run()` orchestration; multi-zone Z-loop (one full-year sim per zone) |
+| `design/engine_report.py` | 950 | Report layer: timeseries/summary/climate + PVBES quick-eval + per-zone summaries |
+| `design/engine_loop.py` | 830 | Hourly timestep loop (extracted 2026-11-04, zero-drift) — control tick + `ZoneState` |
 | `cli.py` | 1,500 | `vfed` command |
 | `design/sweep.py` | 900 | PVBES sizing sweep |
+| `design/optimize.py` | 400 | Co-optimization API: `evaluate_candidate` + `optimize` (grid search) |
 
 ## 3. Reorganisation log
 
 - **C5 (done 2026-11-04)** — `design/engine.py` hourly-loop split executed, interface-preserving: `run()` now orchestrates `engine_loop.py` (`run_hourly_loop`) + `engine_report.py` (`build_report`); public surface (`DesignEngine` / `run_project` / `full_load_warnings` / `SimulationResult` import paths and signatures) frozen; zero-drift sha256 oracles + full suite (1,069 tests) verified. See `docs/planning/2026-11-03_repo-reorg-plan.md`.
 - **C2b (done 2026-11-03)** — `scripts/` split into `tools/` (maintenance utilities) + `benchmarks/` (validation benchmarks); 33 pure renames, path references updated repo-wide.
+- **Waves 1–5 (2026-11-07/08)** — new `design/control.py` (control protocol, stdlib-only leaf) and `design/optimize.py` (co-optimization API); top-level `zones` config + multi-zone simulation across `project.py`/`engine.py`/`engine_loop.py`/`engine_report.py`.
+- **Wave 6 (2026-11-08)** — policy authority (`owns`) mechanism: declared `owns` frozensets, missing-owned-field and out-of-authority failures, and the `CONTROL_FIELDS` registry (12 first-tier fields with config counterparts and `voids_params`); suite grew to 1,292 tests.
