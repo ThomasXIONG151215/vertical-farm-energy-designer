@@ -1,0 +1,125 @@
+{
+ "A0_none": {
+  "annual_water_m3": 10.76,
+  "annual_hvac_kwh": 10259.65,
+  "hvac_kwh_dark": 5737.42,
+  "hvac_kwh_light": 4522.24,
+  "hvac_kwh_total": 10259.65,
+  "deh_water_kg_smer35_est": 32462.3,
+  "xd_mean_dark": 0.114227,
+  "xd_mean_light": 0.116023,
+  "xd_mean_last_dark_hour": 0.052482,
+  "xd_mean_first3h_light": 0.020588,
+  "annual_harvest_kg_exact": 100.54,
+  "annual_harvest_fw_kg_exact": 2010.79,
+  "moisture_clamp_stats": {
+   "floor_clip_events": 0,
+   "floor_clip_water_kg": 0.0,
+   "sat_clip_events": 0,
+   "sat_clip_water_kg": 0.0
+  },
+  "dehumidifier_performance": {
+   "deh_nominal_dehum_kg": 18408.5,
+   "deh_actual_dehum_kg": 9190.2,
+   "hvac_nominal_dehum_kg": 3760.1,
+   "hvac_actual_dehum_kg": 1566.0,
+   "removal_limited_events": 41269,
+   "removal_limited_water_kg": 11412.324,
+   "deh_utilization": 0.4992
+  },
+  "deh_smer_effective": {
+   "control_mode": "vfd",
+   "smer_curve": false,
+   "smer_map": false,
+   "effective_smer_kg_per_kwh": 2.063,
+   "delivered_smer_kg_per_kwh": 1.03,
+   "rated_smer_kg_per_kwh": 3.5,
+   "deh_comp_energy_kwh": 8924.59,
+   "deh_total_energy_kwh": 9274.94
+  },
+  "led_kwh": 42048.0,
+  "rh_setpoint_pct": 65.0
+ },
+ "A55": {
+  "annual_water_m3": 10.99,
+  "annual_hvac_kwh": 10229.61,
+  "hvac_kwh_dark": 5734.33,
+  "hvac_kwh_light": 4495.28,
+  "hvac_kwh_total": 10229.61,
+  "deh_water_kg_smer35_est": 32095.6,
+  "xd_mean_dark": 0.11423,
+  "xd_mean_light": 0.116027,
+  "xd_mean_last_dark_hour": 0.052483,
+  "xd_mean_first3h_light": 0.020588,
+  "annual_harvest_kg_exact": 100.54,
+  "annual_harvest_fw_kg_exact": 2010.9,
+  "moisture_clamp_stats": {
+   "floor_clip_events": 0,
+   "floor_clip_water_kg": 0.0,
+   "sat_clip_events": 0,
+   "sat_clip_water_kg": 0.0
+  },
+  "dehumidifier_performance": {
+   "deh_nominal_dehum_kg": 18499.7,
+   "deh_actual_dehum_kg": 9442.2,
+   "hvac_nominal_dehum_kg": 3684.5,
+   "hvac_actual_dehum_kg": 1549.5,
+   "removal_limited_events": 40702,
+   "removal_limited_water_kg": 11192.548,
+   "deh_utilization": 0.5104
+  },
+  "deh_smer_effective": {
+   "control_mode": "vfd",
+   "smer_curve": false,
+   "smer_map": false,
+   "effective_smer_kg_per_kwh": 2.096,
+   "delivered_smer_kg_per_kwh": 1.07,
+   "rated_smer_kg_per_kwh": 3.5,
+   "deh_comp_energy_kwh": 8825.18,
+   "deh_total_energy_kwh": 9170.17
+  },
+  "led_kwh": 42048.0,
+  "rh_setpoint_pct": 65.0
+ },
+ "A60": {
+  "annual_water_m3": 10.86,
+  "annual_hvac_kwh": 10244.67,
+  "hvac_kwh_dark": 5736.19,
+  "hvac_kwh_light": 4508.48,
+  "hvac_kwh_total": 10244.67,
+  "deh_water_kg_smer35_est": 32344.5,
+  "xd_mean_dark": 0.114228,
+  "xd_mean_light": 0.116025,
+  "xd_mean_last_dark_hour": 0.052482,
+  "xd_mean_first3h_light": 0.020588,
+  "annual_harvest_kg_exact": 100.54,
+  "annual_harvest_fw_kg_exact": 2010.84,
+  "moisture_clamp_stats": {
+   "floor_clip_events": 0,
+   "floor_clip_water_kg": 0.0,
+   "sat_clip_events": 0,
+   "sat_clip_water_kg": 0.0
+  },
+  "dehumidifier_performance": {
+   "deh_nominal_dehum_kg": 18573.1,
+   "deh_actual_dehum_kg": 9313.8,
+   "hvac_nominal_dehum_kg": 3681.0,
+   "hvac_actual_dehum_kg": 1547.6,
+   "removal_limited_events": 41013,
+   "removal_limited_water_kg": 11392.701,
+   "deh_utilization": 0.5015
+  },
+  "deh_smer_effective": {
+   "control_mode": "vfd",
+   "smer_curve": false,
+   "smer_map": false,
+   "effective_smer_kg_per_kwh": 2.088,
+   "delivered_smer_kg_per_kwh": 1.047,
+   "rated_smer_kg_per_kwh": 3.5,
+   "deh_comp_energy_kwh": 8894.34,
+   "deh_total_energy_kwh": 9241.29
+  },
+  "led_kwh": 42048.0,
+  "rh_setpoint_pct": 65.0
+ }
+}

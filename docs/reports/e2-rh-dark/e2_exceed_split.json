@@ -1,0 +1,23 @@
+{
+ "A0_none": {
+  "exceed_total": 5368,
+  "exceed_dark": 1924,
+  "exceed_light": 3444,
+  "light_rh_mean": 65.652,
+  "dark_rh_mean": 64.775
+ },
+ "A55": {
+  "exceed_total": 3470,
+  "exceed_dark": 0,
+  "exceed_light": 3470,
+  "light_rh_mean": 65.674,
+  "dark_rh_mean": 55.024
+ },
+ "A60": {
+  "exceed_total": 3524,
+  "exceed_dark": 0,
+  "exceed_light": 3524,
+  "light_rh_mean": 65.711,
+  "dark_rh_mean": 60.027
+ }
+}

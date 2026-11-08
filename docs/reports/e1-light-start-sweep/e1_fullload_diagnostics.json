@@ -1,0 +1,142 @@
+{
+  "0": {
+    "full_load_diagnostics": {
+      "hvac_cool": {
+        "hours": 305,
+        "pct": 3.48,
+        "max_streak_h": 8
+      },
+      "hvac_heat": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "deh": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "criteria": {
+        "hvac_pct_warn": 10.0,
+        "hvac_streak_warn_h": 24.0,
+        "deh_pct_warn": 60.0,
+        "hourly_substep_frac": 0.99
+      }
+    },
+    "warnings": [],
+    "annual_load_kwh": null,
+    "energy_share_pct": null
+  },
+  "6": {
+    "full_load_diagnostics": {
+      "hvac_cool": {
+        "hours": 241,
+        "pct": 2.75,
+        "max_streak_h": 8
+      },
+      "hvac_heat": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "deh": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "criteria": {
+        "hvac_pct_warn": 10.0,
+        "hvac_streak_warn_h": 24.0,
+        "deh_pct_warn": 60.0,
+        "hourly_substep_frac": 0.99
+      }
+    },
+    "warnings": [],
+    "annual_load_kwh": null,
+    "energy_share_pct": null
+  },
+  "14": {
+    "full_load_diagnostics": {
+      "hvac_cool": {
+        "hours": 251,
+        "pct": 2.87,
+        "max_streak_h": 8
+      },
+      "hvac_heat": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "deh": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "criteria": {
+        "hvac_pct_warn": 10.0,
+        "hvac_streak_warn_h": 24.0,
+        "deh_pct_warn": 60.0,
+        "hourly_substep_frac": 0.99
+      }
+    },
+    "warnings": [],
+    "annual_load_kwh": null,
+    "energy_share_pct": null
+  },
+  "16": {
+    "full_load_diagnostics": {
+      "hvac_cool": {
+        "hours": 297,
+        "pct": 3.39,
+        "max_streak_h": 8
+      },
+      "hvac_heat": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "deh": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "criteria": {
+        "hvac_pct_warn": 10.0,
+        "hvac_streak_warn_h": 24.0,
+        "deh_pct_warn": 60.0,
+        "hourly_substep_frac": 0.99
+      }
+    },
+    "warnings": [],
+    "annual_load_kwh": null,
+    "energy_share_pct": null
+  },
+  "22": {
+    "full_load_diagnostics": {
+      "hvac_cool": {
+        "hours": 328,
+        "pct": 3.74,
+        "max_streak_h": 8
+      },
+      "hvac_heat": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "deh": {
+        "hours": 0,
+        "pct": 0.0,
+        "max_streak_h": 0
+      },
+      "criteria": {
+        "hvac_pct_warn": 10.0,
+        "hvac_streak_warn_h": 24.0,
+        "deh_pct_warn": 60.0,
+        "hourly_substep_frac": 0.99
+      }
+    },
+    "warnings": [],
+    "annual_load_kwh": null,
+    "energy_share_pct": null
+  }
+}
