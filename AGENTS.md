@@ -35,10 +35,11 @@ vfed design tariffs
 # Validate (schema check without running a simulation)
 vfed validate <project.yaml>
 
-# Evaluate / Sweep (there is no separate `optimize` command — PVBES sizing is done via sweep; the co-optimization API in `vfed/design/optimize.py` is Python-only)
+# Evaluate / Sweep / Optimize (PVBES sizing via sweep; `vfed optimize` wraps the co-optimization API in `vfed/design/optimize.py` — flat `--grid` keys + inner `--pv`/`--battery` re-dispatch; zones/policies dims are Python-API only)
 vfed --version
 vfed evaluate <project.yaml> --cache weather_cache [--export out/]
 vfed sweep <project.yaml> --cache weather_cache --out results.csv
+vfed optimize <project.yaml> --cache weather_cache --grid KEY=SPEC [--pv a1,a2] [--battery b1,b2] [--policy-json JSON]
 
 # Tests
 pytest

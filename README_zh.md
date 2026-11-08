@@ -103,7 +103,7 @@ vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 
 - **控制协议（`vfed/design/control.py`）** — 叠加在逐时循环之上的纯标准库策略层。`ZoneAction` 携带可选的分区指令（LED 开启/调光、温湿度设定点、HVAC/DEH 质量流量覆盖、经济器覆盖、ERV 风量、CO₂ 设定点）；`Observation` 与 `PolicyContext` 定义策略可见的信息；`BuildingPolicy` 是 `reset` / `plan_daily` / `step` 协议。动作按字段三层合并：step > 日计划 > 无，因此全空策略与 legacy 循环逐位一致。策略按名注册，从 `{"type", "params"}` 配置规格加载（未知类型快速失败）；首个内置策略为 `setpoint_offset`。新增 `control.period_s` 字段（`timestep_s` 的整数倍，60–3600 s，默认无 = 物理步长）设定控制周期；`EnergySystem` 接受冻结的 `dispatch_policy` 钩子用于电池充放电请求。
 - **多分区房间（`zones:` 配置）** — 顶层 `zones:` 映射：分区 id → 覆盖增量（`{section: {field: value}}`），描述与全局配置不同的房间；`from_dict` 逐分区校验增量，未知 section、字段或分区 id 快速失败。声明分区后，引擎在每个分区自己的合并视图上各跑一次全年仿真，报告设施总量、OR 合并标志、分区前缀逐时列与 `summary["zones"]` 块。空映射保持单房间 legacy 行为；分区在 v1 不可扫描。
-- **协同优化 API（`vfed/design/optimize.py`）** — `evaluate_candidate()` 将声明式候选（扁平参数覆盖 + `zones` 深合并增量 + 策略规格，带 schema 版本）应用到基础项目，跑一次仿真，并用 sweep 经济学助手打分 — LCOE 口径与 `vfed sweep` 逐位一致。`optimize()` 执行笛卡尔积网格搜索 — 每个建筑组合一次引擎运行，再做内层 PV × 电池再调度，与 `sweep_design` 相同的两阶段模式 — 支持可选进程池并行。仅 Python API，无 CLI 命令。
+- **协同优化 API（`vfed/design/optimize.py`）** — `evaluate_candidate()` 将声明式候选（扁平参数覆盖 + `zones` 深合并增量 + 策略规格，带 schema 版本）应用到基础项目，跑一次仿真，并用 sweep 经济学助手打分 — LCOE 口径与 `vfed sweep` 逐位一致。`optimize()` 执行笛卡尔积网格搜索 — 每个建筑组合一次引擎运行，再做内层 PV × 电池再调度，与 `sweep_design` 相同的两阶段模式 — 支持可选进程池并行。wave 7 起同时提供 `vfed optimize` CLI 命令（`--grid KEY=SPEC` 扫描、内层 `--pv`/`--battery` 再调度列表、`--policy-json`）；zones 与逐分区策略仍仅限 Python API。
 
 ### 2026-10 — 验证与标定能力
 
@@ -499,6 +499,7 @@ vertical-farm-energy-designer/
 | `vfed validate <project.yaml>` | 校验项目 YAML（不运行仿真） |
 | `vfed evaluate <project.yaml> [--cache dir] [--export dir] [--tariff region]` | 对单一配置运行建筑仿真；`--export` 将 `summary.csv` / `timeseries.csv` / `monthly.csv` 写入 `dir` |
 | `vfed sweep <project.yaml> [--cache dir] [--out results.csv] [--tariff region]` | 枚举 `space.parameter_ranges`（如光伏面积 × 电池容量）并输出 CSV；未声明 range 时评估单一固定配置 |
+| `vfed optimize <project.yaml> [--cache dir] [--grid KEY=SPEC ...] [--pv a1,a2] [--battery b1,b2] [--objective name] [--workers N] [--policy-json JSON] [--out results.csv]` | 平铺建筑参数协同优化 + 嵌套 PV × 电池再调度：每个 `--grid` 组合跑一次仿真，再对 `--pv`/`--battery` 列表做快速内层选型（`SPEC` 形式：`min:max:step`、`v1,v2,...`、`v`）；`--policy-json` 挂载已注册控制策略；zones 与逐分区策略仅限 Python API |
 
 ## 配置
 

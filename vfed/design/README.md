@@ -13,7 +13,7 @@ Design orchestration — YAML project configuration, simulation engine, validate
 | `presets.py` | Pre-built presets: `preset_default()` and `preset_609()` (Fengxian lettuce PFAL) |
 | `sweep.py` | Design-space sweeper — enumerates `space.parameter_ranges` (e.g. PV area × battery capacity), dispatches each configuration through the PVBES energy system, returns the design minimising the configured objective (default LCOE) |
 | `control.py` | Control protocol — `ZoneAction`/`Observation`/`PolicyContext`, `BuildingPolicy` protocol (`reset`/`plan_daily`/`step`), per-field merge (step action > daily plan > none = bit-identical legacy), `POLICY_REGISTRY` with built-in `setpoint_offset`. Pure leaf: stdlib only, no `vfed/` imports (AST-enforced) |
-| `optimize.py` | Co-optimization API — `evaluate_candidate` (apply a schema-v1 candidate dict to a base project, run one simulation, score with the sweep economics helpers) and `optimize` (Cartesian grid search: one engine run per building combo, then inner PV × battery re-dispatch). Python API only — no CLI command |
+| `optimize.py` | Co-optimization API — `evaluate_candidate` (apply a schema-v1 candidate dict to a base project, run one simulation, score with the sweep economics helpers) and `optimize` (Cartesian grid search: one engine run per building combo, then inner PV × battery re-dispatch). Exposed as the `vfed optimize` CLI command since wave 7 (`--grid`/`--pv`/`--battery`/`--policy-json`); zones and per-zone policy dimensions stay Python-API only |
 | `fx.py` | Currency conversion (energy/PV unit prices, exchange rates) |
 | `result.py` | `SimulationResult` container returned by the engine and consumed by sweep/agent/CLI |
 
