@@ -40,7 +40,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from .control import build_policy
+from .control import CONTROL_FIELDS, build_policy, validate_owns
 from .engine import DesignEngine
 from .project import (
     PARAM_PATH_MAP,
@@ -111,6 +111,59 @@ def _validate_candidate(candidate: Any) -> None:
             f"parameter keys: {sorted(_FLAT_KEYS)}, structural keys: "
             f"{sorted(_CANDIDATE_RESERVED)}"
         )
+
+
+def _check_authority_conflicts(flat_keys, zones_delta, policy_specs) -> None:
+    """Raise when a candidate/sweep key fights a policy's declared ``owns``.
+
+    Wave 6 authority rule: a policy that owns a control field voids the
+    runtime authority of the config keys listed in
+    ``CONTROL_FIELDS[field].voids_params``. A candidate that overrides one
+    of those flat keys (or a ``zones`` delta that lands on the same field)
+    would be silently ignored at runtime, so it is refused up front.
+
+    A policy spec may carry ``"schedule_echo": true`` to declare that the
+    config value stays meaningful (the policy merely echoes the schedule);
+    such specs skip the conflict check entirely.
+    """
+    specs = [
+        spec
+        for spec in policy_specs
+        if isinstance(spec, dict) and not spec.get("schedule_echo")
+    ]
+    voided = {}  # param name -> owning field (first owner wins for message)
+    for spec in specs:
+        policy = build_policy(spec)
+        owns = validate_owns(
+            getattr(policy, "owns", None), f"policy spec {spec!r}"
+        )
+        for fname in owns:
+            for param in CONTROL_FIELDS[fname].voids_params:
+                voided.setdefault(param, fname)
+    for key in flat_keys:
+        if key in voided:
+            raise ValueError(
+                f"candidate key '{key}' is voided by policy field "
+                f"'{voided[key]}' (owned control authority); the policy "
+                "would silently override it at runtime — remove the key "
+                "from the candidate, or opt out with "
+                "'\"schedule_echo\": true' in the policy spec"
+            )
+    if zones_delta:
+        rev = {v: k for k, v in PARAM_PATH_MAP.items()}
+        for zid, sections in zones_delta.items():
+            for section, fields in (sections or {}).items():
+                for field in (fields or {}):
+                    flat = rev.get((section, field))
+                    if flat is not None and flat in voided:
+                        raise ValueError(
+                            f"zones[{zid}].{section}.{field} maps to config "
+                            f"key '{flat}', voided by policy field "
+                            f"'{voided[flat]}'; the policy would silently "
+                            "override it at runtime — remove the override "
+                            "or opt out with "
+                            "'\"schedule_echo\": true' in the policy spec"
+                        )
 
 
 def _project_from_candidate(base: DesignProject, candidate: dict) -> DesignProject:
@@ -305,6 +358,18 @@ def evaluate_candidate(
     """
     _check_objective(objective)
     _validate_candidate(candidate)
+    specs: List[dict] = []
+    if isinstance(candidate.get("policy"), dict):
+        specs.append(candidate["policy"])
+    if isinstance(candidate.get("policies"), dict):
+        specs.extend(
+            s for s in candidate["policies"].values() if isinstance(s, dict)
+        )
+    _check_authority_conflicts(
+        [k for k in candidate if k not in _CANDIDATE_RESERVED],
+        candidate.get("zones"),
+        specs,
+    )
     p = _project_from_candidate(base, candidate)
     policy, policies = _policy_seat_from_candidate(candidate)
     sim = DesignEngine(cache_dir=cache_dir).run(
@@ -334,6 +399,13 @@ def optimize(
 
     Returns ``{"results": DataFrame (sorted by objective ascending, stable
     tie-break = combo order), "best": dict, "objective": str}``.
+
+    Wave 6: grid-level flat keys are checked against every declared policy
+    spec's ``owns`` up front (``_check_authority_conflicts``).  v1
+    simplification: combo-level ``zones`` deltas versus policy specs are
+    NOT re-checked here per combo — those conflicts follow
+    ``evaluate_candidate`` semantics (raise) and can be opted out of with
+    ``"schedule_echo": true`` on the spec.
     """
     _check_objective(objective)
     if not isinstance(grid, dict):
@@ -347,6 +419,14 @@ def optimize(
                 f"grid['{name}'] must be a list of values, got "
                 f"{type(values).__name__}"
             )
+    grid_specs: List[Any] = list(grid.get("policy", []) or [])
+    for seat in grid.get("policies", []) or []:
+        # policies dim: list of whole {zone_id: spec} dicts
+        if isinstance(seat, dict):
+            grid_specs.extend(s for s in seat.values() if isinstance(s, dict))
+    _check_authority_conflicts(
+        [k for k in grid if k not in _CANDIDATE_RESERVED], None, grid_specs
+    )
     pv_values: List[float] = [0.0] if pv_grid is None else list(pv_grid)
     bat_values: List[float] = [0.0] if battery_grid is None else list(battery_grid)
 

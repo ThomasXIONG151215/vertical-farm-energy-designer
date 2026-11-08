@@ -291,6 +291,12 @@ def run_hourly_loop(
         )
         policy.reset(ctx)
         zone_eff = ZoneAction()
+        # Wave 6 — control ownership. owns itself is validated once at
+        # engine level (DesignEngine.run / _run_multizone); here we snapshot
+        # the declared set and pre-generate the field-name tuple so the
+        # per-tick enforcement below never re-derives it.
+        policy_owns = frozenset(getattr(policy, "owns", frozenset()))
+        policy_field_names = tuple(ZoneAction.__dataclass_fields__)
 
     for h in range(n):
         energy_wh = 0.0
@@ -388,6 +394,27 @@ def run_hourly_loop(
                                 "keeps the legacy path)."
                             )
                         zone_eff = merge(ctrl.zones.get(zone_id), daily_plan, hour_of_day)
+                        # Wave 6 — owns enforcement on the merged action.
+                        # Owned fields must carry a value every control tick
+                        # (from step or plan_daily); unowned fields must stay
+                        # None or the policy is reaching outside its seat.
+                        for fname in policy_field_names:
+                            value = getattr(zone_eff, fname)
+                            if fname in policy_owns:
+                                if value is None:
+                                    raise RuntimeError(
+                                        f"policy owns '{fname}' but the merged "
+                                        f"action at t_s={obs.t_s}s zone "
+                                        f"'{zone_id}' left it None — owned "
+                                        "字段每拍必须给值（step 或 plan_daily）"
+                                    )
+                            elif value is not None:
+                                raise RuntimeError(
+                                    f"policy set '{fname}'={value!r} at "
+                                    f"t_s={obs.t_s}s zone '{zone_id}' without "
+                                    "declaring it in owns — 要么声明进 "
+                                    "owns，要么别设"
+                                )
 
             # C2b: LED on/off + dimming commands.  led_on None follows the
             # clock (is_light_h); True/False force light/dark for THIS

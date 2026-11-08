@@ -97,6 +97,8 @@ def _ts_sha256(result):
 class _NullPolicy:
     """Attaches the policy seat but never overrides anything."""
 
+    owns = frozenset()  # Wave 6: pure observer declares no authority.
+
     def reset(self, ctx):
         pass
 
@@ -194,6 +196,8 @@ class TestZeroDriftIntegration:
         from vfed.design.presets import preset_609
 
         class RH60Policy:
+            owns = frozenset({"RH_sp"})  # Wave 6: claims RH_sp.
+
             def reset(self, ctx):
                 pass
 
@@ -219,6 +223,8 @@ class TestTickCadence:
         from vfed.design.presets import preset_609
 
         class CountingPolicy:
+            owns = frozenset()  # Wave 6: counts ticks, sets nothing.
+
             def __init__(self):
                 self.ctx = None
                 self.step_count = 0
@@ -257,6 +263,8 @@ class TestTickCadence:
         from vfed.design.presets import preset_609
 
         class CountingPolicy:
+            owns = frozenset()  # Wave 6: counts ticks, sets nothing.
+
             def __init__(self):
                 self.step_count = 0
 

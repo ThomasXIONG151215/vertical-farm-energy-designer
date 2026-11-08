@@ -16,7 +16,7 @@ policy is bit-identical to ``policy=None`` (zero drift).
 
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Dict, Mapping, Optional, Protocol
+from typing import Dict, FrozenSet, Mapping, Optional, Protocol, Tuple
 
 
 @dataclass
@@ -98,7 +98,15 @@ class BuildingPolicy(Protocol):
     called at each day boundary before the first step of that day and
     may return ``None`` when no daily plan applies.  ``step`` is called
     at every control tick and must return a ``ControlAction``.
+
+    Wave 6 (owns authority): every policy must declare ``owns``, the
+    frozenset of ``BUILDING_CONTROL_NAMES`` fields it takes over.  An
+    owned field MUST carry a value every tick (step or plan_daily); a
+    field outside ``owns`` MUST stay ``None``.  A pure-observation
+    policy declares ``frozenset()``.
     """
+
+    owns: frozenset
 
     def reset(self, ctx: PolicyContext) -> None:
         ...
@@ -131,6 +139,87 @@ def merge(action: Optional[ZoneAction], daily: Optional[DailyPlan], hour: int) -
 
 
 # ---------------------------------------------------------------------------
+# Wave 6 (owns authority): the control-field registry.  Each ZoneAction
+# field a policy may claim is described once here.  ``voids_params`` are
+# FLATTENED config-parameter names (the keys of project.PARAM_PATH_MAP /
+# PARAM_TOPLEVEL_MAP) whose config authority lapses at runtime while the
+# field is owned by a policy: the loop then drives that quantity and the
+# config key only feeds sizing/auto-size paths.  control.py stays a pure
+# leaf, so it cannot import project.py — the voids_params <-> map-key
+# sync is enforced by tests (test_47).
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ControlField:
+    """One claimable control field and the config keys it hollows out."""
+
+    name: str
+    tier: int  # 0 = building loop, 1 = PVBES dispatch
+    config_counterpart: str
+    voids_params: Tuple[str, ...] = ()
+
+
+CONTROL_FIELDS: Dict[str, ControlField] = {
+    "led_on": ControlField(
+        "led_on", 0, "led.light_start_hour/led.photoperiod_hours (clock)",
+        ("light_start_hour", "photoperiod_hours"),
+    ),
+    "led_dim": ControlField("led_dim", 0, "led PPFD at full-on", ()),
+    "T_sp": ControlField(
+        "T_sp", 0, "setpoints.T_light/setpoints.T_dark", ("T_light", "T_dark")
+    ),
+    "T_heat_sp": ControlField("T_heat_sp", 0, "setpoints.T_heat", ("T_heat",)),
+    "RH_sp": ControlField(
+        "RH_sp", 0, "setpoints.RH/setpoints.RH_dark", ("RH", "RH_dark")
+    ),
+    "hvac_m": ControlField("hvac_m", 0, "HVAC modulation (auto)", ()),
+    "deh_m": ControlField("deh_m", 0, "DEH modulation (auto)", ()),
+    "econ_override": ControlField("econ_override", 0, "economizer auto state", ()),
+    "erv_flow_m3h": ControlField("erv_flow_m3h", 0, "ERV ventilation auto flow", ()),
+    "co2_sp": ControlField("co2_sp", 0, "setpoints.co2_ppm", ("co2_ppm",)),
+    "charge_w": ControlField(
+        "charge_w", 1, "PVBES greedy dispatch (battery charge)", ()
+    ),
+    "discharge_w": ControlField(
+        "discharge_w", 1, "PVBES greedy dispatch (battery discharge)", ()
+    ),
+}
+
+#: Fields a BuildingPolicy may claim in ``owns`` (the dispatch-tier
+#: charge_w/discharge_w belong to DispatchPolicy, not BuildingPolicy).
+BUILDING_CONTROL_NAMES: FrozenSet[str] = frozenset(
+    f for f, cf in CONTROL_FIELDS.items() if cf.tier == 0
+)
+
+
+def validate_owns(owns, policy_desc: str) -> frozenset:
+    """Check and normalize a policy's ``owns`` declaration.
+
+    ``None`` means the policy never declared ``owns`` — that is an error
+    (a pure-observation policy must declare ``frozenset()``).  Anything
+    that is not a frozenset/set, or names a field outside
+    ``BUILDING_CONTROL_NAMES``, raises ``ValueError`` naming the
+    offender.  Returns the declaration as a frozenset.
+    """
+    if owns is None:
+        raise ValueError(
+            f"{policy_desc} must declare 'owns' (a frozenset of control-field "
+            f"names); a pure-observation policy declares frozenset()"
+        )
+    if isinstance(owns, (str, bytes)) or not isinstance(owns, (frozenset, set)):
+        raise ValueError(
+            f"{policy_desc} owns must be a frozenset of control-field names, "
+            f"got {type(owns).__name__}"
+        )
+    unknown = sorted(set(owns) - BUILDING_CONTROL_NAMES)
+    if unknown:
+        raise ValueError(
+            f"{policy_desc} owns declares unknown control field(s) {unknown}; "
+            f"known building fields: {sorted(BUILDING_CONTROL_NAMES)}"
+        )
+    return frozenset(owns)
+
+
+# ---------------------------------------------------------------------------
 # O5: declarative policy registry.  Candidates (optimize.py / YAML) name a
 # policy by string type + params dict; ``build_policy`` instantiates it.
 # This module stays a pure leaf (stdlib-only imports, see test_40's AST
@@ -158,14 +247,23 @@ def register_policy(name: str):
 def build_policy(spec) -> "BuildingPolicy":
     """Instantiate a registered policy from a ``{"type": ..., "params": ...}`` spec.
 
-    Fail-fast contract: an unknown type name, a missing ``"type"`` key or
-    a non-mapping spec/params all raise ``ValueError`` naming the
-    offending key/type, before any simulation runs.
+    Fail-fast contract: an unknown spec key, an unknown type name, a
+    missing ``"type"`` key or a non-mapping spec/params all raise
+    ``ValueError`` naming the offending key/type, before any simulation
+    runs.  Accepted spec keys: ``"type"``, ``"params"`` and the optimize
+    escape hatch ``"schedule_echo"`` (see optimize._check_authority_conflicts).
     """
     if not isinstance(spec, Mapping):
         raise ValueError(
             f"policy spec must be a mapping {{'type': str, 'params': dict}}, "
             f"got {type(spec).__name__}"
+        )
+    allowed_keys = {"type", "params", "schedule_echo"}
+    unknown_keys = sorted(set(spec) - allowed_keys)
+    if unknown_keys:
+        raise ValueError(
+            f"policy spec has unknown key(s) {unknown_keys}; "
+            f"allowed keys: {sorted(allowed_keys)}"
         )
     ptype = spec.get("type")
     if not isinstance(ptype, str) or not ptype:
@@ -214,6 +312,11 @@ class SetpointOffsetPolicy:
     Zero drift: with all params at their defaults every emitted field is
     ``None``, so the merged ``ZoneAction`` is all-``None`` and the run is
     bit-identical to ``policy=None``.
+
+    Wave 6 (owns authority): ``owns`` is computed in ``__post_init__``
+    from the effective params, so the declaration can never disagree
+    with what ``step`` actually sets.  All-default params give
+    ``owns == frozenset()`` (pure observer, zero drift).
     """
 
     t_offset_k: float = 0.0
@@ -223,6 +326,16 @@ class SetpointOffsetPolicy:
 
     def __post_init__(self) -> None:
         self._ctx: Optional[PolicyContext] = None
+        claimed = set()
+        if self.t_offset_k:
+            claimed.update(("T_sp", "T_heat_sp"))
+        if self.rh_offset_pp:
+            claimed.add("RH_sp")
+        if self.led_dim is not None:
+            claimed.add("led_dim")
+        if self.econ_override is not None:
+            claimed.add("econ_override")
+        self.owns: frozenset = frozenset(claimed)
 
     def reset(self, ctx: PolicyContext) -> None:
         self._ctx = ctx

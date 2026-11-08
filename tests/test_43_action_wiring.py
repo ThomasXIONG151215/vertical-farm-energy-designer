@@ -67,6 +67,7 @@ class ConstantPolicy:
 
     def __init__(self, **fields):
         self._action = ZoneAction(**fields)
+        self.owns = frozenset(fields)  # Wave 6: claims exactly what it sets.
 
     def reset(self, ctx):
         pass

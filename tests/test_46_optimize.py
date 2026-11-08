@@ -78,6 +78,8 @@ def two_zone_project():
 
 
 class _CountingPolicy:
+    owns = frozenset()  # Wave 6: counts ticks, sets nothing.
+
     def __init__(self):
         self.step_count = 0
         self.plan_count = 0

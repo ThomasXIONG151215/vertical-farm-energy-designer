@@ -179,6 +179,8 @@ class TestZoneOverrideNoCrossTalk:
 class _CountingPolicy:
     """Records call counts and the zone_id seen via PolicyContext.reset."""
 
+    owns = frozenset()  # Wave 6: pure observer declares no authority.
+
     def __init__(self):
         self.reset_calls = 0
         self.step_calls = 0

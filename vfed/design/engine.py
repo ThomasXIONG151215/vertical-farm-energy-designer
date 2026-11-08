@@ -28,9 +28,43 @@ from ..plants.van_henten import VanHenten
 from ..plants.van_henten_3state import VanHenten3State
 from ..weather.series import WeatherSeries
 from ..weather.weather_bridge import fetch_weather, to_hourly
+from .control import CONTROL_FIELDS, validate_owns
 from .result import SimulationResult
 
 __all__ = ["DesignEngine", "run_project", "full_load_warnings"]
+
+
+def _validate_policy_seats(policy=None, policies=None):
+    """Validate ``owns`` on every policy seat and warn about hollowed config.
+
+    Called once per run, before the loop, on both the single-zone path
+    (``policy``) and the multi-zone path (``policies``). Each policy object
+    must declare an ``owns`` frozenset that passes
+    :func:`vfed.design.control.validate_owns`. Whenever an owned field voids
+    config authority (``CONTROL_FIELDS[f].voids_params``), a warning lists the
+    affected YAML keys: runtime no longer reads them to drive the loop, but
+    sizing / auto-size still does.
+    """
+    seats = []
+    if policy is not None:
+        seats.append(("policy", policy))
+    if policies is not None:
+        seats.extend(
+            (f"policies[{zid}]", pol) for zid, pol in policies.items()
+        )
+    for desc, pol in seats:
+        name = f"{desc} ({type(pol).__name__})"
+        owns = validate_owns(getattr(pol, "owns", None), name)
+        voided = set()
+        for fname in owns:
+            voided.update(CONTROL_FIELDS[fname].voids_params)
+        if voided:
+            warnings.warn(
+                f"{name} owns {sorted(owns)}; config key(s) {sorted(voided)} "
+                "no longer drive the loop at runtime "
+                "(sizing/auto-size still reads them)",
+                stacklevel=2,
+            )
 
 
 def _build_growth(p):
@@ -1228,6 +1262,8 @@ class DesignEngine:
                 "policies requires a multi-zone project (declare zones) — "
                 "use policy= for the single-zone path"
             )
+        if policy is not None:
+            _validate_policy_seats(policy=policy)
         if weather is None:
             weather = fetch_weather(
                 p.site.lat,
@@ -1745,6 +1781,9 @@ class DesignEngine:
         """
         from .engine_report import build_report
         from .project import DesignProject
+
+        if policies is not None:
+            _validate_policy_seats(policies=policies)
 
         views = p.zone_views()
         states = []
