@@ -11,8 +11,8 @@
 | Path | Role |
 |------|------|
 | `vfed/` | The simulator package — see §2 |
-| `tests/` | Pytest suite (1,292 tests). CI (`.github/workflows/ci.yml`) runs it on push/PR for Python 3.10–3.12. Do not move. |
-| `examples/` | Example project YAMLs (`example_sweep.yaml`, `example_lcoe_full.yaml`) |
+| `tests/` | Pytest suite (1,305 tests). CI (`.github/workflows/ci.yml`) runs it on push/PR for Python 3.10–3.12. Do not move. |
+| `examples/` | Example project YAMLs (`example_sweep.yaml`, `example_lcoe_full.yaml`, zones/control/control+PV examples) |
 | `data/` | `data/weather/` city CSVs (offline quickstart); `data/datasets/` public datasets (git-ignored except `*.md`) |
 | `docs/` | `architecture.md` (this file) · `reports/` (technical deliverables) · `references/` (PV/BES validation data — datasheets, measured curves; `battery.py`/`modules.py` load anchors from here at runtime) · `planning/` (dated session plans) |
 | `tools/` | Maintenance utilities — `download_weather_db.py` refreshes `data/weather/` |
@@ -115,3 +115,4 @@ graph TD
 - **C2b (done 2026-11-03)** — `scripts/` split into `tools/` (maintenance utilities) + `benchmarks/` (validation benchmarks); 33 pure renames, path references updated repo-wide.
 - **Waves 1–5 (2026-11-07/08)** — new `design/control.py` (control protocol, stdlib-only leaf) and `design/optimize.py` (co-optimization API); top-level `zones` config + multi-zone simulation across `project.py`/`engine.py`/`engine_loop.py`/`engine_report.py`.
 - **Wave 6 (2026-11-08)** — policy authority (`owns`) mechanism: declared `owns` frozensets, missing-owned-field and out-of-authority failures, and the `CONTROL_FIELDS` registry (12 first-tier fields with config counterparts and `voids_params`); suite grew to 1,292 tests.
+- **Wave 7 (2026-11-08)** — quick wins: `vfed optimize` CLI (repeatable `--grid KEY=SPEC` scans with the inner PV × battery re-dispatch, `--policy-json` policy injection), `Observation.pv_w` live PV feed on the single-zone policy path, zones/control/control+PV examples, ASCII error-message fixes; suite grew to 1,305 tests.

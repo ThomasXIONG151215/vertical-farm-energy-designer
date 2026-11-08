@@ -37,7 +37,7 @@ vertical-farm-energy-designer/
 │   ├── design/  # 配置契约、引擎（枢纽）、预设、扫描
 │   ├── agent/   # 评估器（agent-cli 契约）
 │   └── calibration/ # 可辨识性 + 拟合工具
-├── tests/       # pytest 测试套件（1,292 用例，CI：Python 3.10–3.12）
+├── tests/       # pytest 测试套件（1,305 用例，CI：Python 3.10–3.12）
 ├── tools/       # 维护工具（download_weather_db.py）
 ├── benchmarks/  # 验证基准（BESTEST、生长模型）
 ├── examples/    # 示例项目 YAML（sweep / LCOE 演示）
@@ -93,7 +93,7 @@ vfed evaluate my_farm.yaml --cache weather_cache
 vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 ```
 
-`--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `examples/example_lcoe_full.yaml`。没有单独的 `optimize` CLI 命令；容量优化通过 `sweep` 完成，Python 协同优化 API（`vfed.design.optimize`）覆盖候选评估与网格搜索 — 见[最新进展](#最新进展)。
+`--out results.csv` 将完整枚举表写入 CSV（每行一组配置）。控制台打印使目标最小化的最优设计 — 目标可选 `lcoe`（默认）、`kwh_per_kg_fresh` 或 `cost_per_kg_fresh` — 包括最优 `pv_area` 与 `battery` 装机。更完整的 225 组配置（含全资本成本）演示见 `examples/example_lcoe_full.yaml`。Python 协同优化 API（`vfed.design.optimize`）现已同时暴露为 `vfed optimize` 命令：可重复的 `--grid KEY=SPEC` 扫描平铺设计/控制参数，内层 `--pv` / `--battery` 列表毫秒级重调度，`--policy-json` 挂载已注册策略 — 见[最新进展](#最新进展)。
 
 ## 最新进展
 
@@ -115,7 +115,7 @@ vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 - **验证与基准**
   - `benchmarks/bestest/` — EnergyPlus BESTEST 验证台（ASHRAE 140 Cases 600/600FF/900/900FF，Denver TMY3）。2R2C 墙体湿路径在 Case 600 上 4/4 项指标通过 EnergyPlus 参考对照。
   - 公开数据生长基准：UC Davis 生菜（3 状态模型生物量 RMSE 21.49 g → 14.26 g）；BJAAF 分阶段留出集（3 状态 −1.6 %/+11.5 %，1 状态外推失败 +27 %）。
-  - 1,292 个 pytest 用例全部通过。
+  - 1,305 个 pytest 用例全部通过。
 - **本地化的公开数据集**（`data/datasets/`）— AGC 2018/2019 温室（WUR，CC0）、UC Davis 生菜（30 分钟环境 + 逐日生物量 + 冠层 RGB）、BJAAF 北京生菜（配对 LAI/X_d）、CERTH 垂直农场能源（CC BY 4.0）、UniBo VF LCA、Frontiers 能耗强度基准表。
 - **DEH 调试模式** — `609_identified` 预设内置奉贤辨识的设定值调制 map（留出集 DEH 功率 MAE 389 W，优于此前标定模型的 507 W）。`609` 预设保持原厂 DEH 不变。
 
@@ -137,7 +137,7 @@ PFAL 能耗建模分散在三个割裂的世界里：通用建筑引擎（Energy
 
 | 框架 | 定位 | 建筑物理 | HVAC 与除湿 | 作物模型 | 光伏·电池·经济性 | 验证 | 许可证 |
 |---|---|---|---|---|---|---|---|
-| **VFED**（本仓库） | PFAL 优先：不透明、LED 主导的房间 | 纯 Python ODE 热湿围护模型，可选 2R2C 墙体热质量 | COP 四模式（carnot / constant / linear / table）+ 软顶、曲轴箱加热、除霜；专用除湿机带 DOE/E+ SMER 曲线与 map | Van Henten 1 或 3 状态，5 种蒸腾方法 | 光伏 + 电池 + 分时电网，LCOE/NPV/IRR 容量扫描 | 1,292 个测试；ASHRAE 140（BESTEST）验证台；UC Davis + BJAAF 生长基准 | MIT |
+| **VFED**（本仓库） | PFAL 优先：不透明、LED 主导的房间 | 纯 Python ODE 热湿围护模型，可选 2R2C 墙体热质量 | COP 四模式（carnot / constant / linear / table）+ 软顶、曲轴箱加热、除霜；专用除湿机带 DOE/E+ SMER 曲线与 map | Van Henten 1 或 3 状态，5 种蒸腾方法 | 光伏 + 电池 + 分时电网，LCOE/NPV/IRR 容量扫描 | 1,305 个测试；ASHRAE 140（BESTEST）验证台；UC Davis + BJAAF 生长基准 | MIT |
 | [GreenLight](https://github.com/davkat1/GreenLight)（瓦赫宁根大学） | 自然光番茄温室 | 已验证的 ODE 状态（空气/冠层/覆盖层/土壤） | 锅炉 + 管道加热、通风窗、保温幕；无变 COP 热泵；除湿仅靠通风 | 机理番茄模型（干物质分配、LAI） | 无 | 热需求已验证（Katzin et al. 2020） | BSD-3 |
 | [GreenLight-Gym2](https://github.com/BartvLaatum/GreenLight-Gym2)（瓦赫宁根大学） | 温室强化学习控制基准 | 经 CasADi 的 GreenLight ODE | 同 GreenLight，外加机械除湿规则开关 | 继承番茄模型 | 含能源/CO₂ 价格的利润奖励；无光伏/电池/LCOE | 已发表 IFAC AgriControl 2025 基准 | AGPL-3 |
 | [Greenhouses-Library](https://github.com/queraltab/Greenhouses-Library) | 自然光温室 + 热力系统 | Modelica 物理组件 | CHP + 热泵性能 map、锅炉、储热、区域供热 | TOMGRO 类产量模型 | 仅热力集成 | 同行评审（Altes-Buch et al. 2019） | BSD-3（2023 年起停更） |

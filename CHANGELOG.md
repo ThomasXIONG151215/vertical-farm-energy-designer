@@ -57,8 +57,7 @@ semantic — behaviour changes are called out explicitly under **Changed**.
   combination, then the inner PV × battery re-dispatch over
   `EnergySystem.calculate_metrics` — the same two-phase pattern as
   `sweep_design`. Runs can parallelise through a `ProcessPoolExecutor`
-  after a serial main-process warm-up run. Python API only; there is
-  still no CLI `optimize` command. Tests: test_46_optimize new.
+  after a serial main-process warm-up run. Tests: test_46_optimize new.
 - **Policy authority mechanism (wave 6).** Policies declare an `owns`
   frozenset of control-field names; `CONTROL_FIELDS` is the registry of
   the 12 first-tier fields (10 building-loop commands plus battery
@@ -72,6 +71,24 @@ semantic — behaviour changes are called out explicitly under **Changed**.
   config key voided by an owned field (`schedule_echo: true` in a
   policy spec opts back in). Tests: test_47_authority new (16 tests);
   suite grew to 1,292.
+- **Wave 7 quick wins: optimize CLI, live PV observation, examples.**
+  New `vfed optimize` CLI subcommand wraps the co-optimization API:
+  repeatable `--grid KEY=SPEC` (`min:max:step` scan, explicit list, or
+  single value; flat params only, reserved/unknown keys fail fast),
+  `--pv` / `--battery` inner sizing lists, `--objective`,
+  `--policy-json`, `--workers`, and `--out` CSV; output reuses the
+  sweep printer, and CLI vs API results agree exactly on the same
+  input. `Observation.pv_w` now carries the hourly PV AC output (kW;
+  series keep the kW convention despite the `_w` name) on the
+  single-zone path when a policy is attached and PV is configured,
+  precomputed once by mirroring the report's PV construction — the
+  default path never builds a PVSystem, and multi-zone stays `None`
+  in v1. New examples `example_zones.yaml` (two-zone override-delta),
+  `example_control.yaml` (`control.period_s` + policy factory
+  pointer), `example_control_pv.yaml` (control + PV + battery). Six
+  error messages converted to pure ASCII (test_14 gate restored).
+  Tests: test_40 +3, new test_48_cli_optimize (10 tests); suite grew
+  to 1,305.
 - **Dry-bulb economizer free cooling + ERV fan power (P3-9).** New
   envelope fields `economizer_enabled` / `economizer_flow_m3h` /
   `economizer_delta_t_k` / `erv_fan_power_w` (all default off/0, so the

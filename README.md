@@ -37,7 +37,7 @@ vertical-farm-energy-designer/
 │   ├── design/  # config contract, engine (hub), presets, sweep
 │   ├── agent/   # evaluator (agent-cli contract)
 │   └── calibration/ # identifiability + fitting tools
-├── tests/       # pytest suite (1,292 tests, CI: Python 3.10–3.12)
+├── tests/       # pytest suite (1,305 tests, CI: Python 3.10–3.12)
 ├── tools/       # maintenance utilities (download_weather_db.py)
 ├── benchmarks/  # validation benchmarks (BESTEST, growth)
 ├── examples/    # example project YAMLs (sweep / LCOE demos)
@@ -93,7 +93,7 @@ The `609` preset declares no sweep ranges, so `vfed sweep my_farm.yaml` would on
 vfed sweep examples/example_sweep.yaml --cache weather_cache --out results.csv
 ```
 
-`--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `examples/example_lcoe_full.yaml`. There is no separate `optimize` CLI command; sizing is done via `sweep`, and the Python co-optimization API (`vfed.design.optimize`) covers candidate evaluation and grid search — see [What's New](#whats-new).
+`--out results.csv` writes the full enumeration table to CSV (one row per configuration). The console prints the best design that minimises the configured objective — `lcoe` (default), `kwh_per_kg_fresh`, or `cost_per_kg_fresh` — including the optimal `pv_area` and `battery` sizes. A longer 225-configuration demo with full capital costs is `examples/example_lcoe_full.yaml`. The Python co-optimization API (`vfed.design.optimize`) is also exposed as a `vfed optimize` command: repeatable `--grid KEY=SPEC` scans flat design/control parameters while the inner `--pv` / `--battery` lists re-dispatch in milliseconds, and `--policy-json` attaches a registered policy — see [What's New](#whats-new).
 
 ## What's New
 
@@ -115,7 +115,7 @@ Since the paper, the engine has grown from a load generator into a validated, ca
 - **Validation & benchmarks**
   - `benchmarks/bestest/` — an EnergyPlus BESTEST harness (ASHRAE 140 Cases 600/600FF/900/900FF, Denver TMY3). The 2R2C-wall wet path passes 4/4 Case 600 metrics against the EnergyPlus reference.
   - Growth benchmarks on public data: UC Davis lettuce (biomass RMSE 21.49 g → 14.26 g with the 3-state model) and BJAAF staged holdouts (3-state −1.6 %/+11.5 % vs 1-state +27 % extrapolation failure).
-  - 1,292 pytest tests, all passing.
+  - 1,305 pytest tests, all passing.
 - **Localized public datasets** under `data/datasets/` — AGC 2018/2019 greenhouse (WUR, CC0), UC Davis lettuce (30-min environment + daily biomass + canopy RGB), BJAAF Beijing lettuce (paired LAI/X_d), CERTH vertical-farm energy (CC BY 4.0), UniBo VF LCA, and the Frontiers energy-intensity benchmark table.
 - **DEH commissioning mode** — the `609_identified` preset ships the Fengxian-identified setpoint-modulation map (holdout DEH power MAE 389 W vs 507 W for the prior calibrated model). The stock `609` preset is unchanged.
 
@@ -137,7 +137,7 @@ PFAL energy modelling lives in three fragmented worlds: general building engines
 
 | Framework | Focus | Building physics | HVAC & dehumidification | Crop model | PV·battery·economics | Validation | License |
 |---|---|---|---|---|---|---|---|
-| **VFED** (this repo) | PFAL-first: opaque, LED-dominant rooms | Pure-Python ODE heat+moisture envelope, optional 2R2C wall mass | COP modes (Carnot / constant / linear / table) + soft cap, crankcase heater, defrost; dedicated dehumidifier with DOE/E+ SMER curves and maps | Van Henten 1- or 3-state, 5 transpiration methods | PV + battery + TOU grid, LCOE/NPV/IRR sizing sweep | 1,292 tests; ASHRAE 140 (BESTEST) harness; UC Davis + BJAAF growth benchmarks | MIT |
+| **VFED** (this repo) | PFAL-first: opaque, LED-dominant rooms | Pure-Python ODE heat+moisture envelope, optional 2R2C wall mass | COP modes (Carnot / constant / linear / table) + soft cap, crankcase heater, defrost; dedicated dehumidifier with DOE/E+ SMER curves and maps | Van Henten 1- or 3-state, 5 transpiration methods | PV + battery + TOU grid, LCOE/NPV/IRR sizing sweep | 1,305 tests; ASHRAE 140 (BESTEST) harness; UC Davis + BJAAF growth benchmarks | MIT |
 | [GreenLight](https://github.com/davkat1/GreenLight) (WUR) | Sunlit tomato greenhouse | Validated ODE states (air / canopy / cover / soil) | Boiler + pipe-rail heating, vents, thermal screens; no variable-COP heat pump; dehumidification via ventilation only | Mechanistic tomato (DM partitioning, LAI) | None | Heat demand validated (Katzin et al. 2020) | BSD-3 |
 | [GreenLight-Gym2](https://github.com/BartvLaatum/GreenLight-Gym2) (WUR) | Greenhouse RL control benchmark | GreenLight ODE via CasADi | Same as GreenLight, plus a mechanical-dehumidification rule flag | Inherited tomato | Profit reward with energy/CO₂ prices; no PV/battery/LCOE | Published IFAC AgriControl 2025 benchmark | AGPL-3 |
 | [Greenhouses-Library](https://github.com/queraltab/Greenhouses-Library) | Sunlit greenhouse + thermal systems | Physical Modelica components | CHP + heat-pump performance maps, boilers, storage, district heating | TOMGRO-type yield | Thermal integration only | Peer-reviewed (Altes-Buch et al. 2019) | BSD-3 (dormant since 2023) |
