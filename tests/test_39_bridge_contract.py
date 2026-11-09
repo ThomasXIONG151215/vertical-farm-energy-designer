@@ -290,7 +290,8 @@ def test_city_path_loads_15min_file_silently(city_env, tmp_path):
         )
     assert len(out) == 35040
     assert out.index[0] == pd.Timestamp("2025-01-01")
-    assert (np.diff(out.index.asi8)[:5] == 900_000_000_000).all()  # native 15-min step
+    # unit-safe: pandas 3 keeps native us/s resolution, so compare timedeltas
+    assert (np.diff(out.index.values)[:5] == np.timedelta64(900, "s")).all()  # native 15-min step
     hourly = weather_bridge.to_hourly(out)
     assert len(hourly) == 8760
     assert hourly["shortwave_radiation"].sum() * 3600 == pytest.approx(

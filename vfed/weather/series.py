@@ -50,9 +50,7 @@ class WeatherSeries:
         if start.ndim != 1 or start.size == 0:
             raise ValueError("start_s must be a non-empty 1-D array of row starts")
         if not np.issubdtype(start.dtype, np.integer):
-            raise ValueError(
-                "start_s must be integer seconds (the loop time ledger is integer)"
-            )
+            raise ValueError("start_s must be integer seconds (the loop time ledger is integer)")
         if start.size > 1 and not np.all(np.diff(start) > 0):
             raise ValueError("start_s must be strictly increasing")
         self._start = start
@@ -103,11 +101,15 @@ class WeatherSeries:
         elif "timestamp" in df.columns:
             index = pd.DatetimeIndex(df["timestamp"])
         else:
-            raise ValueError(
-                "weather frame needs a DatetimeIndex or a 'timestamp' column"
-            )
+            raise ValueError("weather frame needs a DatetimeIndex or a 'timestamp' column")
         if len(index) == 0:
             raise ValueError("weather frame contains 0 rows")
+        # pandas 3 changed the default datetime64 unit from ns to us, so
+        # raw asi8 integers no longer mean ns there.  Normalize to ns
+        # first (lossless); pandas 1.x has no .unit but is ns-only.
+        unit = getattr(index, "unit", "ns")
+        if unit != "ns":
+            index = index.as_unit("ns")
         deltas_ns = index.asi8 - index.asi8[0]
         if np.any(deltas_ns % 1_000_000_000 != 0):
             raise ValueError(

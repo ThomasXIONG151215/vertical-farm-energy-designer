@@ -73,6 +73,22 @@ REQUIRED_WEATHER_COLUMNS = ("temperature_2m", "relative_humidity_2m", "shortwave
 _NS_PER_SECOND = 1_000_000_000
 _NS_PER_HOUR = 3_600_000_000_000
 
+
+def _index_ns(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """Normalize a DatetimeIndex to nanosecond resolution for asi8 math.
+
+    pandas 3 changed the default datetime64 unit from nanoseconds to
+    microseconds, so raw ``asi8`` integers no longer mean ns there and
+    the ``_NS_PER_*`` comparisons below would see timesteps 1000x too
+    small.  Converting us/s -> ns is lossless.  pandas 1.x has no
+    ``.unit`` attribute but already defaults to ns, so the getattr
+    fallback keeps this a no-op on the minimum supported version.
+    """
+    if getattr(index, "unit", "ns") != "ns":
+        index = index.as_unit("ns")
+    return index
+
+
 # G2 (Wave 1): POA transposition-model vocabulary (single source of truth
 # for add_poa, fetch_weather and the SiteConfig field).  "isotropic" is the
 # legacy pre-G2 sky model; "hay_davies" adds the Hay & Davies (1980)
@@ -174,6 +190,7 @@ def _grid_step_seconds(index: pd.DatetimeIndex) -> Optional[int]:
     """
     if not isinstance(index, pd.DatetimeIndex) or len(index) < 2:
         return None
+    index = _index_ns(index)
     deltas = np.diff(index.asi8)
     d0 = int(deltas[0])
     if d0 <= 0 or d0 % _NS_PER_SECOND != 0 or np.any(deltas != d0):
@@ -189,7 +206,7 @@ def _uniform_step_seconds(df: pd.DataFrame, context: str) -> int:
     frame, fewer than two rows, non-increasing stamps, a non-constant
     step, and a step that is not a whole number of seconds.
     """
-    index = df.index
+    index = _index_ns(df.index)
     if not isinstance(index, pd.DatetimeIndex):
         raise WeatherFetchError(
             f"{context}: weather data must be timestamp-indexed, got a "
@@ -204,8 +221,7 @@ def _uniform_step_seconds(df: pd.DataFrame, context: str) -> int:
         raise WeatherFetchError(f"{context}: weather data contains 0 rows.")
     if len(index) == 1:
         raise WeatherFetchError(
-            f"{context}: weather data contains 1 row; a timestep is "
-            "undefined below two rows."
+            f"{context}: weather data contains 1 row; a timestep is " "undefined below two rows."
         )
     deltas = np.diff(index.asi8)
     bad = np.nonzero(deltas <= 0)[0]
@@ -233,7 +249,9 @@ def _uniform_step_seconds(df: pd.DataFrame, context: str) -> int:
     return d0 // _NS_PER_SECOND
 
 
-def validate_weather_grid(df: pd.DataFrame, year: int, context: str, *, strict_window: bool = True) -> int:
+def validate_weather_grid(
+    df: pd.DataFrame, year: int, context: str, *, strict_window: bool = True
+) -> int:
     """Validate the unified exit contract and return the step in seconds.
 
     Checks, in order: the three required columns are present, the stamp
@@ -291,7 +309,7 @@ def to_hourly(df: pd.DataFrame) -> pd.DataFrame:
             f"to_hourly: timestep {step_s} s does not divide one hour; "
             "rows cannot be aggregated to whole hours."
         )
-    index = df.index
+    index = _index_ns(df.index)
     if int(index.asi8[0]) % _NS_PER_HOUR != 0:
         raise WeatherFetchError(
             f"to_hourly: first stamp {index[0]} is not anchored on the "
@@ -773,10 +791,7 @@ def fetch_weather(
             # interpolation / no synthesized rows, no-hardcoded-science).
             expected_n = _window_seconds(year) // step_s
             first_ts = df.index[0]
-            aligned = (
-                len(df) == expected_n
-                and first_ts == pd.Timestamp(f"{year}-01-01 00:00:00")
-            )
+            aligned = len(df) == expected_n and first_ts == pd.Timestamp(f"{year}-01-01 00:00:00")
             if not aligned:
                 warnings.warn(
                     f"City weather file {local.name} is not aligned to the "
@@ -835,7 +850,9 @@ def fetch_weather(
         # over the grid step) so a future sub-hourly cache is not spuriously
         # treated as stale; today's hourly caches keep the same numbers.
         step_s = _grid_step_seconds(df.index)
-        expected_n = _window_seconds(year) // step_s if step_s else (365 + int(calendar.isleap(year))) * 24
+        expected_n = (
+            _window_seconds(year) // step_s if step_s else (365 + int(calendar.isleap(year))) * 24
+        )
         aligned = (
             len(df) > 0
             and df.index[0] == pd.Timestamp(f"{year}-01-01 00:00:00")

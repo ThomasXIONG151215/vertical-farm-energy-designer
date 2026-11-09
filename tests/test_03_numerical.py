@@ -50,13 +50,13 @@ class TestCRF:
 class TestKwhPerKg:
     def test_kwh_per_kg_finite(self, sim_609):
         """kwh_per_kg must be finite (not inf/nan)."""
-        assert np.isfinite(sim_609["kwh_per_kg"]), \
-            f"kwh_per_kg is {sim_609['kwh_per_kg']}"
+        assert np.isfinite(sim_609["kwh_per_kg"]), f"kwh_per_kg is {sim_609['kwh_per_kg']}"
 
     def test_kwh_per_kg_fresh_finite(self, sim_609):
         """kwh_per_kg_fresh must be finite."""
-        assert np.isfinite(sim_609["kwh_per_kg_fresh"]), \
-            f"kwh_per_kg_fresh is {sim_609['kwh_per_kg_fresh']}"
+        assert np.isfinite(
+            sim_609["kwh_per_kg_fresh"]
+        ), f"kwh_per_kg_fresh is {sim_609['kwh_per_kg_fresh']}"
 
     def test_kwh_per_kg_ratio(self):
         """Dry / fresh should be roughly 20:1 (5% DM convention)."""
@@ -67,8 +67,7 @@ class TestKwhPerKg:
         engine = DesignEngine()
         sim = engine.run(p)
         ratio = sim["kwh_per_kg"] / max(sim["kwh_per_kg_fresh"], 1e-9)
-        assert ratio == pytest.approx(20.0, rel=0.05), \
-            f"dry/fresh ratio = {ratio} (expected ~20)"
+        assert ratio == pytest.approx(20.0, rel=0.05), f"dry/fresh ratio = {ratio} (expected ~20)"
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +95,7 @@ class TestHumidityODEClamps:
 
     def _solver(self, V_room=200.0, rho_air=1.2, P_atm=101.325):
         from vfed.physics.ode import RoomODESolver
+
         return RoomODESolver(C_z=1000.0, V_room=V_room, rho_air=rho_air, P_atm=P_atm)
 
     def test_floor_clamp_reports_clipped_water(self):
@@ -103,8 +103,7 @@ class TestHumidityODEClamps:
         water (0.004 kg/kg - 0.005 kg/kg step -> 0.24 kg) instead of silently
         destroying it."""
         s = self._solver()
-        W_new, meta = s.step_humidity(
-            0.004, -0.002, T_z=22.0, dt=600.0, return_meta=True)
+        W_new, meta = s.step_humidity(0.004, -0.002, T_z=22.0, dt=600.0, return_meta=True)
         assert W_new == 0.0
         assert meta["floor_clipped_kg"] == pytest.approx(0.24, rel=1e-9)
         assert meta["sat_clipped_kg"] == 0.0
@@ -115,13 +114,12 @@ class TestHumidityODEClamps:
         from vfed.physics.psychrometrics import saturation_vapor_pressure
 
         s = self._solver()
-        W_sat = 0.622 * saturation_vapor_pressure(25.0) / (
-            101.325 - saturation_vapor_pressure(25.0))
-        W_new, meta = s.step_humidity(
-            0.05, 0.0, T_z=25.0, dt=600.0, return_meta=True)
+        W_sat = (
+            0.622 * saturation_vapor_pressure(25.0) / (101.325 - saturation_vapor_pressure(25.0))
+        )
+        W_new, meta = s.step_humidity(0.05, 0.0, T_z=25.0, dt=600.0, return_meta=True)
         assert W_new == pytest.approx(W_sat, rel=1e-9)
-        assert meta["sat_clipped_kg"] == pytest.approx(
-            (0.05 - W_sat) * self.AIR_MASS, rel=1e-9)
+        assert meta["sat_clipped_kg"] == pytest.approx((0.05 - W_sat) * self.AIR_MASS, rel=1e-9)
         assert meta["floor_clipped_kg"] == 0.0
 
     def test_mass_conservation_books_clip_as_water(self):
@@ -132,18 +130,15 @@ class TestHumidityODEClamps:
         s = self._solver()
         W_z, M, T, dt = 0.004, -0.002, 22.0, 600.0
         unclamped = W_z + M * dt / self.AIR_MASS
-        W_new, meta = s.step_humidity(
-            W_z, M, T_z=T, dt=dt, return_meta=True)
-        bookkeeping = W_new + (meta["sat_clipped_kg"]
-                               - meta["floor_clipped_kg"]) / self.AIR_MASS
+        W_new, meta = s.step_humidity(W_z, M, T_z=T, dt=dt, return_meta=True)
+        bookkeeping = W_new + (meta["sat_clipped_kg"] - meta["floor_clipped_kg"]) / self.AIR_MASS
         assert bookkeeping == pytest.approx(unclamped, rel=1e-12)
 
     def test_never_negative_for_any_input(self):
         """Even a violent over-dehumidification must never yield a negative
         humidity state (regression guard for the reported bug)."""
         s = self._solver(V_room=50.0)  # tiny room -> very strong removal
-        W_new, _ = s.step_humidity(
-            0.001, -0.005, T_z=22.0, dt=600.0, return_meta=True)
+        W_new, _ = s.step_humidity(0.001, -0.005, T_z=22.0, dt=600.0, return_meta=True)
         assert W_new >= 0.0
 
     def test_legacy_signature_still_returns_float(self):
@@ -164,9 +159,9 @@ class TestPsychrometricsGuards:
         from vfed.physics.psychrometrics import saturation_vapor_pressure
 
         with pytest.raises(ValueError):
-            saturation_vapor_pressure(-300.0)   # would ZeroDivisionError at -237.3
+            saturation_vapor_pressure(-300.0)  # would ZeroDivisionError at -237.3
         with pytest.raises(ValueError):
-            saturation_vapor_pressure(150.0)    # beyond validity / p_sat >= P_atm
+            saturation_vapor_pressure(150.0)  # beyond validity / p_sat >= P_atm
 
     def test_ah_to_temp_rh_rejects_negative_ah(self):
         """Negative absolute humidity must raise, not silently emit a fake
@@ -182,8 +177,7 @@ class TestPsychrometricsGuards:
         from vfed.physics.psychrometrics import temp_rh_to_ah
 
         assert temp_rh_to_ah(25.0, -10.0) == 0.0
-        assert temp_rh_to_ah(25.0, 150.0) == pytest.approx(
-            temp_rh_to_ah(25.0, 100.0), rel=1e-9)
+        assert temp_rh_to_ah(25.0, 150.0) == pytest.approx(temp_rh_to_ah(25.0, 100.0), rel=1e-9)
 
 
 # ---------------------------------------------------------------------------
@@ -247,15 +241,20 @@ def test_engine_over_dehumidification_never_negative_rh():
     p.transpiration.daily_water_L = 80.0
 
     # Deterministic synthetic weather: hot & dry outdoor all year.
-    idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
-    weather = pd.DataFrame({
-        "temperature_2m": 30.0,
-        "relative_humidity_2m": 30.0,
-        "shortwave_radiation": 0.0,
-        "direct_radiation": 0.0,
-        "diffuse_radiation": 0.0,
-        "surface_pressure": 1013.25,
-    }, index=idx)
+    idx = pd.date_range(
+        "2026-01-01", periods=8760, freq="h"
+    )  # naive: grid contract rejects tz-aware stamps
+    weather = pd.DataFrame(
+        {
+            "temperature_2m": 30.0,
+            "relative_humidity_2m": 30.0,
+            "shortwave_radiation": 0.0,
+            "direct_radiation": 0.0,
+            "diffuse_radiation": 0.0,
+            "surface_pressure": 1013.25,
+        },
+        index=idx,
+    )
 
     sim = DesignEngine().run(p, weather=weather)
     ts = sim.timeseries
@@ -263,8 +262,10 @@ def test_engine_over_dehumidification_never_negative_rh():
     assert float(np.min(ts["RH_z"])) >= 0.0
     stats = sim.summary["moisture_clamp_stats"]
     assert set(stats.keys()) == {
-        "floor_clip_events", "floor_clip_water_kg",
-        "sat_clip_events", "sat_clip_water_kg",
+        "floor_clip_events",
+        "floor_clip_water_kg",
+        "sat_clip_events",
+        "sat_clip_water_kg",
     }
     # With inventory-capped removal the ODE floor clamp no longer fires from
     # device over-dehumidification (the flow itself is capped first).  The
@@ -326,23 +327,31 @@ def test_engine_reports_actual_dehumidification():
     p.transpiration.method = "daily"
     p.transpiration.daily_water_L = 80.0
 
-    idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
-    weather = pd.DataFrame({
-        "temperature_2m": 30.0,
-        "relative_humidity_2m": 30.0,
-        "shortwave_radiation": 0.0,
-        "direct_radiation": 0.0,
-        "diffuse_radiation": 0.0,
-        "surface_pressure": 1013.25,
-    }, index=idx)
+    idx = pd.date_range(
+        "2026-01-01", periods=8760, freq="h"
+    )  # naive: grid contract rejects tz-aware stamps
+    weather = pd.DataFrame(
+        {
+            "temperature_2m": 30.0,
+            "relative_humidity_2m": 30.0,
+            "shortwave_radiation": 0.0,
+            "direct_radiation": 0.0,
+            "diffuse_radiation": 0.0,
+            "surface_pressure": 1013.25,
+        },
+        index=idx,
+    )
 
     sim = DesignEngine().run(p, weather=weather)
     perf = sim.summary["dehumidifier_performance"]
 
     assert set(perf.keys()) == {
-        "deh_nominal_dehum_kg", "deh_actual_dehum_kg",
-        "hvac_nominal_dehum_kg", "hvac_actual_dehum_kg",
-        "removal_limited_events", "removal_limited_water_kg",
+        "deh_nominal_dehum_kg",
+        "deh_actual_dehum_kg",
+        "hvac_nominal_dehum_kg",
+        "hvac_actual_dehum_kg",
+        "removal_limited_events",
+        "removal_limited_water_kg",
         "deh_utilization",
     }
     assert 0.0 <= perf["deh_actual_dehum_kg"] <= perf["deh_nominal_dehum_kg"]
@@ -351,7 +360,8 @@ def test_engine_reports_actual_dehumidification():
     assert perf["removal_limited_events"] > 0
     assert perf["removal_limited_water_kg"] > 0.0
     assert perf["removal_limited_water_kg"] <= (
-        perf["deh_nominal_dehum_kg"] + perf["hvac_nominal_dehum_kg"])
+        perf["deh_nominal_dehum_kg"] + perf["hvac_nominal_dehum_kg"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -372,7 +382,7 @@ def test_van_henten_high_temp_no_singularity():
 
     dX_d, X_d_new = grow.step(T_z=50.0, light=87.5, X_d=0.05, dt=600.0)
     assert np.isfinite(dX_d) and np.isfinite(X_d_new)
-    assert dX_d < 0.0                     # respiration only — no collapse
+    assert dX_d < 0.0  # respiration only — no collapse
     assert X_d_new == pytest.approx(0.05 + dX_d * 600.0, rel=1e-9)
     assert X_d_new > 0.0
 
@@ -381,7 +391,7 @@ def test_van_henten_high_temp_no_singularity():
         dd, xnew = grow.step(T_z=T, light=87.5, X_d=0.05, dt=600.0)
         assert np.isfinite(dd) and np.isfinite(xnew)
         assert xnew >= 0.0
-        assert dd <= 1e-6                 # no spurious growth burst
+        assert dd <= 1e-6  # no spurious growth burst
 
     # Positive control: normal growing temperature still photosynthesis.
     dX_good, _ = grow.step(T_z=22.0, light=87.5, X_d=0.05, dt=600.0)
@@ -391,8 +401,7 @@ def test_van_henten_high_temp_no_singularity():
 def test_psychrometrics_pressure_parameterization():
     """temp_rh_to_ah / ah_to_temp_rh accept an explicit station pressure;
     lower pressure (higher altitude) raises AH for the same RH."""
-    from vfed.physics.psychrometrics import (
-        temp_rh_to_ah, ah_to_temp_rh, saturation_vapor_pressure)
+    from vfed.physics.psychrometrics import temp_rh_to_ah, ah_to_temp_rh, saturation_vapor_pressure
 
     pv = saturation_vapor_pressure(25.0) * 0.5
     w_sea = 0.622 * pv / (101.325 - pv)
@@ -424,15 +433,20 @@ def test_engine_altitude_pressure_consistent():
     p.transpiration.method = "daily"
     p.transpiration.daily_water_L = 80.0
 
-    idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
-    weather = pd.DataFrame({
-        "temperature_2m": 20.0,
-        "relative_humidity_2m": 60.0,
-        "shortwave_radiation": 0.0,
-        "direct_radiation": 0.0,
-        "diffuse_radiation": 0.0,
-        "surface_pressure": 950.0,
-    }, index=idx)
+    idx = pd.date_range(
+        "2026-01-01", periods=8760, freq="h"
+    )  # naive: grid contract rejects tz-aware stamps
+    weather = pd.DataFrame(
+        {
+            "temperature_2m": 20.0,
+            "relative_humidity_2m": 60.0,
+            "shortwave_radiation": 0.0,
+            "direct_radiation": 0.0,
+            "diffuse_radiation": 0.0,
+            "surface_pressure": 950.0,
+        },
+        index=idx,
+    )
 
     sim = DesignEngine().run(p, weather=weather)
     ts = sim.timeseries
@@ -540,15 +554,20 @@ def _deh_scenario(humid_outdoor: bool = True):
     p.transpiration.method = "daily"
     p.transpiration.daily_water_L = 80.0
 
-    idx = pd.date_range("2026-01-01", periods=8760, freq="h", tz="UTC")
-    weather = pd.DataFrame({
-        "temperature_2m": 25.0,
-        "relative_humidity_2m": 80.0 if humid_outdoor else 30.0,
-        "shortwave_radiation": 0.0,
-        "direct_radiation": 0.0,
-        "diffuse_radiation": 0.0,
-        "surface_pressure": 1013.25,
-    }, index=idx)
+    idx = pd.date_range(
+        "2026-01-01", periods=8760, freq="h"
+    )  # naive: grid contract rejects tz-aware stamps
+    weather = pd.DataFrame(
+        {
+            "temperature_2m": 25.0,
+            "relative_humidity_2m": 80.0 if humid_outdoor else 30.0,
+            "shortwave_radiation": 0.0,
+            "direct_radiation": 0.0,
+            "diffuse_radiation": 0.0,
+            "surface_pressure": 1013.25,
+        },
+        index=idx,
+    )
     return p, weather
 
 
@@ -572,15 +591,11 @@ def test_engine_reports_deh_effective_smer_vfd_default():
     assert eff is not None and eff > 0.0 and np.isfinite(eff)
     # closure: effective x compressor kWh = NOMINAL condensate (3-dp rounding)
     perf = sim.summary["dehumidifier_performance"]
-    assert eff == pytest.approx(
-        perf["deh_nominal_dehum_kg"] / sm["deh_comp_energy_kwh"], rel=2e-3
-    )
+    assert eff == pytest.approx(perf["deh_nominal_dehum_kg"] / sm["deh_comp_energy_kwh"], rel=2e-3)
     # delivered (inventory-capped) ratio never exceeds the nominal ratio
     deliv = sm["delivered_smer_kg_per_kwh"]
     assert deliv is not None and 0.0 < deliv <= eff
-    assert deliv == pytest.approx(
-        perf["deh_actual_dehum_kg"] / sm["deh_comp_energy_kwh"], rel=2e-3
-    )
+    assert deliv == pytest.approx(perf["deh_actual_dehum_kg"] / sm["deh_comp_energy_kwh"], rel=2e-3)
 
 
 def test_engine_deh_explicit_vfd_matches_default_bitwise():
@@ -623,4 +638,3 @@ def test_engine_deh_on_off_mode_runs_and_reports():
     assert float(np.min(sim.timeseries["RH_z"])) >= 0.0
     # and the run is numerically healthy overall
     assert np.isfinite(sim.summary["annual_energy_kwh"])
-

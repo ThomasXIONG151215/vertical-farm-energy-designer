@@ -39,7 +39,10 @@ classifiers = [
 
 dependencies = [
     "numpy>=1.20.0",
-    "pandas>=1.3.0",
+    # <3 guard: pandas 3 changed the default datetime64 unit from ns to us;
+    # the grid-contract checks are ns-normalized (vfed/weather) but the rest
+    # of the bitwise-pinned pipeline is only validated on pandas 2.x.
+    "pandas>=1.3.0,<3",
     "requests>=2.25.0",
     "pyyaml>=5.4.0",
 ]
