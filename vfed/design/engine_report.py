@@ -544,18 +544,14 @@ def build_report(
             zmetrics = {
                 "annual_load_kwh": round(float(np.sum(z["load_kw"])), 2),
                 "annual_harvest_kg": round(z_harvest_kg, 2),
-                "annual_harvest_fw_kg": round(
-                    z_harvest_kg / zp.growth.dry_matter_fraction, 2
-                ),
+                "annual_harvest_fw_kg": round(z_harvest_kg / zp.growth.dry_matter_fraction, 2),
                 "annual_water_m3": round(z["total_water_kg"] / 1000.0, 2),
                 "T_z_mean_c": round(float(np.mean(z["T_z_out"])), 2),
                 "rh_setpoint_pct": z_rh_set,
                 "rh_exceed_hours": z_rh_exceed,
                 "rh_p95_pct": round(float(np.percentile(z["RH_z_out"], 95)), 2),
                 "rh_max_pct": round(float(np.max(z["RH_z_out"])), 2),
-                "deh_utilization": round(
-                    zdp["deh_actual_kg"] / zdp["deh_nominal_kg"], 4
-                )
+                "deh_utilization": round(zdp["deh_actual_kg"] / zdp["deh_nominal_kg"], 4)
                 if zdp["deh_nominal_kg"] > 0
                 else 1.0,
                 "full_load_diagnostics": {
@@ -568,14 +564,10 @@ def build_report(
                 "deh_P_ref_w": z["deh_P_ref_w"],
             }
             if z["co2_on"]:
-                zmetrics["annual_co2_injected_kg"] = round(
-                    z["co2_inj_total_kg"], 3
-                )
+                zmetrics["annual_co2_injected_kg"] = round(z["co2_inj_total_kg"], 3)
             zsummary[zid] = zmetrics
         summary["zones"] = zsummary
-        summary["harvest_final_standing_kg"] = round(
-            sum(z["standing_kg"] for z in zones), 4
-        )
+        summary["harvest_final_standing_kg"] = round(sum(z["standing_kg"] for z in zones), 4)
 
     # ── monthly dict ───────────────────────────────────────────────────
 
@@ -1299,9 +1291,7 @@ def build_report(
             "hvac_P_rated_w": z0["hvac_P_rated_w"],
             "hvac_P_rated_heat_w": z0["hvac_P_rated_heat_w"],
             "deh_P_ref_w": z0["deh_P_ref_w"],
-            "deh_M_design_kgs": float(
-                z0["deh_P_ref_w"] * z0p.deh.smer / 3.6e6
-            ),
+            "deh_M_design_kgs": float(z0["deh_P_ref_w"] * z0p.deh.smer / 3.6e6),
         }
 
     return SimulationResult(

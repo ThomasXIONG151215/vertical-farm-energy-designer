@@ -49,9 +49,7 @@ def _validate_policy_seats(policy=None, policies=None):
     if policy is not None:
         seats.append(("policy", policy))
     if policies is not None:
-        seats.extend(
-            (f"policies[{zid}]", pol) for zid, pol in policies.items()
-        )
+        seats.extend((f"policies[{zid}]", pol) for zid, pol in policies.items())
     for desc, pol in seats:
         name = f"{desc} ({type(pol).__name__})"
         owns = validate_owns(getattr(pol, "owns", None), name)
@@ -1236,9 +1234,7 @@ class DesignEngine:
         """
         p = project
         if interzone is not None:
-            raise NotImplementedError(
-                "interzone exchange arrives in a later wave"
-            )
+            raise NotImplementedError("interzone exchange arrives in a later wave")
         zones_cfg = getattr(p, "zones", None) or {}
         _multi_zone = bool(zones_cfg)
         if _multi_zone:
@@ -1827,9 +1823,7 @@ class DesignEngine:
                     module=a.module,
                     eta_inv=p.pv.eta_inv,
                     eta_system=p.pv.eta_system,
-                    C_pv=resolve_unit_price(
-                        p.pv.C_pv, USD_C_PV, p.currency, p.exchange_rate
-                    ),
+                    C_pv=resolve_unit_price(p.pv.C_pv, USD_C_PV, p.currency, p.exchange_rate),
                 )
             series += arr_sys.calculate_pv_output(arr_wx, a.area_m2, year=year)
         return series
@@ -1954,9 +1948,7 @@ class DesignEngine:
         co2_on = co2_first is not None
         E_co2_Wh = np.zeros(n) if co2_on else None
         monthly_co2_kg = np.zeros(12) if co2_on else None
-        co2_clamp_stats = (
-            {"floor_clip_events": 0, "floor_clip_co2_kg": 0.0} if co2_on else None
-        )
+        co2_clamp_stats = {"floor_clip_events": 0, "floor_clip_co2_kg": 0.0} if co2_on else None
         co2_inj_total_kg = 0.0
 
         for zid, zp, zs, lp in states:
@@ -1991,20 +1983,14 @@ class DesignEngine:
             if zs.co2_on:
                 E_co2_Wh += zs.E_co2_Wh
                 monthly_co2_kg += zs.monthly_co2_kg
-                co2_clamp_stats["floor_clip_events"] += zs.co2_clamp_stats[
-                    "floor_clip_events"
-                ]
-                co2_clamp_stats["floor_clip_co2_kg"] += zs.co2_clamp_stats[
-                    "floor_clip_co2_kg"
-                ]
+                co2_clamp_stats["floor_clip_events"] += zs.co2_clamp_stats["floor_clip_events"]
+                co2_clamp_stats["floor_clip_co2_kg"] += zs.co2_clamp_stats["floor_clip_co2_kg"]
                 co2_inj_total_kg += lp.co2_inj_total_kg or 0.0
             # Standing crop at horizon end: same expression the report
             # layer uses for the single-zone path (next_harvest beyond
             # horizon => the final planting is still in the room).
             standing = (
-                max((lp.X_d - zs.X_d_init) * zs.crop_area, 0.0)
-                if lp.next_harvest_h > n
-                else 0.0
+                max((lp.X_d - zs.X_d_init) * zs.crop_area, 0.0) if lp.next_harvest_h > n else 0.0
             )
             standing_by_zone[zid] = standing
 
@@ -2028,9 +2014,7 @@ class DesignEngine:
         CO2_z_out = co2_first[2].CO2_z_out if co2_first else None
         S_co2_inj_out = co2_first[2].S_co2_inj_out if co2_first else None
         # Light diagnostics: first zone with per-layer PPFD reporting.
-        ppfd_src = next(
-            (s[2] for s in states if getattr(s[2].led, "ppfd_layers", None)), z0s
-        )
+        ppfd_src = next((s[2] for s in states if getattr(s[2].led, "ppfd_layers", None)), z0s)
         ppfd_out = ppfd_src.ppfd_out
         qled_out = ppfd_src.qled_out
 

@@ -262,10 +262,12 @@ def run_hourly_loop(
     zone_eff = None
     daily_plan = {}
     if policy is not None:
-        if not isinstance(control_steps, int) or isinstance(control_steps, bool) or control_steps < 1:
-            raise ValueError(
-                f"control_steps must be an int >= 1, got {control_steps!r}."
-            )
+        if (
+            not isinstance(control_steps, int)
+            or isinstance(control_steps, bool)
+            or control_steps < 1
+        ):
+            raise ValueError(f"control_steps must be an int >= 1, got {control_steps!r}.")
         steps_per_day = int(86400 // dt)
         if steps_per_day != sub * 24:
             raise ValueError(
@@ -606,7 +608,6 @@ def run_hourly_loop(
 
             # floor then reports any residual clamp, never silently.
             if co2_on:
-
                 # C2b: co2_sp (policy, ppm) replaces the config-resolved
 
                 # co2_sp_ppm for this substep; None inherits the config
@@ -796,9 +797,23 @@ def run_hourly_loop(
             if zone_eff is not None and zone_eff.econ_override is not None:
                 econ_active = econ_on if zone_eff.econ_override else False
 
+            # C2b: econ_flow_m3h (policy) overrides the free-cooling
+            # airflow, clamped to [0, design]; None keeps the design
+            # flow.  Amplitude only -- activation stays with the gates
+            # and econ_override above.  An explicit 0 with the gates
+            # passing closes the damper (economizer off, ERV path
+            # resumes); the no-override path stays bit-identical.
+            _econ_flow_ov = zone_eff.econ_flow_m3h if zone_eff is not None else None
+            if _econ_flow_ov is None:
+                _econ_flow_eff = econ_flow
+            else:
+                _econ_flow_eff = min(max(_econ_flow_ov, 0.0), econ_flow)
+                if _econ_flow_eff <= 0.0:
+                    econ_active = False
+
             if econ_active:
                 Q_erv, M_erv, Q_lat_erv = env.economizer_ventilation(
-                    T_ext_s, T_z, W_ext, W_z, econ_flow
+                    T_ext_s, T_z, W_ext, W_z, _econ_flow_eff
                 )
 
                 if Q_erv < 0.0:
@@ -807,7 +822,7 @@ def run_hourly_loop(
                 econ_active_s += dt
 
                 if erv_fan_w > 0.0 and erv_fan_ref_flow > 0.0:
-                    P_erv_fan_s = erv_fan_w * (econ_flow / erv_fan_ref_flow)
+                    P_erv_fan_s = erv_fan_w * (_econ_flow_eff / erv_fan_ref_flow)
 
             elif erv_on:
                 # C2b: erv_flow_m3h (policy) overrides the core airflow,

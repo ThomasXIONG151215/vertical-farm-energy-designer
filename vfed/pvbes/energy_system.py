@@ -370,9 +370,7 @@ class EnergySystem:
             "grid_charged": grid_charged,
             "total_charged": total_charged,
             "total_discharged": total_discharged,
-            "battery_cycles": (
-                total_charged * b.eta_ch + total_discharged / max(b.eta_dis, 0.01)
-            )
+            "battery_cycles": (total_charged * b.eta_ch + total_discharged / max(b.eta_dis, 0.01))
             / (2.0 * E_bat)
             if E_bat > 0
             else 0.0,

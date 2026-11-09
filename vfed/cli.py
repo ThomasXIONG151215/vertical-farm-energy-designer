@@ -1469,9 +1469,7 @@ def _parse_grid_value(key: str, spec: str) -> list:
         try:
             return [float(p) for p in spec.split(",")]
         except ValueError:
-            raise ValueError(
-                f"grid['{key}']: list spec '{spec}' must be comma-separated numbers"
-            )
+            raise ValueError(f"grid['{key}']: list spec '{spec}' must be comma-separated numbers")
     try:
         return [float(spec)]
     except ValueError:
@@ -1651,7 +1649,9 @@ def _cmd_optimize(args):
         else:
             print(f"    {key:24s} = {val}")
     if isinstance(best.get("policy"), dict):
-        print(f"    policy                  = {best['policy'].get('type', '?')} (from --policy-json)")
+        print(
+            f"    policy                  = {best['policy'].get('type', '?')} (from --policy-json)"
+        )
 
     _print_boundary_hints(best, results, "    ")
 
@@ -1844,7 +1844,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="JSON",
         help="control policy spec as a JSON object, e.g. "
-        "'{\"type\": \"night_setback\", \"params\": {...}}'; invalid JSON exits E001",
+        '\'{"type": "night_setback", "params": {...}}\'; invalid JSON exits E001',
     )
     o.set_defaults(func=_cmd_optimize)
 

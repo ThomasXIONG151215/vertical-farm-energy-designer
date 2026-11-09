@@ -97,9 +97,7 @@ class SimulationResult:
     #    pinned to_dict() v1.0 schema (summary["zones"] carries the
     #    per-zone KPIs there).
     zone_ids: List[str] = field(default_factory=list)
-    zone_timeseries: Dict[str, Dict[str, List[float]]] = field(
-        default_factory=dict
-    )
+    zone_timeseries: Dict[str, Dict[str, List[float]]] = field(default_factory=dict)
 
     # -----------------------------------------------------------------
     def __getitem__(self, key: str) -> Any:

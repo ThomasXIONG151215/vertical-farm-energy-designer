@@ -86,17 +86,13 @@ _METRIC_KEYS = (
 
 def _check_objective(objective: str) -> None:
     if objective not in _VALID_OBJECTIVES:
-        raise ValueError(
-            f"Unknown objective '{objective}'. Valid: {sorted(_VALID_OBJECTIVES)}"
-        )
+        raise ValueError(f"Unknown objective '{objective}'. Valid: {sorted(_VALID_OBJECTIVES)}")
 
 
 def _validate_candidate(candidate: Any) -> None:
     """Fail fast on schema version and unknown top-level candidate keys."""
     if not isinstance(candidate, dict):
-        raise ValueError(
-            f"candidate must be a mapping, got {type(candidate).__name__}"
-        )
+        raise ValueError(f"candidate must be a mapping, got {type(candidate).__name__}")
     schema = candidate.get("schema", _CANDIDATE_SCHEMA)
     if schema != _CANDIDATE_SCHEMA:
         raise ValueError(
@@ -127,16 +123,12 @@ def _check_authority_conflicts(flat_keys, zones_delta, policy_specs) -> None:
     such specs skip the conflict check entirely.
     """
     specs = [
-        spec
-        for spec in policy_specs
-        if isinstance(spec, dict) and not spec.get("schedule_echo")
+        spec for spec in policy_specs if isinstance(spec, dict) and not spec.get("schedule_echo")
     ]
     voided = {}  # param name -> owning field (first owner wins for message)
     for spec in specs:
         policy = build_policy(spec)
-        owns = validate_owns(
-            getattr(policy, "owns", None), f"policy spec {spec!r}"
-        )
+        owns = validate_owns(getattr(policy, "owns", None), f"policy spec {spec!r}")
         for fname in owns:
             for param in CONTROL_FIELDS[fname].voids_params:
                 voided.setdefault(param, fname)
@@ -153,7 +145,7 @@ def _check_authority_conflicts(flat_keys, zones_delta, policy_specs) -> None:
         rev = {v: k for k, v in PARAM_PATH_MAP.items()}
         for zid, sections in zones_delta.items():
             for section, fields in (sections or {}).items():
-                for field in (fields or {}):
+                for field in fields or {}:
                     flat = rev.get((section, field))
                     if flat is not None and flat in voided:
                         raise ValueError(
@@ -362,9 +354,7 @@ def evaluate_candidate(
     if isinstance(candidate.get("policy"), dict):
         specs.append(candidate["policy"])
     if isinstance(candidate.get("policies"), dict):
-        specs.extend(
-            s for s in candidate["policies"].values() if isinstance(s, dict)
-        )
+        specs.extend(s for s in candidate["policies"].values() if isinstance(s, dict))
     _check_authority_conflicts(
         [k for k in candidate if k not in _CANDIDATE_RESERVED],
         candidate.get("zones"),
@@ -410,30 +400,25 @@ def optimize(
     _check_objective(objective)
     if not isinstance(grid, dict):
         raise ValueError(
-            f"grid must be a dict of name -> list of values, "
-            f"got {type(grid).__name__}"
+            f"grid must be a dict of name -> list of values, " f"got {type(grid).__name__}"
         )
     for name, values in grid.items():
         if not isinstance(values, (list, tuple)):
             raise ValueError(
-                f"grid['{name}'] must be a list of values, got "
-                f"{type(values).__name__}"
+                f"grid['{name}'] must be a list of values, got " f"{type(values).__name__}"
             )
     grid_specs: List[Any] = list(grid.get("policy", []) or [])
     for seat in grid.get("policies", []) or []:
         # policies dim: list of whole {zone_id: spec} dicts
         if isinstance(seat, dict):
             grid_specs.extend(s for s in seat.values() if isinstance(s, dict))
-    _check_authority_conflicts(
-        [k for k in grid if k not in _CANDIDATE_RESERVED], None, grid_specs
-    )
+    _check_authority_conflicts([k for k in grid if k not in _CANDIDATE_RESERVED], None, grid_specs)
     pv_values: List[float] = [0.0] if pv_grid is None else list(pv_grid)
     bat_values: List[float] = [0.0] if battery_grid is None else list(battery_grid)
 
     names = list(grid.keys())  # declared key order (dict is ordered)
     combos: List[dict] = [
-        dict(zip(names, values))
-        for values in itertools.product(*(grid[n] for n in names))
+        dict(zip(names, values)) for values in itertools.product(*(grid[n] for n in names))
     ]
     if not combos:  # empty product on an empty grid -> one base combo
         combos = [{}]
@@ -444,23 +429,15 @@ def optimize(
         # fetch writes the cache before the pool opens (workers would
         # otherwise race on the same cache file).  The warm-up result is
         # kept, so combo #1 is not computed twice.
-        chunks = [
-            _run_combo(base, combos[0], cache_dir, weather, pv_values, bat_values)
-        ]
+        chunks = [_run_combo(base, combos[0], cache_dir, weather, pv_values, bat_values)]
         rest = combos[1:]
         if rest:
             project_dict = base.to_dict()
-            payload = [
-                (project_dict, c, cache_dir, pv_values, bat_values, weather)
-                for c in rest
-            ]
+            payload = [(project_dict, c, cache_dir, pv_values, bat_values, weather) for c in rest]
             with ProcessPoolExecutor(max_workers=n_workers) as ex:
                 chunks.extend(list(ex.map(_optimize_worker, payload)))
     else:
-        chunks = [
-            _run_combo(base, c, cache_dir, weather, pv_values, bat_values)
-            for c in combos
-        ]
+        chunks = [_run_combo(base, c, cache_dir, weather, pv_values, bat_values) for c in combos]
 
     rows = [row for chunk in chunks for row in chunk]
     results = pd.DataFrame(rows) if rows else pd.DataFrame()

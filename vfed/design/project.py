@@ -2837,9 +2837,7 @@ class DesignProject:
         _zones: Dict[str, Dict[str, Any]] = {}
         for _zid, _zdelta in _zones_raw.items():
             if not isinstance(_zid, str) or not _zid:
-                raise ValueError(
-                    f"zone id must be a non-empty string, got {_zid!r}"
-                )
+                raise ValueError(f"zone id must be a non-empty string, got {_zid!r}")
             if _zid in ZONE_RESERVED_IDS:
                 raise ValueError(
                     f"zone id {_zid!r} is reserved for whole-building "
@@ -2873,9 +2871,7 @@ class DesignProject:
                         f"value (field-level delta), got "
                         f"{type(_fields).__name__}"
                     )
-            _zones[_zid] = {
-                _sec: dict(_fields) for _sec, _fields in _zdelta.items()
-            }
+            _zones[_zid] = {_sec: dict(_fields) for _sec, _fields in _zdelta.items()}
 
         project = cls(
             name=d.get("name", "unnamed"),
@@ -2892,9 +2888,7 @@ class DesignProject:
             battery=BatteryConfig(**battery_cfg),
             tariff=_tariff(d.get("tariff", {})),
             space=DesignSpace(**space_cfg),
-            control=ControlConfig(
-                **sub(ControlConfig, d.get("control", {}), yaml_path="control")
-            ),
+            control=ControlConfig(**sub(ControlConfig, d.get("control", {}), yaml_path="control")),
             equipment_power_w=d.get("equipment_power_w", 0.0),
             equipment_capital=_equipment_cap,
             envelope_capital=_envelope_cap,
@@ -2920,9 +2914,7 @@ class DesignProject:
             try:
                 cls.from_dict(project.zone_view(_zid))
             except ValueError as _exc:
-                raise ValueError(
-                    f"zones.{_zid}: invalid override delta -- {_exc}"
-                ) from _exc
+                raise ValueError(f"zones.{_zid}: invalid override delta -- {_exc}") from _exc
 
         # ── R26 currency engine: materialize USD-baseline default prices ──
         # Every None sentinel (omitted key / explicit null) becomes the

@@ -1,7 +1,7 @@
 """Wave 6: control ownership (``owns``) authority contract (test_47).
 
 Contract under test:
-  * ``CONTROL_FIELDS`` registry integrity: the 10 ``ZoneAction`` fields
+  * ``CONTROL_FIELDS`` registry integrity: the 11 ``ZoneAction`` fields
     are exactly ``BUILDING_CONTROL_NAMES``; the two dispatch-tier fields
     (``charge_w`` / ``discharge_w``) live only in ``CONTROL_FIELDS``;
     every ``voids_params`` entry is a real flattened config key

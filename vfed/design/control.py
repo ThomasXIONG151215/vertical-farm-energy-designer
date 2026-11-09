@@ -26,8 +26,8 @@ class ZoneAction:
     Every field defaults to ``None``, which means "keep the legacy
     config-driven value" at the consumption site.  Fields that carry
     device-level commands (``led_dim``, ``hvac_m``, ``deh_m``,
-    ``erv_flow_m3h``, ``co2_sp``) are carried by C1 and consumed once
-    the device parameter hooks land (C2b).
+    ``econ_flow_m3h``, ``erv_flow_m3h``, ``co2_sp``) are carried by
+    C1 and consumed once the device parameter hooks land (C2b).
     """
 
     led_on: Optional[bool] = None
@@ -38,6 +38,7 @@ class ZoneAction:
     hvac_m: Optional[float] = None
     deh_m: Optional[float] = None
     econ_override: Optional[bool] = None
+    econ_flow_m3h: Optional[float] = None
     erv_flow_m3h: Optional[float] = None
     co2_sp: Optional[float] = None
 
@@ -162,28 +163,23 @@ class ControlField:
 
 CONTROL_FIELDS: Dict[str, ControlField] = {
     "led_on": ControlField(
-        "led_on", 0, "led.light_start_hour/led.photoperiod_hours (clock)",
+        "led_on",
+        0,
+        "led.light_start_hour/led.photoperiod_hours (clock)",
         ("light_start_hour", "photoperiod_hours"),
     ),
     "led_dim": ControlField("led_dim", 0, "led PPFD at full-on", ()),
-    "T_sp": ControlField(
-        "T_sp", 0, "setpoints.T_light/setpoints.T_dark", ("T_light", "T_dark")
-    ),
+    "T_sp": ControlField("T_sp", 0, "setpoints.T_light/setpoints.T_dark", ("T_light", "T_dark")),
     "T_heat_sp": ControlField("T_heat_sp", 0, "setpoints.T_heat", ("T_heat",)),
-    "RH_sp": ControlField(
-        "RH_sp", 0, "setpoints.RH/setpoints.RH_dark", ("RH", "RH_dark")
-    ),
+    "RH_sp": ControlField("RH_sp", 0, "setpoints.RH/setpoints.RH_dark", ("RH", "RH_dark")),
     "hvac_m": ControlField("hvac_m", 0, "HVAC modulation (auto)", ()),
     "deh_m": ControlField("deh_m", 0, "DEH modulation (auto)", ()),
     "econ_override": ControlField("econ_override", 0, "economizer auto state", ()),
+    "econ_flow_m3h": ControlField("econ_flow_m3h", 0, "economizer auto flow", ()),
     "erv_flow_m3h": ControlField("erv_flow_m3h", 0, "ERV ventilation auto flow", ()),
     "co2_sp": ControlField("co2_sp", 0, "setpoints.co2_ppm", ("co2_ppm",)),
-    "charge_w": ControlField(
-        "charge_w", 1, "PVBES greedy dispatch (battery charge)", ()
-    ),
-    "discharge_w": ControlField(
-        "discharge_w", 1, "PVBES greedy dispatch (battery discharge)", ()
-    ),
+    "charge_w": ControlField("charge_w", 1, "PVBES greedy dispatch (battery charge)", ()),
+    "discharge_w": ControlField("discharge_w", 1, "PVBES greedy dispatch (battery discharge)", ()),
 }
 
 #: Fields a BuildingPolicy may claim in ``owns`` (the dispatch-tier
@@ -270,8 +266,7 @@ def build_policy(spec) -> "BuildingPolicy":
     ptype = spec.get("type")
     if not isinstance(ptype, str) or not ptype:
         raise ValueError(
-            f"policy spec needs a string 'type' key, got {ptype!r} "
-            f"(spec keys: {sorted(spec)})"
+            f"policy spec needs a string 'type' key, got {ptype!r} " f"(spec keys: {sorted(spec)})"
         )
     params = spec.get("params", {})
     if params is None:
@@ -284,8 +279,7 @@ def build_policy(spec) -> "BuildingPolicy":
     cls = POLICY_REGISTRY.get(ptype)
     if cls is None:
         raise ValueError(
-            f"unknown policy type '{ptype}'; registered types: "
-            f"{sorted(POLICY_REGISTRY)}"
+            f"unknown policy type '{ptype}'; registered types: " f"{sorted(POLICY_REGISTRY)}"
         )
     return cls(**params)
 
@@ -347,9 +341,7 @@ class SetpointOffsetPolicy:
 
     def step(self, obs: Observation) -> ControlAction:
         if self._ctx is None:
-            raise RuntimeError(
-                "SetpointOffsetPolicy.step called before reset(ctx)"
-            )
+            raise RuntimeError("SetpointOffsetPolicy.step called before reset(ctx)")
         za = ZoneAction()
         if self.t_offset_k:
             base_cool = self._ctx.T_light if obs.is_light else self._ctx.T_dark

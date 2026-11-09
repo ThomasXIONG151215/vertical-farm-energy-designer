@@ -1,7 +1,8 @@
 """C2b: ZoneAction control-field wiring in run_hourly_loop (test_43).
 
 Every remaining ZoneAction field (led_on, led_dim, hvac_m, deh_m,
-erv_flow_m3h, co2_sp) plus the two config fields that land in the loop
+erv_flow_m3h, econ_flow_m3h, co2_sp) plus the two config fields that
+land in the loop
 (setpoints.T_heat, setpoints.RH_dark) is asserted DIRECTIONALLY: a run
 with the field set differs from the same run without it in the
 physically expected direction.  Two zero-drift invariants anchor the
@@ -292,3 +293,49 @@ def test_co2_sp_override_raises_concentration_band():
         rich.summary["annual_co2_injected_kg"]
         > base.summary["annual_co2_injected_kg"]
     )
+
+
+# ── econ_flow_m3h ──────────────────────────────────────────────────
+
+
+def test_econ_flow_override_scales_free_cooling_and_fan():
+    proj = preset_609()
+    proj.envelope.economizer_enabled = True
+    proj.envelope.economizer_flow_m3h = 800.0
+    proj.envelope.erv_fan_power_w = 200.0
+    weather = synthetic_weather(48)
+
+    base = _run(proj, weather)
+    half = _run(proj, weather, policy=ConstantPolicy(econ_flow_m3h=400.0))
+    shut = _run(proj, weather, policy=ConstantPolicy(econ_flow_m3h=0.0))
+
+    # Baseline sanity: the economizer actually engages (cool-mode LED
+    # room, cold outside air, delta_t_k gate at the 1.0 K default).
+    assert base.summary["erv"]["economizer_hours"] > 0.0
+
+    # Fan energy per active hour is exactly proportional (P = 200 W *
+    # 400/800, EC-motor linear scaling, same P3-9 metering as the
+    # erv_flow_m3h test above).  Unlike the always-on ERV, the
+    # economizer is gated: halved free cooling warms the zone, so
+    # engagement hours drift (measured here: 18 -> 22 h) -- the ratio
+    # is the per-hour linear law times the hours ratio.
+    base_hours = base.summary["erv"]["economizer_hours"]
+    half_hours = half.summary["erv"]["economizer_hours"]
+    assert half_hours >= base_hours  # warmer zone -> gate passes more
+    base_fan = base.summary["erv"]["annual_fan_kwh"]
+    half_fan = half.summary["erv"]["annual_fan_kwh"]
+    np.testing.assert_allclose(
+        half_fan / base_fan, 0.5 * (half_hours / base_hours), rtol=1e-6
+    )
+    assert base_fan > 0.0
+
+    # Free cooling still delivered and directionally below baseline at
+    # fixed hours (per-hour ventilation heat is linear in flow; exact
+    # totals drift with engagement hours and zone-state feedback).
+    assert half.summary["erv"]["annual_free_cooling_kwh"] > 0.0
+
+    # Explicit 0 with the gates passing closes the damper: the
+    # economizer logs zero active hours and zero fan energy (the
+    # summary keys exist because economizer_enabled=True in config).
+    assert shut.summary["erv"]["economizer_hours"] == 0.0
+    assert shut.summary["erv"]["annual_fan_kwh"] == 0.0
